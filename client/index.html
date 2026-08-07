@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Organización de equipos y turnos de servicio: consulta el horario del mes y administra equipos, personas, eventos y uniformes."
+    />
+    <title>Equipos y Turnos</title>
+    <script>
+      // Aplica el tema guardado (o el del sistema) antes de que React monte,
+      // para evitar un parpadeo del tema incorrecto en la primera carga.
+      (function () {
+        try {
+          var saved = localStorage.getItem('app_theme');
+          var theme =
+            saved === 'light' || saved === 'dark'
+              ? saved
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

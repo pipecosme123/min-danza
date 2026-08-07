@@ -1,0 +1,23 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno (secretos: JWT_SECRET, credenciales de BD, etc.)
+.env
+.env.*.local
+
+# Build output
+dist/
+build/
+
+# Logs
+npm-debug.log*
+*.log
+
+# Prisma
+server/prisma/dev.db
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

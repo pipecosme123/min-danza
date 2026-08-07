@@ -1,0 +1,318 @@
+// ---------------------------------------------------------------------------
+// App de organización de equipos y turnos de servicio
+// Reglas de negocio: ver CLAUDE.md en la raíz del repo.
+// Convención: modelos y campos en camelCase/PascalCase (Prisma) mapeados a
+// snake_case en PostgreSQL vía @map/@@map.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------- ENUMS -------------------------------------
+
+/// Categoría de la persona en el padrón. Los valores están en español a
+/// propósito: son los que llegan literalmente en el CSV/XLSX de carga masiva.
+enum PersonCategory {
+  ELEGIBLE_LIDER
+  COLABORADOR
+
+  @@map("person_category")
+}
+
+/// Rol de una persona DENTRO de un equipo mensual.
+enum TeamRole {
+  LEADER
+  SUPPORT
+  COLLABORATOR
+
+  @@map("team_role")
+}
+
+/// FIXED         = turno fijo semanal (miércoles / domingo)
+/// EXTRAORDINARY = evento extraordinario creado por el admin (SÍ cuenta al balance)
+/// SPECIAL       = evento del último sábado (NO cuenta al balance, roster manual)
+enum SlotType {
+  FIXED
+  EXTRAORDINARY
+  SPECIAL
+
+  @@map("slot_type")
+}
+
+/// DRAFT     = el admin todavía puede re-sortear equipos
+/// FINALIZED = el mes está publicado
+enum MonthStatus {
+  DRAFT
+  FINALIZED
+
+  @@map("month_status")
+}
+
+enum Weekday {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+
+  @@map("weekday")
+}
+
+// ------------------------------- ACCESO ------------------------------------
+
+/// Único administrador por ahora. Es una tabla (no una constante) para no
+/// bloquear "múltiples administradores" a futuro. Se crea vía seed, no hay UI
+/// de registro.
+model AdminUser {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String    @map("password_hash")
+  displayName  String?   @map("display_name")
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("admin_user")
+}
+
+// ------------------------------- PADRÓN ------------------------------------
+
+model Person {
+  id         String         @id @default(cuid())
+  fullName   String         @map("full_name")
+  /// Documento opcional. Es la clave natural preferida para el upsert del
+  /// import masivo. Postgres permite múltiples NULL en un índice único, así
+  /// que "opcional + único" convive sin problema.
+  documentId String?        @unique @map("document_id")
+  category   PersonCategory
+  /// Baja lógica. NUNCA se borra una persona que ya participó en un mes
+  /// (las FK desde TeamMember son onDelete: Restrict).
+  active     Boolean        @default(true)
+  notes      String?
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  teamMemberships   TeamMember[]
+  specialEventRoles SpecialSaturdayMember[]
+
+  /// Consulta caliente: pool de sorteo = personas activas por categoría.
+  @@index([active, category])
+  @@index([fullName])
+  @@map("person")
+}
+
+// --------------------------- CICLO MENSUAL ---------------------------------
+
+model MonthCycle {
+  id          String      @id @default(cuid())
+  year        Int
+  month       Int
+  /// Cuántos equipos definió el admin para este mes.
+  teamCount   Int         @map("team_count")
+  status      MonthStatus @default(DRAFT)
+  finalizedAt DateTime?   @map("finalized_at")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  teams        Team[]
+  serviceSlots ServiceSlot[]
+
+  @@unique([year, month])
+  @@index([status])
+  @@map("month_cycle")
+}
+
+model Team {
+  id           String   @id @default(cuid())
+  monthCycleId String   @map("month_cycle_id")
+  /// Etiqueta visible: "Equipo 1", "Equipo 2"...
+  label        String
+  /// Orden estable de presentación e identificador interno 1..teamCount.
+  orderIndex   Int      @map("order_index")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  monthCycle      MonthCycle       @relation(fields: [monthCycleId], references: [id], onDelete: Cascade)
+  members         TeamMember[]
+  slotAssignments SlotAssignment[]
+
+  @@unique([monthCycleId, label])
+  @@unique([monthCycleId, orderIndex])
+  /// Necesario para que TeamMember y SlotAssignment puedan apuntar a
+  /// (id, monthCycleId) con FK compuesta. No borrar.
+  @@unique([id, monthCycleId])
+  @@index([monthCycleId])
+  @@map("team")
+}
+
+model TeamMember {
+  id             String   @id @default(cuid())
+  teamId         String   @map("team_id")
+  /// Denormalizado desde Team a propósito: habilita el único
+  /// @@unique([monthCycleId, personId]) — "una persona, un solo equipo al mes".
+  /// La FK compuesta garantiza que este valor SIEMPRE coincide con
+  /// team.monthCycleId; no es posible desincronizarlo.
+  monthCycleId   String   @map("month_cycle_id")
+  personId       String   @map("person_id")
+  role           TeamRole
+  /// true cuando el admin forzó el rol a mano (p. ej. promover un COLABORADOR
+  /// a LEADER). El sorteo automático NUNCA escribe true aquí.
+  manualOverride Boolean  @default(false) @map("manual_override")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  team   Team   @relation(fields: [teamId, monthCycleId], references: [id, monthCycleId], onDelete: Cascade)
+  person Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+
+  @@unique([teamId, personId])
+  @@unique([monthCycleId, personId])
+  @@index([teamId, role])
+  @@index([personId])
+  @@map("team_member")
+}
+
+// ------------------------------ UNIFORMES ----------------------------------
+
+model Uniform {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  /// Color para el chip/etiqueta en la página pública (ej. "#1E40AF").
+  colorHex    String?  @map("color_hex")
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  serviceSlots    ServiceSlot[]
+  weekdayUniforms WeekdayUniform[]
+
+  @@map("uniform")
+}
+
+/// Configuración editable: qué uniforme corresponde a cada día de la semana.
+/// Se usa para poblar ServiceSlot.uniformId al generar los slots FIXED del mes.
+/// Cambiar esta tabla NO reescribe los slots ya generados (ver D9).
+model WeekdayUniform {
+  id        String   @id @default(cuid())
+  weekday   Weekday  @unique
+  uniformId String   @map("uniform_id")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  uniform Uniform @relation(fields: [uniformId], references: [id], onDelete: Restrict)
+
+  @@map("weekday_uniform")
+}
+
+// ---------------------------- HORARIO / SLOTS ------------------------------
+
+/// Definición de los turnos fijos semanales (miércoles 17:00/19:00,
+/// domingo 08:00/10:30). Es data seeded, no constantes en el código, para que
+/// cambiar un horario no exija un deploy. La EXCEPCIÓN del último domingo
+/// (omitir 10:30 y poner teamsNeeded = 2 en el de 08:00) vive en
+/// scheduleGeneration.service.js, NO aquí (ver D10).
+model FixedSlotTemplate {
+  id          String   @id @default(cuid())
+  weekday     Weekday
+  startTime   String   @map("start_time") @db.VarChar(5)
+  teamsNeeded Int      @default(1) @map("teams_needed")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([weekday, startTime])
+  @@map("fixed_slot_template")
+}
+
+model ServiceSlot {
+  id                  String   @id @default(cuid())
+  monthCycleId        String   @map("month_cycle_id")
+  /// Fecha civil (sin hora, sin zona horaria). Ver D7.
+  date                DateTime @db.Date
+  /// Hora local en formato "HH:mm" 24h, cero-padded ("08:00", "18:50").
+  /// Ordena correctamente en forma lexicográfica. Ver D7.
+  startTime           String   @map("start_time") @db.VarChar(5)
+  slotType            SlotType @map("slot_type")
+  /// Nombre visible del evento (solo EXTRAORDINARY/SPECIAL). Los FIXED lo
+  /// dejan en null y la UI los rotula por día/hora.
+  title               String?
+  /// 1 por defecto; 2 en el último domingo y opcionalmente en extraordinarios.
+  teamsNeeded         Int      @default(1) @map("teams_needed")
+  /// false SOLO para SPECIAL (garantizado por CHECK en la migración).
+  countsTowardBalance Boolean  @default(true) @map("counts_toward_balance")
+  uniformId           String?  @map("uniform_id")
+  notes               String?
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  monthCycle     MonthCycle              @relation(fields: [monthCycleId], references: [id], onDelete: Cascade)
+  uniform        Uniform?                @relation(fields: [uniformId], references: [id], onDelete: SetNull)
+  assignments    SlotAssignment[]
+  specialMembers SpecialSaturdayMember[]
+
+  /// Hace idempotente la generación de slots fijos del mes: re-ejecutarla no
+  /// duplica. Incluye slotType para no bloquear un extraordinario que caiga a
+  /// la misma hora que un turno fijo.
+  @@unique([monthCycleId, date, startTime, slotType])
+  /// Necesario para la FK compuesta desde SlotAssignment. No borrar.
+  @@unique([id, monthCycleId])
+  /// Consulta caliente: slots del mes en orden cronológico (recomputeBalance,
+  /// página pública).
+  @@index([monthCycleId, date, startTime])
+  @@index([monthCycleId, slotType])
+  @@index([monthCycleId, countsTowardBalance])
+  @@map("service_slot")
+}
+
+/// Un equipo asignado a un slot. Tabla puente con id propio (no PK compuesta)
+/// porque a futuro los reportes de asistencia colgarán de aquí (ver §7).
+model SlotAssignment {
+  id            String   @id @default(cuid())
+  serviceSlotId String   @map("service_slot_id")
+  teamId        String   @map("team_id")
+  /// Compartido por AMBAS FK compuestas: hace imposible asignar un equipo de
+  /// un mes a un slot de otro mes.
+  monthCycleId  String   @map("month_cycle_id")
+  /// 0 o 1. Da orden estable de presentación cuando un slot lleva 2 equipos
+  /// (último domingo) y evita un tercer equipo por unicidad.
+  slotIndex     Int      @default(0) @map("slot_index")
+  /// true = asignación fijada a mano; recomputeBalance NO la mueve.
+  locked        Boolean  @default(false)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  serviceSlot ServiceSlot @relation(fields: [serviceSlotId, monthCycleId], references: [id, monthCycleId], onDelete: Cascade)
+  team        Team        @relation(fields: [teamId, monthCycleId], references: [id, monthCycleId], onDelete: Cascade)
+
+  @@unique([serviceSlotId, teamId])
+  @@unique([serviceSlotId, slotIndex])
+  /// Consulta caliente: conteo de participaciones por equipo en el mes.
+  @@index([teamId])
+  @@index([monthCycleId, teamId])
+  @@map("slot_assignment")
+}
+
+/// Roster manual del evento del último sábado. Cuelga del ServiceSlot SPECIAL
+/// (no del MonthCycle) — ver D11. Es deliberadamente independiente de
+/// TeamMember: estar aquí NO excluye a la persona de su equipo regular.
+model SpecialSaturdayMember {
+  id            String   @id @default(cuid())
+  serviceSlotId String   @map("service_slot_id")
+  personId      String   @map("person_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  serviceSlot ServiceSlot @relation(fields: [serviceSlotId], references: [id], onDelete: Cascade)
+  person      Person      @relation(fields: [personId], references: [id], onDelete: Restrict)
+
+  @@unique([serviceSlotId, personId])
+  @@index([personId])
+  @@map("special_saturday_member")
+}

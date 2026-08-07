@@ -1,0 +1,16 @@
+.calendar-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.calendar-grid__heading {
+  margin-bottom: var(--space-3);
+  font-size: var(--font-size-lg);
+}
+
+.calendar-grid__slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
+}
