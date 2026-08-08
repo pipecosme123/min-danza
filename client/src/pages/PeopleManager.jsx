@@ -43,14 +43,16 @@ export function PeopleManager() {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 400);
   const [category, setCategory] = useState('');
-  const [showInactive, setShowInactive] = useState(false);
+  // 'active' (default, igual que antes) | 'inactive' (solo inactivas) | 'all'.
+  const [statusFilter, setStatusFilter] = useState('active');
   const [page, setPage] = useState(1);
 
   function buildListParams() {
     const params = { page, pageSize: PAGE_SIZE, sort: 'fullName' };
     if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
     if (category) params.category = category;
-    if (!showInactive) params.active = true;
+    if (statusFilter === 'active') params.active = true;
+    else if (statusFilter === 'inactive') params.active = false;
     return params;
   }
 
@@ -58,11 +60,13 @@ export function PeopleManager() {
     execute(buildListParams()).catch(() => {});
   }
 
-  // Cambiar cualquier filtro vuelve a la página 1.
+  // Cambiar cualquier filtro vuelve a la página 1 y limpia la selección
+  // (los ids seleccionados podrían dejar de estar entre los resultados).
   useEffect(() => {
     setPage(1);
+    setSelectedIds(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, category, showInactive]);
+  }, [debouncedSearch, category, statusFilter]);
 
   // La primera carga ya la hace `immediate: true` de arriba; este efecto
   // solo reacciona a cambios posteriores de filtros/página.
@@ -73,7 +77,7 @@ export function PeopleManager() {
     }
     execute(buildListParams()).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, debouncedSearch, category, showInactive]);
+  }, [page, debouncedSearch, category, statusFilter]);
 
   // Si una baja/edición deja vacía la página actual (y no es la primera),
   // retrocede una página automáticamente en vez de mostrar un vacío confuso.
@@ -229,7 +233,7 @@ export function PeopleManager() {
     try {
       const { person, warnings } = await deactivatePerson(deactivateTarget.id);
       setDeactivateTarget(null);
-      showSuccess(`Se dio de baja a ${person.fullName}.`);
+      showSuccess(`Se inactivó a ${person.fullName}.`);
       applyWarnings(warnings);
       refetch();
     } catch (err) {
@@ -250,6 +254,91 @@ export function PeopleManager() {
       showError(describeApiError(err).message);
     } finally {
       setReactivatingId(null);
+    }
+  }
+
+  // ---- Selección múltiple y acciones en lote ----
+  // La API no tiene un endpoint de bulk update: cada acción en lote dispara
+  // un PATCH/DELETE por persona en paralelo y junta los resultados. No es
+  // atómico (algunas filas pueden actualizarse y otras fallar), por eso el
+  // resumen final siempre distingue éxitos de fallos en vez de asumir todo-o-nada.
+  //
+  // `selectionMode` empieza apagado a propósito: la columna de checkboxes ni
+  // siquiera se agrega a `columns` mientras está en false (no solo
+  // deshabilitada) — el admin la prende con un botón explícito en la barra
+  // de herramientas.
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkCategoryOpen, setBulkCategoryOpen] = useState(false);
+  const [bulkCategoryValue, setBulkCategoryValue] = useState('INSTRUCTOR');
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
+  const [bulkStatusValue, setBulkStatusValue] = useState('active');
+
+  function toggleSelectionMode() {
+    setSelectionMode((prev) => !prev);
+    clearSelection();
+  }
+
+  function toggleSelectOne(id) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  async function runBulkAction(ids, action) {
+    setBulkSubmitting(true);
+    const results = await Promise.allSettled(ids.map((id) => action(id)));
+    setBulkSubmitting(false);
+
+    const succeeded = results.filter((r) => r.status === 'fulfilled');
+    const failed = results.filter((r) => r.status === 'rejected');
+
+    if (failed.length === 0) {
+      showSuccess(`Se actualizó a ${succeeded.length} persona${succeeded.length === 1 ? '' : 's'}.`);
+    } else if (succeeded.length === 0) {
+      showError(`No se pudo actualizar a ninguna persona (${describeApiError(failed[0].reason).message}).`);
+    } else {
+      showWarning(
+        `Se actualizó a ${succeeded.length} de ${ids.length} personas; ${failed.length} no se pudieron actualizar.`,
+      );
+    }
+    applyWarnings(succeeded.flatMap((r) => r.value?.warnings || []));
+    clearSelection();
+    refetch();
+  }
+
+  function openBulkCategoryModal() {
+    setBulkCategoryValue('INSTRUCTOR');
+    setBulkCategoryOpen(true);
+  }
+
+  async function submitBulkCategory(event) {
+    event.preventDefault();
+    setBulkCategoryOpen(false);
+    await runBulkAction(Array.from(selectedIds), (id) => updatePerson(id, { category: bulkCategoryValue }));
+  }
+
+  function openBulkStatusModal() {
+    setBulkStatusValue('active');
+    setBulkStatusOpen(true);
+  }
+
+  async function submitBulkStatus(event) {
+    event.preventDefault();
+    setBulkStatusOpen(false);
+    const ids = Array.from(selectedIds);
+    if (bulkStatusValue === 'active') {
+      await runBulkAction(ids, (id) => updatePerson(id, { active: true }));
+    } else {
+      await runBulkAction(ids, (id) => deactivatePerson(id));
     }
   }
 
@@ -293,7 +382,59 @@ export function PeopleManager() {
   const pagination = data?.pagination ?? null;
   const hasActiveFilters = Boolean(debouncedSearch.trim()) || Boolean(category);
 
+  const pageIds = people.map((p) => p.id);
+  const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+  const someOnPageSelected = pageIds.some((id) => selectedIds.has(id));
+
+  function toggleSelectAllOnPage() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allOnPageSelected) {
+        pageIds.forEach((id) => next.delete(id));
+      } else {
+        pageIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }
+
+  const selectColumn = {
+    key: '__select',
+    header: (
+      <input
+        type="checkbox"
+        className="people-manager__row-checkbox"
+        aria-label="Seleccionar todas las personas de esta página"
+        checked={allOnPageSelected}
+        ref={(el) => {
+          if (el) el.indeterminate = !allOnPageSelected && someOnPageSelected;
+        }}
+        onChange={toggleSelectAllOnPage}
+      />
+    ),
+    render: (row) => (
+      <input
+        type="checkbox"
+        className="people-manager__row-checkbox"
+        aria-label={`Seleccionar a ${row.fullName}`}
+        checked={selectedIds.has(row.id)}
+        onChange={() => toggleSelectOne(row.id)}
+      />
+    ),
+  };
+
   const columns = [
+    // La columna de checkboxes solo existe en el array de columnas mientras
+    // `selectionMode` está prendido: cuando está apagado no hay rastro de
+    // ella en el DOM, no solo deshabilitada.
+    ...(selectionMode ? [selectColumn] : []),
+    {
+      key: '__index',
+      header: '#',
+      // Numeración absoluta (no reinicia en 1 en cada página), así una
+      // persona tiene siempre el mismo número mientras no cambie el orden.
+      render: (row, index) => (page - 1) * PAGE_SIZE + index + 1,
+    },
     { key: 'fullName', header: 'Nombre' },
     { key: 'documentId', header: 'Documento', render: (row) => row.documentId || '—' },
     {
@@ -321,9 +462,9 @@ export function PeopleManager() {
               variant="danger"
               size="sm"
               onClick={() => setDeactivateTarget(row)}
-              aria-label={`Dar de baja a ${row.fullName}`}
+              aria-label={`Inactivar a ${row.fullName}`}
             >
-              Dar de baja
+              Inactivar
             </Button>
           ) : (
             <Button
@@ -346,8 +487,8 @@ export function PeopleManager() {
       <header className="page-header">
         <h1>Personas</h1>
         <p className="page-header__description">
-          Administra el padrón de instructores y ministros: carga masiva por archivo, alta, edición y baja
-          individual.
+          Administra el padrón de instructores y ministros: carga masiva por archivo, alta, edición, inactivación
+          y acciones en lote sobre varias personas a la vez.
         </p>
       </header>
 
@@ -355,6 +496,13 @@ export function PeopleManager() {
         <Button onClick={openCreateModal}>Nueva persona</Button>
         <Button variant="secondary" onClick={openImportModal}>
           Importar personas
+        </Button>
+        <Button
+          variant={selectionMode ? 'primary' : 'secondary'}
+          onClick={toggleSelectionMode}
+          aria-pressed={selectionMode}
+        >
+          {selectionMode ? 'Salir de selección múltiple' : 'Seleccionar varias'}
         </Button>
       </div>
 
@@ -370,11 +518,36 @@ export function PeopleManager() {
           <option value="INSTRUCTOR">Instructor</option>
           <option value="MINISTRO">Ministro</option>
         </Field>
-        <label className="people-manager__checkbox">
-          <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />
-          Ver personas inactivas también
-        </label>
+        <Field
+          label="Estado"
+          as="select"
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+        >
+          <option value="active">Activas</option>
+          <option value="inactive">Inactivas</option>
+          <option value="all">Todas</option>
+        </Field>
       </div>
+
+      {selectionMode && selectedIds.size > 0 ? (
+        <div className="people-manager__selection-bar" role="toolbar" aria-label="Acciones sobre la selección">
+          <p className="people-manager__selection-count">
+            {selectedIds.size} persona{selectedIds.size === 1 ? '' : 's'} seleccionada{selectedIds.size === 1 ? '' : 's'}
+          </p>
+          <div className="people-manager__selection-actions">
+            <Button variant="secondary" size="sm" onClick={openBulkCategoryModal} disabled={bulkSubmitting}>
+              Cambiar categoría
+            </Button>
+            <Button variant="secondary" size="sm" onClick={openBulkStatusModal} disabled={bulkSubmitting}>
+              Cambiar estado
+            </Button>
+            <Button variant="ghost" size="sm" onClick={clearSelection} disabled={bulkSubmitting}>
+              Cancelar selección
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {loading ? <Spinner label="Cargando personas..." /> : null}
 
@@ -524,13 +697,13 @@ export function PeopleManager() {
         open={Boolean(deactivateTarget)}
         onClose={() => setDeactivateTarget(null)}
         onConfirm={confirmDeactivate}
-        title="Dar de baja a esta persona"
+        title="Inactivar a esta persona"
         description={
           deactivateTarget
-            ? `${deactivateTarget.fullName} dejará de aparecer en los próximos sorteos, pero su historial se conserva. Puedes reactivarla cuando quieras desde el listado de inactivos.`
+            ? `${deactivateTarget.fullName} dejará de aparecer en los próximos sorteos, pero su historial se conserva. Puedes reactivarla cuando quieras desde el listado de inactivas.`
             : ''
         }
-        confirmLabel="Dar de baja"
+        confirmLabel="Inactivar"
         cancelLabel="Cancelar"
         variant="danger"
         loading={deactivateSubmitting}
@@ -575,6 +748,66 @@ export function PeopleManager() {
             </div>
           </>
         )}
+      </Modal>
+
+      {/* Cambiar categoría en lote */}
+      <Modal open={bulkCategoryOpen} onClose={() => setBulkCategoryOpen(false)} title="Cambiar categoría">
+        <form onSubmit={submitBulkCategory} noValidate>
+          <p>
+            Se va a cambiar la categoría de {selectedIds.size} persona{selectedIds.size === 1 ? '' : 's'}{' '}
+            seleccionada{selectedIds.size === 1 ? '' : 's'}.
+          </p>
+          <Field
+            label="Nueva categoría"
+            as="select"
+            value={bulkCategoryValue}
+            onChange={(event) => setBulkCategoryValue(event.target.value)}
+          >
+            <option value="INSTRUCTOR">Instructor</option>
+            <option value="MINISTRO">Ministro</option>
+          </Field>
+          <div className="people-manager__form-actions">
+            <Button type="button" variant="secondary" onClick={() => setBulkCategoryOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" loading={bulkSubmitting}>
+              Aplicar
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Cambiar estado en lote */}
+      <Modal open={bulkStatusOpen} onClose={() => setBulkStatusOpen(false)} title="Cambiar estado">
+        <form onSubmit={submitBulkStatus} noValidate>
+          <p>
+            Se va a cambiar el estado de {selectedIds.size} persona{selectedIds.size === 1 ? '' : 's'} seleccionada
+            {selectedIds.size === 1 ? '' : 's'}.
+          </p>
+          <Field
+            label="Nuevo estado"
+            as="select"
+            value={bulkStatusValue}
+            onChange={(event) => setBulkStatusValue(event.target.value)}
+          >
+            <option value="active">Activar</option>
+            <option value="inactive">Inactivar</option>
+          </Field>
+          {bulkStatusValue === 'inactive' ? (
+            <p className="people-manager__bulk-warning">
+              Estas personas dejarán de aparecer en los próximos sorteos. Su historial se conserva y podés
+              reactivarlas cuando quieras.
+            </p>
+          ) : null}
+          <div className="people-manager__form-actions">
+            <Button type="button" variant="secondary" onClick={() => setBulkStatusOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" variant={bulkStatusValue === 'inactive' ? 'danger' : 'primary'} loading={bulkSubmitting}>
+              Aplicar
+            </Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

@@ -23,9 +23,9 @@ function getFocusableElements(container) {
  * - `role="dialog"` + `aria-modal` + `aria-labelledby` para lectores de
  *   pantalla.
  *
- * @param {{ open: boolean, onClose: () => void, title: string }} props
+ * @param {{ open: boolean, onClose: () => void, title: string, size?: 'md'|'lg' }} props
  */
-export function Modal({ open, onClose, title, children, footer }) {
+export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   const previouslyFocusedRef = useRef(null);
@@ -90,7 +90,7 @@ export function Modal({ open, onClose, title, children, footer }) {
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div
         ref={dialogRef}
-        className="modal"
+        className={`modal${size === 'lg' ? ' modal--lg' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

@@ -14,7 +14,7 @@ import { Modal } from '../components/ui/Modal.jsx';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog.jsx';
 import { Field } from '../components/ui/Field.jsx';
 import { TeamCard } from '../components/domain/TeamCard.jsx';
-import { ROLE_LABELS } from '../components/domain/MemberList.jsx';
+import { ROLE_LABELS, sortMembers } from '../components/domain/MemberList.jsx';
 import './TeamGenerator.css';
 
 const CATEGORY_LABELS = {
@@ -485,6 +485,7 @@ export function TeamGenerator() {
         open={Boolean(editTeam)}
         onClose={closeEditModal}
         title={editTeam ? `Editar ${editTeam.label}` : 'Editar equipo'}
+        size="lg"
       >
         {editTeam ? (
           <form onSubmit={submitEditRoster} noValidate>
@@ -497,8 +498,11 @@ export function TeamGenerator() {
               <p className="team-generator__roster-empty">Este equipo se quedaría sin integrantes.</p>
             ) : (
               <ul className="roster-list">
-                {editRoster.map((m) => (
-                  <li key={m.personId} className="roster-row">
+                {sortMembers(editRoster).map((m) => (
+                  <li
+                    key={m.personId}
+                    className={`roster-row${m.role === 'LEADER' ? ' roster-row--leader' : ''}`}
+                  >
                     <span className="roster-row__name">{m.fullName}</span>
                     <label className="roster-row__role-label">
                       <span className="visually-hidden">Rol de {m.fullName}</span>

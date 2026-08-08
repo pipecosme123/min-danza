@@ -321,6 +321,43 @@ describe("PATCH /api/teams/:teamId", () => {
     await retire([leaderA, leaderB, collabA, collabB]);
   });
 
+  it("swap de líder dentro del mismo equipo (promover al que va de LEADER antes que degradar al anterior no debe romper el índice único parcial)", async () => {
+    // Regresión: team_member_one_leader_per_team es un índice único parcial
+    // (team_id WHERE role = 'LEADER') a nivel de base. Si el body llega con
+    // el ascenso a LEADER ANTES que la baja del líder anterior, procesarlo
+    // en ese mismo orden deja, por un instante, dos filas LEADER en el
+    // mismo equipo y Postgres rechaza el UPDATE con P2002.
+    const instructor1 = await makePerson("INSTRUCTOR", "Swap Instructor 1");
+    const instructor2 = await makePerson("INSTRUCTOR", "Swap Instructor 2");
+
+    const monthCycle = await createMonth(2079, 6, 1);
+    const gen = await authed(request(app).post(`/api/months/${monthCycle.id}/generate-teams`));
+    expect(gen.status).toBe(200);
+
+    const [team] = gen.body.teams;
+    const currentLeader = team.members.find((m) => m.role === "LEADER");
+    const currentSupport = team.members.find((m) => m.role === "SUPPORT");
+    expect(currentLeader).toBeDefined();
+    expect(currentSupport).toBeDefined();
+
+    // A propósito: el ascenso (nuevo LEADER) va PRIMERO en el array, la baja
+    // va SEGUNDA — es el orden que reproduce el bug si el service no lo
+    // corrige internamente.
+    const res = await authed(request(app).patch(`/api/teams/${team.id}`)).send({
+      members: [
+        { personId: currentSupport.personId, role: "LEADER" },
+        { personId: currentLeader.personId, role: "SUPPORT" },
+      ],
+    });
+
+    expect(res.status).toBe(200);
+    const roles = Object.fromEntries(res.body.team.members.map((m) => [m.personId, m.role]));
+    expect(roles[currentSupport.personId]).toBe("LEADER");
+    expect(roles[currentLeader.personId]).toBe("SUPPORT");
+
+    await retire([instructor1, instructor2]);
+  });
+
   it("PATCH con 0 líderes falla con 400 EQUIPO_SIN_LIDER", async () => {
     const { teamX, leaderA, leaderB, collabA, collabB } = await setupTwoTeamMonth([2079, 2]);
     const teamXCollabIds = teamX.members.filter((m) => m.role === "COLLABORATOR").map((m) => m.personId);

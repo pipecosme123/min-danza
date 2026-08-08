@@ -123,6 +123,13 @@
   border-radius: var(--radius-md);
 }
 
+/* Mismos tokens que `.member-list__item--leader`: el líder se reconoce de
+   un vistazo también acá, no solo en la vista de solo lectura. */
+.roster-row--leader {
+  background-color: var(--color-info-bg);
+  border-color: var(--color-info-border);
+}
+
 .roster-row__name {
   flex: 1 1 160px;
   font-weight: var(--font-weight-medium);

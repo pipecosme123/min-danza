@@ -16,7 +16,7 @@ vi.mock("../api/people.js", () => ({
   importPeople: vi.fn(),
 }));
 
-import { getPeople } from "../api/people.js";
+import { getPeople, updatePerson } from "../api/people.js";
 
 function samplePage(overrides = {}) {
   return {
@@ -40,6 +40,7 @@ function samplePage(overrides = {}) {
 describe("PeopleManager", () => {
   beforeEach(() => {
     getPeople.mockReset();
+    updatePerson.mockReset();
   });
 
   it("carga y muestra el listado de personas al montar, pidiendo solo activas por defecto", async () => {
@@ -106,5 +107,97 @@ describe("PeopleManager", () => {
 
     expect(screen.getByRole("heading", { name: "Nueva persona" })).toBeInTheDocument();
     expect(screen.getByLabelText(/Nombre completo/)).toBeInTheDocument();
+  });
+
+  it("la acción de baja se llama «Inactivar», no «Dar de baja»", async () => {
+    getPeople.mockResolvedValue(samplePage());
+    render(<PeopleManager />);
+
+    await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Inactivar a Ana Gómez" })).toBeInTheDocument();
+    expect(screen.queryByText(/dar de baja/i)).not.toBeInTheDocument();
+  });
+
+  it("el filtro «Estado» permite pedir solo inactivas o todas, no solo activas/checkbox", async () => {
+    getPeople.mockResolvedValue(samplePage());
+    const user = userEvent.setup();
+    render(<PeopleManager />);
+
+    await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
+    expect(getPeople).toHaveBeenLastCalledWith(expect.objectContaining({ active: true }));
+
+    await user.selectOptions(screen.getByLabelText("Estado"), "inactive");
+    await waitFor(() => expect(getPeople).toHaveBeenLastCalledWith(expect.objectContaining({ active: false })));
+
+    await user.selectOptions(screen.getByLabelText("Estado"), "all");
+    await waitFor(() => {
+      const lastCall = getPeople.mock.calls.at(-1)[0];
+      expect(lastCall).not.toHaveProperty("active");
+    });
+  });
+
+  it("la selección múltiple está oculta hasta que se activa, y se puede volver a ocultar", async () => {
+    getPeople.mockResolvedValue(samplePage());
+    const user = userEvent.setup();
+    render(<PeopleManager />);
+
+    await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
+    expect(screen.queryByLabelText("Seleccionar a Ana Gómez")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Seleccionar varias" }));
+    expect(screen.getByLabelText("Seleccionar a Ana Gómez")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Salir de selección múltiple" }));
+    expect(screen.queryByLabelText("Seleccionar a Ana Gómez")).not.toBeInTheDocument();
+  });
+
+  it("permite seleccionar varias personas y cambiar su categoría en lote", async () => {
+    getPeople.mockResolvedValue(
+      samplePage({
+        data: [
+          { id: "1", fullName: "Ana Gómez", documentId: "1234567", category: "INSTRUCTOR", active: true, notes: null },
+          { id: "2", fullName: "Beto Ruiz", documentId: "7654321", category: "MINISTRO", active: true, notes: null },
+        ],
+        pagination: { page: 1, pageSize: 25, total: 2, totalPages: 1 },
+      }),
+    );
+    updatePerson.mockResolvedValue({ person: { id: "1", fullName: "Ana Gómez" }, warnings: [] });
+    const user = userEvent.setup();
+    render(<PeopleManager />);
+
+    await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
+
+    // La selección múltiple arranca oculta: hay que activarla a propósito.
+    expect(screen.queryByLabelText("Seleccionar a Ana Gómez")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Seleccionar varias" }));
+
+    await user.click(screen.getByLabelText("Seleccionar a Ana Gómez"));
+    await user.click(screen.getByLabelText("Seleccionar a Beto Ruiz"));
+    expect(screen.getByText("2 personas seleccionadas")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cambiar categoría" }));
+    await user.selectOptions(screen.getByLabelText("Nueva categoría"), "MINISTRO");
+    await user.click(screen.getByRole("button", { name: "Aplicar" }));
+
+    await waitFor(() => expect(updatePerson).toHaveBeenCalledTimes(2));
+    expect(updatePerson).toHaveBeenCalledWith("1", { category: "MINISTRO" });
+    expect(updatePerson).toHaveBeenCalledWith("2", { category: "MINISTRO" });
+    // Tras aplicar, la selección se limpia y se refresca el listado.
+    await waitFor(() => expect(screen.queryByText(/seleccionada/)).not.toBeInTheDocument());
+  });
+
+  it("la paginación ofrece botones numéricos para saltar directo a una página", async () => {
+    getPeople.mockResolvedValue(
+      samplePage({ pagination: { page: 1, pageSize: 25, total: 100, totalPages: 4 } }),
+    );
+    const user = userEvent.setup();
+    render(<PeopleManager />);
+
+    await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
+
+    const pageThreeButton = screen.getByRole("button", { name: "Ir a la página 3" });
+    await user.click(pageThreeButton);
+
+    await waitFor(() => expect(getPeople).toHaveBeenLastCalledWith(expect.objectContaining({ page: 3 })));
   });
 });

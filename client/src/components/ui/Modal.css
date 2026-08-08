@@ -20,6 +20,19 @@
   box-shadow: var(--shadow-lg);
 }
 
+/* Diálogos con contenido más denso (ej. edición del roster de un equipo)
+   necesitan más aire en pantallas grandes; en mobile no hay diferencia,
+   `.modal` ya ocupa el ancho disponible. */
+.modal--lg {
+  max-width: 480px;
+}
+
+@media (min-width: 640px) {
+  .modal--lg {
+    max-width: 720px;
+  }
+}
+
 .modal__header {
   display: flex;
   align-items: flex-start;

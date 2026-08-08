@@ -259,6 +259,27 @@ export async function listTeamsForMonth(monthCycleId) {
 // ---------------------------------------------------------------------------
 
 export async function updateTeam(teamId, members) {
+  try {
+    return await updateTeamTransaction(teamId, members);
+  } catch (err) {
+    // Carrera: dos PATCH concurrentes sobre el mismo equipo (doble clic,
+    // dos pestañas) pueden pasar ambos las validaciones de arriba antes de
+    // que el primero confirme, y el segundo choca con alguno de los índices
+    // únicos (uno de ellos parcial: team_member_one_leader_per_team) recién
+    // al escribir. Mismo patrón que la carrera de POST /api/people
+    // (ver people.service.js): se traduce a un 409 legible en vez de dejar
+    // pasar el P2002 crudo al errorHandler genérico.
+    if (err?.code === "P2002") {
+      throw new ConflictError(
+        "No se pudo guardar: otra edición de este equipo se aplicó al mismo tiempo. Volvé a intentarlo.",
+        { code: "EQUIPO_EDITADO_CONCURRENTEMENTE" }
+      );
+    }
+    throw err;
+  }
+}
+
+async function updateTeamTransaction(teamId, members) {
   return prisma.$transaction(async (tx) => {
     const team = await tx.team.findUnique({
       where: { id: teamId },
@@ -322,8 +343,18 @@ export async function updateTeam(teamId, members) {
       },
     });
 
-    // Paso 4: upsert el resto.
-    for (const m of members) {
+    // Paso 4: upsert el resto. Los no-LEADER van primero: la base tiene un
+    // índice único parcial (team_member_one_leader_per_team, sobre team_id
+    // WHERE role = 'LEADER') que protege la invariante B2 a nivel de datos.
+    // Si el nuevo líder se escribiera antes de degradar al anterior, habría
+    // un instante con dos filas LEADER en el mismo equipo y Postgres
+    // rechazaría el UPDATE con P2002 — por eso las bajas de LEADER SIEMPRE
+    // se aplican antes que los ascensos a LEADER, nunca en el orden en que
+    // llegó el body.
+    const orderedMembers = [...members].sort(
+      (a, b) => Number(a.role === "LEADER") - Number(b.role === "LEADER")
+    );
+    for (const m of orderedMembers) {
       const person = peopleById.get(m.personId);
       const expectedCategory = m.role === "COLLABORATOR" ? "MINISTRO" : "INSTRUCTOR";
       const manualOverride = person.category !== expectedCategory;

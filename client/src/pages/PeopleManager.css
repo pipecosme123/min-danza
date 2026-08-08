@@ -18,26 +18,45 @@
 
 @media (min-width: 720px) {
   .people-manager__filters {
-    grid-template-columns: 2fr 1fr auto;
+    grid-template-columns: 2fr 1fr 1fr;
   }
 }
 
-.people-manager__checkbox {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--tap-target-min);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text);
+.people-manager__row-checkbox {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--color-primary);
   cursor: pointer;
 }
 
-.people-manager__checkbox input {
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-  accent-color: var(--color-primary);
-  cursor: pointer;
+.people-manager__selection-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  background-color: var(--color-info-bg);
+  border: 1px solid var(--color-info-border);
+  border-radius: var(--radius-md);
+}
+
+.people-manager__selection-count {
+  margin: 0;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-info-text);
+}
+
+.people-manager__selection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.people-manager__bulk-warning {
+  color: var(--color-danger);
+  font-weight: var(--font-weight-medium);
 }
 
 .people-manager__row-actions {

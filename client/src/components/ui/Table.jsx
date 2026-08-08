@@ -7,7 +7,7 @@ import './Table.css';
  * personas, equipos o eventos sin reescribirse (principio Open/Closed).
  *
  * @param {{
- *   columns: Array<{ key: string, header: string, render?: (row: any) => React.ReactNode }>,
+ *   columns: Array<{ key: string, header: string, render?: (row: any, index: number) => React.ReactNode }>,
  *   data: Array<any>,
  *   getRowKey?: (row: any, index: number) => string|number,
  *   caption?: string,
@@ -39,7 +39,7 @@ export function Table({ columns, data, getRowKey = (row, index) => row.id ?? ind
             data.map((row, index) => (
               <tr key={getRowKey(row, index)}>
                 {columns.map((column) => (
-                  <td key={column.key}>{column.render ? column.render(row) : row[column.key]}</td>
+                  <td key={column.key}>{column.render ? column.render(row, index) : row[column.key]}</td>
                 ))}
               </tr>
             ))
