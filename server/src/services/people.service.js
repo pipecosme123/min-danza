@@ -12,6 +12,7 @@ const PERSON_SELECT = {
   fullName: true,
   documentId: true,
   category: true,
+  isJoven: true,
   active: true,
   notes: true,
   createdAt: true,
@@ -53,12 +54,13 @@ function buildOrderBy(sort) {
 }
 
 /**
- * @param {{ page: number, pageSize: number, search?: string, category?: string, active?: boolean, sort?: string }} query
+ * @param {{ page: number, pageSize: number, search?: string, category?: string, active?: boolean, isJoven?: boolean, sort?: string }} query
  */
-export async function listPeople({ page, pageSize, search, category, active, sort }) {
+export async function listPeople({ page, pageSize, search, category, active, isJoven, sort }) {
   const where = {};
   if (category) where.category = category;
   if (active !== undefined) where.active = active;
+  if (isJoven !== undefined) where.isJoven = isJoven;
   if (search) {
     const docSearch = normalizeDocument(search);
     where.OR = [
@@ -106,9 +108,9 @@ async function findPersonByNameKey(key, excludeId) {
 }
 
 /**
- * @param {{ fullName: string, documentId?: string|null, category: string, notes?: string|null, confirmDuplicateName?: boolean }} input
+ * @param {{ fullName: string, documentId?: string|null, category: string, isJoven?: boolean, notes?: string|null, confirmDuplicateName?: boolean }} input
  */
-export async function createPerson({ fullName, documentId, category, notes, confirmDuplicateName }) {
+export async function createPerson({ fullName, documentId, category, isJoven, notes, confirmDuplicateName }) {
   if (documentId) {
     const clashing = await prisma.person.findUnique({ where: { documentId } });
     if (clashing) {
@@ -137,6 +139,7 @@ export async function createPerson({ fullName, documentId, category, notes, conf
         fullName,
         documentId: documentId ?? null,
         category,
+        isJoven: isJoven ?? false,
         notes: notes ?? null,
       },
       select: PERSON_SELECT,
@@ -183,7 +186,7 @@ async function collectActiveMembershipWarning(tx, personId) {
 
 /**
  * @param {string} id
- * @param {{ fullName?: string, documentId?: string|null, category?: string, notes?: string|null, active?: boolean }} patch
+ * @param {{ fullName?: string, documentId?: string|null, category?: string, isJoven?: boolean, notes?: string|null, active?: boolean }} patch
  */
 export async function updatePerson(id, patch) {
   return prisma.$transaction(async (tx) => {
@@ -209,6 +212,7 @@ export async function updatePerson(id, patch) {
     }
 
     if (patch.category !== undefined) data.category = patch.category;
+    if (patch.isJoven !== undefined) data.isJoven = patch.isJoven;
     if (patch.notes !== undefined) data.notes = patch.notes;
     if (patch.active !== undefined) data.active = patch.active;
 

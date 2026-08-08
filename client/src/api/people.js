@@ -12,6 +12,7 @@ import { apiClient } from './client.js';
  * @property {string} fullName
  * @property {string|null} documentId
  * @property {'INSTRUCTOR'|'MINISTRO'} category
+ * @property {boolean} isJoven Independiente de `category`: elegible para el pool de sorteo del equipo de jóvenes.
  * @property {boolean} active
  * @property {string|null} notes
  * @property {string} createdAt
@@ -25,6 +26,7 @@ import { apiClient } from './client.js';
  * @property {string} [search]
  * @property {'INSTRUCTOR'|'MINISTRO'} [category]
  * @property {boolean} [active]
+ * @property {boolean} [isJoven]
  * @property {'fullName'|'-fullName'|'createdAt'|'-createdAt'} [sort]
  */
 
@@ -44,6 +46,7 @@ export function getPeople(params = {}) {
   if (params.search) query.set('search', params.search);
   if (params.category) query.set('category', params.category);
   if (params.active != null) query.set('active', String(params.active));
+  if (params.isJoven != null) query.set('isJoven', String(params.isJoven));
   if (params.sort) query.set('sort', params.sort);
 
   const queryString = query.toString();
@@ -51,7 +54,7 @@ export function getPeople(params = {}) {
 }
 
 /**
- * @param {{ fullName: string, documentId?: string|null, category: 'INSTRUCTOR'|'MINISTRO', notes?: string|null, confirmDuplicateName?: boolean }} data
+ * @param {{ fullName: string, documentId?: string|null, category: 'INSTRUCTOR'|'MINISTRO', isJoven?: boolean, notes?: string|null, confirmDuplicateName?: boolean }} data
  * @returns {Promise<Person>}
  */
 export function createPerson(data) {
@@ -60,7 +63,7 @@ export function createPerson(data) {
 
 /**
  * @param {string} id
- * @param {Partial<{ fullName: string, documentId: string|null, category: 'INSTRUCTOR'|'MINISTRO', notes: string|null, active: boolean }>} data
+ * @param {Partial<{ fullName: string, documentId: string|null, category: 'INSTRUCTOR'|'MINISTRO', isJoven: boolean, notes: string|null, active: boolean }>} data
  * @returns {Promise<{ person: Person, warnings: Array<{ code: string, message: string }> }>}
  */
 export function updatePerson(id, data) {

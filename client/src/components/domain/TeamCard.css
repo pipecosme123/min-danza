@@ -1,9 +1,18 @@
 .team-card {
   padding: var(--space-4);
   border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-border);
   border-radius: var(--radius-lg);
   background-color: var(--color-surface);
   box-shadow: var(--shadow-sm);
+}
+
+/* Equipo de jóvenes: mismo componente, solo un acento de color para
+   reconocerlo de un vistazo en el grid (el texto del `label`, "Servicio de
+   jóvenes", ya lo distingue por sí solo; esto es un refuerzo visual, no la
+   única señal). */
+.team-card--youth {
+  border-left-color: var(--color-primary);
 }
 
 .team-card__header {

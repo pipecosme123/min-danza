@@ -47,7 +47,14 @@ const CANONICAL_ALIASES = {
     "documentid",
   ],
   notes: ["notas", "observaciones", "comentarios", "notes"],
+  isJoven: ["joven", "jovenes", "jóvenes", "es joven"],
 };
+
+// P-ish (mismo mecanismo que CATEGORY_TABLE, pero sin error de fila): valores
+// que se reconocen como "sí" en la columna opcional "Joven". Cualquier otra
+// cosa (vacío, "no", "false", "0", texto libre) se interpreta como negativo —
+// nunca falla la fila por esto.
+const JOVEN_TRUE_VALUES = new Set(["SI", "TRUE", "1", "X"]);
 
 // P5 — tabla CERRADA de valores aceptados en la columna de categoría.
 // Los alias en español ("Elegible líder", "Colaborador", etc.) se conservan
@@ -83,7 +90,9 @@ function normalizeHeader(s) {
     .trim();
 }
 
-function normalizeCategoryCell(s) {
+// Genérico: trim -> mayúsculas -> sin tildes -> espacios/guiones colapsados.
+// Usado para normalizar tanto la celda de categoría como la de "Joven".
+function normalizeCellText(s) {
   return s
     .trim()
     .toUpperCase()
@@ -291,7 +300,7 @@ function validateCategoryCell(raw) {
   if (raw.trim() === "") {
     return { ok: false, code: "CATEGORIA_VACIA", message: "La categoría no puede estar vacía." };
   }
-  const norm = normalizeCategoryCell(raw);
+  const norm = normalizeCellText(raw);
   const mapped = CATEGORY_TABLE[norm];
   if (!mapped) {
     return {
@@ -315,6 +324,11 @@ function validateDocumentCell(raw) {
     return { ok: false, code: "DOCUMENTO_INVALIDO", message: "El documento solo admite letras y números." };
   }
   return { ok: true, value };
+}
+
+// Columna opcional "Joven": nunca falla la fila, solo mapea a boolean.
+function parseJovenCell(raw) {
+  return JOVEN_TRUE_VALUES.has(normalizeCellText(raw));
 }
 
 function validateNotesCell(raw) {
@@ -434,6 +448,19 @@ export async function importPeopleFromFile({ buffer, originalName }) {
       }
     }
 
+    // Columna opcional "Joven": si no está presente, isJoven queda false
+    // para todas las filas (ver docs/api/people.md). Si está presente, se
+    // marca isJovenProvided para que, al actualizar a alguien existente, solo
+    // se toque el campo cuando el archivo trae la columna (mismo patrón que
+    // notesProvided arriba) — nunca se resetea a false por omisión de celda.
+    let isJoven = false;
+    let isJovenProvided = false;
+    if (assigned.isJoven !== undefined) {
+      const rawIsJoven = getCell(row, "isJoven") ?? "";
+      isJoven = parseJovenCell(rawIsJoven);
+      isJovenProvided = true;
+    }
+
     const fullName = nameResult.value;
     const category = categoryResult.value;
 
@@ -464,7 +491,7 @@ export async function importPeopleFromFile({ buffer, originalName }) {
     }
     fileKeyMap.set(dedupKey, rowNumber);
 
-    validRows.push({ rowNumber, fullName, category, documentId, notes, notesProvided });
+    validRows.push({ rowNumber, fullName, category, documentId, notes, notesProvided, isJoven, isJovenProvided });
   }
 
   // ---- Pasada 2: resolver contra la base (P11) ----
@@ -509,6 +536,9 @@ export async function importPeopleFromFile({ buffer, originalName }) {
         if (row.notesProvided && row.notes !== existing.notes) {
           changes.notes = { from: existing.notes, to: row.notes };
         }
+        if (row.isJovenProvided && row.isJoven !== existing.isJoven) {
+          changes.isJoven = { from: existing.isJoven, to: row.isJoven };
+        }
 
         if (Object.keys(changes).length === 0) {
           skipped.push({
@@ -524,6 +554,7 @@ export async function importPeopleFromFile({ buffer, originalName }) {
         if (changes.fullName) updateData.fullName = row.fullName;
         if (changes.category) updateData.category = row.category;
         if (changes.notes) updateData.notes = row.notes;
+        if (changes.isJoven) updateData.isJoven = row.isJoven;
 
         pendingOps.push({
           kind: "update",
@@ -539,7 +570,13 @@ export async function importPeopleFromFile({ buffer, originalName }) {
           rowNumber: row.rowNumber,
           execute: (tx) =>
             tx.person.create({
-              data: { fullName: row.fullName, documentId: row.documentId, category: row.category, notes: row.notes },
+              data: {
+                fullName: row.fullName,
+                documentId: row.documentId,
+                category: row.category,
+                isJoven: row.isJoven,
+                notes: row.notes,
+              },
               select: { id: true, fullName: true, category: true },
             }),
         });
@@ -560,7 +597,13 @@ export async function importPeopleFromFile({ buffer, originalName }) {
         rowNumber: row.rowNumber,
         execute: (tx) =>
           tx.person.create({
-            data: { fullName: row.fullName, documentId: null, category: row.category, notes: row.notes },
+            data: {
+              fullName: row.fullName,
+              documentId: null,
+              category: row.category,
+              isJoven: row.isJoven,
+              notes: row.notes,
+            },
             select: { id: true, fullName: true, category: true },
           }),
       });

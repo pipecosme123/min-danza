@@ -68,13 +68,14 @@ function authed(req) {
   return req.set("Authorization", `Bearer ${token}`);
 }
 
-async function makePerson(category, suffix) {
+async function makePerson(category, suffix, opts = {}) {
   docCounter += 1;
   const person = await prisma.person.create({
     data: {
       fullName: `${NAME_PREFIX} ${suffix}`,
       documentId: `${DOC_PREFIX}${docCounter}`,
       category,
+      isJoven: opts.isJoven ?? false,
       active: true,
     },
   });
@@ -255,6 +256,222 @@ describe("POST /api/months/:id/generate-teams", () => {
   it("sin token devuelve 401", async () => {
     const res = await request(app).post("/api/months/cualquier-id/generate-teams");
     expect(res.status).toBe(401);
+  });
+});
+
+describe("POST /api/months/:id/generate-teams — equipo de jóvenes (youthTeam)", () => {
+  it("youthTeam ausente: no se crea ningún equipo YOUTH ese mes, comportamiento regular intacto", async () => {
+    const instructors = await Promise.all(
+      Array.from({ length: 2 }, (_, i) => makePerson("INSTRUCTOR", `Youth Ausente Instr ${i + 1}`))
+    );
+    const month = await createMonth(2090, 1, 2);
+    const res = await authed(request(app).post(`/api/months/${month.id}/generate-teams`));
+
+    expect(res.status).toBe(200);
+    expect(res.body.teams).toHaveLength(2);
+    expect(res.body.teams.every((t) => t.teamType === "REGULAR")).toBe(true);
+
+    await retire(instructors);
+  });
+
+  it("youthTeam.enabled: false explícito: tampoco se crea equipo YOUTH", async () => {
+    const instructors = await Promise.all(
+      Array.from({ length: 1 }, (_, i) => makePerson("INSTRUCTOR", `Youth False Instr ${i + 1}`))
+    );
+    const month = await createMonth(2090, 2, 1);
+    const res = await authed(request(app).post(`/api/months/${month.id}/generate-teams`)).send({
+      youthTeam: { enabled: false },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.teams).toHaveLength(1);
+    expect(res.body.teams.every((t) => t.teamType === "REGULAR")).toBe(true);
+
+    await retire(instructors);
+  });
+
+  it("crea el equipo YOUTH con el líder correcto y size-1 colaboradores, ningún SUPPORT", async () => {
+    const instructors = await Promise.all(
+      Array.from({ length: 1 }, (_, i) => makePerson("INSTRUCTOR", `Youth Ok Instr ${i + 1}`))
+    );
+    const leader = await makePerson("MINISTRO", "Youth Ok Leader", { isJoven: true });
+    const jovenes = await Promise.all(
+      Array.from({ length: 5 }, (_, i) => makePerson("MINISTRO", `Youth Ok Colab ${i + 1}`, { isJoven: true }))
+    );
+
+    const month = await createMonth(2090, 3, 1);
+    const res = await authed(request(app).post(`/api/months/${month.id}/generate-teams`)).send({
+      youthTeam: { enabled: true, size: 4, leaderPersonId: leader.id },
+    });
+
+    expect(res.status).toBe(200);
+    const youthTeam = res.body.teams.find((t) => t.teamType === "YOUTH");
+    expect(youthTeam).toBeDefined();
+    expect(youthTeam.label).toBe("Servicio de jóvenes");
+
+    const leaders = youthTeam.members.filter((m) => m.role === "LEADER");
+    const collaborators = youthTeam.members.filter((m) => m.role === "COLLABORATOR");
+    const support = youthTeam.members.filter((m) => m.role === "SUPPORT");
+    expect(leaders).toHaveLength(1);
+    expect(leaders[0].personId).toBe(leader.id);
+    expect(leaders[0].manualOverride).toBe(true);
+    expect(collaborators).toHaveLength(3); // size 4 - 1 líder
+    expect(support).toHaveLength(0);
+    expect(collaborators.every((m) => m.manualOverride === false)).toBe(true);
+
+    await retire([...instructors, leader, ...jovenes]);
+  });
+
+  it("falta leaderPersonId con enabled: true -> 400", async () => {
+    const instructors = await Promise.all(
+      Array.from({ length: 1 }, (_, i) => makePerson("INSTRUCTOR", `Youth SinLider Instr ${i + 1}`))
+    );
+    const month = await createMonth(2090, 4, 1);
+    const res = await authed(request(app).post(`/api/months/${month.id}/generate-teams`)).send({
+      youthTeam: { enabled: true, size: 3 },
+    });
+
+    expect(res.status).toBe(400);
+
+    await retire(instructors);
+  });
+
+  it("leaderPersonId de alguien isJoven: false -> 400 LIDER_JOVENES_INVALIDO", async () => {
+    const instructors = await Promise.all(
+      Array.from({ length: 1 }, (_, i) => makePerson("INSTRUCTOR", `Youth LiderNoJoven Instr ${i + 1}`))
+    );
+    const notJoven = await makePerson("MINISTRO", "Youth Lider No Joven", { isJoven: false });
+
+    const month = await createMonth(2090, 5, 1);
+    const res = await authed(request(app).post(`/api/months/${month.id}/generate-teams`)).send({
+      youthTeam: { enabled: true, size: 1, leaderPersonId: notJoven.id },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.details.code).toBe("LIDER_JOVENES_INVALIDO");
+
+    await retire([...instructors, notJoven]);
+  });
+
+  it("leaderPersonId de alguien inactivo -> 400 LIDER_JOVENES_INVALIDO", async () => {
+    const instructors = await Promise.all(
+      Array.from({ length: 1 }, (_, i) => makePerson("INSTRUCTOR", `Youth LiderInactivo Instr ${i + 1}`))
+    );
+    const inactiveJoven = await makePerson("MINISTRO", "Youth Lider Inactivo", { isJoven: true });
+    await retire([inactiveJoven]);
+
+    const month = await createMonth(2090, 6, 1);
+    const res = await authed(request(app).post(`/api/months/${month.id}/generate-teams`)).send({
+      youthTeam: { enabled: true, size: 1, leaderPersonId: inactiveJoven.id },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.details.code).toBe("LIDER_JOVENES_INVALIDO");
+
+    await retire(instructors);
+  });
+
+  it("409 POOL_JOVENES_INSUFICIENTE si hay menos personas isJoven activas que size", async () => {
+    const instructors = await Promise.all(
+      Array.from({ length: 1 }, (_, i) => makePerson("INSTRUCTOR", `Youth PoolInsuf Instr ${i + 1}`))
+    );
+    const leader = await makePerson("MINISTRO", "Youth PoolInsuf Leader", { isJoven: true });
+    const oneCollab = await makePerson("MINISTRO", "Youth PoolInsuf Colab", { isJoven: true });
+
+    const month = await createMonth(2090, 7, 1);
+    const res = await authed(request(app).post(`/api/months/${month.id}/generate-teams`)).send({
+      youthTeam: { enabled: true, size: 5, leaderPersonId: leader.id },
+    });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.details.code).toBe("POOL_JOVENES_INSUFICIENTE");
+    expect(res.body.error.details.available).toBe(2); // líder + 1 colaborador disponible
+    expect(res.body.error.details.needed).toBe(5);
+
+    await retire([...instructors, leader, oneCollab]);
+  });
+
+  it("prioriza a quienes no estuvieron en YOUTH el mes anterior, y relaja con warning JOVENES_REPETIDOS_POSIBLE cuando no alcanza", async () => {
+    const instructorsE = await Promise.all(
+      Array.from({ length: 1 }, (_, i) => makePerson("INSTRUCTOR", `Youth Relax E Instr ${i + 1}`))
+    );
+    const leaderE = await makePerson("MINISTRO", "Youth Relax E Leader", { isJoven: true });
+    const collabsE = await Promise.all(
+      Array.from({ length: 2 }, (_, i) => makePerson("MINISTRO", `Youth Relax E Colab ${i + 1}`, { isJoven: true }))
+    );
+
+    const monthE = await createMonth(2091, 1, 1);
+    const genE = await authed(request(app).post(`/api/months/${monthE.id}/generate-teams`)).send({
+      youthTeam: { enabled: true, size: 3, leaderPersonId: leaderE.id },
+    });
+    expect(genE.status).toBe(200);
+    expect(genE.body.warnings.some((w) => w.code === "JOVENES_REPETIDOS_POSIBLE")).toBe(false);
+    const youthTeamE = genE.body.teams.find((t) => t.teamType === "YOUTH");
+    const collabIdsE = youthTeamE.members.filter((m) => m.role === "COLLABORATOR").map((m) => m.personId);
+    expect(collabIdsE.sort()).toEqual(collabsE.map((p) => p.id).sort());
+
+    // Mes F: mismo líder + mismo pool exacto (nadie nuevo) -> el pool
+    // "preferido" (sin los colaboradores del mes anterior) queda vacío, se
+    // relaja la restricción y se avisa con warning.
+    const monthF = await createMonth(2091, 2, 1);
+    const genF = await authed(request(app).post(`/api/months/${monthF.id}/generate-teams`)).send({
+      youthTeam: { enabled: true, size: 3, leaderPersonId: leaderE.id },
+    });
+    expect(genF.status).toBe(200);
+    expect(genF.body.warnings.some((w) => w.code === "JOVENES_REPETIDOS_POSIBLE")).toBe(true);
+    const youthTeamF = genF.body.teams.find((t) => t.teamType === "YOUTH");
+    const collabIdsF = youthTeamF.members.filter((m) => m.role === "COLLABORATOR").map((m) => m.personId);
+    expect(collabIdsF.sort()).toEqual(collabsE.map((p) => p.id).sort());
+
+    await retire([...instructorsE, leaderE, ...collabsE]);
+  });
+
+  it("una persona puede estar en su equipo REGULAR y en el equipo YOUTH el mismo mes (el índice único parcial lo permite)", async () => {
+    // Único instructor activo del pool -> se convierte, sin ambigüedad, en
+    // el líder del único equipo regular. Es también isJoven, y se lo
+    // nombra a mano líder del equipo de jóvenes: debe terminar en AMBOS
+    // equipos del mismo mes sin chocar contra ningún índice único.
+    const overlapPerson = await makePerson("INSTRUCTOR", "Youth Overlap", { isJoven: true });
+
+    const month = await createMonth(2090, 8, 1);
+    const res = await authed(request(app).post(`/api/months/${month.id}/generate-teams`)).send({
+      youthTeam: { enabled: true, size: 1, leaderPersonId: overlapPerson.id },
+    });
+
+    expect(res.status).toBe(200);
+    const regularTeam = res.body.teams.find((t) => t.teamType === "REGULAR");
+    const youthTeam = res.body.teams.find((t) => t.teamType === "YOUTH");
+    expect(regularTeam.members.map((m) => m.personId)).toContain(overlapPerson.id);
+    expect(youthTeam.members.map((m) => m.personId)).toContain(overlapPerson.id);
+
+    await retire([overlapPerson]);
+  });
+
+  it("PATCH a un equipo YOUTH con role SUPPORT en el body -> rechazado con 400 ROL_INVALIDO_EQUIPO_JOVENES", async () => {
+    const instructors = await Promise.all(
+      Array.from({ length: 1 }, (_, i) => makePerson("INSTRUCTOR", `Youth PatchSupport Instr ${i + 1}`))
+    );
+    const leader = await makePerson("MINISTRO", "Youth PatchSupport Leader", { isJoven: true });
+    const collab = await makePerson("MINISTRO", "Youth PatchSupport Colab", { isJoven: true });
+
+    const month = await createMonth(2090, 9, 1);
+    const gen = await authed(request(app).post(`/api/months/${month.id}/generate-teams`)).send({
+      youthTeam: { enabled: true, size: 2, leaderPersonId: leader.id },
+    });
+    expect(gen.status).toBe(200);
+    const youthTeam = gen.body.teams.find((t) => t.teamType === "YOUTH");
+
+    const res = await authed(request(app).patch(`/api/teams/${youthTeam.id}`)).send({
+      members: [
+        { personId: leader.id, role: "LEADER" },
+        { personId: collab.id, role: "SUPPORT" },
+      ],
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.details.code).toBe("ROL_INVALIDO_EQUIPO_JOVENES");
+
+    await retire([...instructors, leader, collab]);
   });
 });
 

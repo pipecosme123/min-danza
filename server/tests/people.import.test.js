@@ -205,6 +205,56 @@ describe("POST /api/people/import — formatos de archivo", () => {
     expect(res.body.summary.ignoredColumns).toContain("Telefono");
   });
 
+  it("columna opcional 'Joven' mapea sí/no a isJoven (crea y actualiza)", async () => {
+    const docSi = `${DOC_PREFIX}JOVENSI`;
+    const docNo = `${DOC_PREFIX}JOVENNO`;
+    const docVacio = `${DOC_PREFIX}JOVENVACIO`;
+    const docUpdate = `${DOC_PREFIX}JOVENUPD`;
+
+    const existing = await prisma.person.create({
+      data: { fullName: `${NAME_PREFIX} Joven Update`, documentId: docUpdate, category: "MINISTRO", isJoven: false },
+    });
+
+    const csv = [
+      "Nombre,Categoria,Documento,Joven",
+      `${NAME_PREFIX} Joven Si,Colaborador,${docSi},Sí`,
+      `${NAME_PREFIX} Joven No,Colaborador,${docNo},No`,
+      `${NAME_PREFIX} Joven Vacio,Colaborador,${docVacio},`,
+      `${NAME_PREFIX} Joven Update,Colaborador,${docUpdate},true`,
+    ].join("\n");
+
+    const res = await attachCsv(authedPost("/api/people/import"), csv, "joven.csv");
+    expect(res.status).toBe(200);
+    expect(res.body.summary.created).toBe(3);
+    expect(res.body.summary.updated).toBe(1);
+
+    const created = await prisma.person.findMany({
+      where: { documentId: { in: [docSi, docNo, docVacio] } },
+    });
+    const bySi = created.find((p) => p.documentId === docSi);
+    const byNo = created.find((p) => p.documentId === docNo);
+    const byVacio = created.find((p) => p.documentId === docVacio);
+    expect(bySi.isJoven).toBe(true);
+    expect(byNo.isJoven).toBe(false);
+    expect(byVacio.isJoven).toBe(false);
+
+    const reloadedExisting = await prisma.person.findUnique({ where: { id: existing.id } });
+    expect(reloadedExisting.isJoven).toBe(true);
+    expect(res.body.updated[0].changes.isJoven).toEqual({ from: false, to: true });
+  });
+
+  it("sin la columna 'Joven' en el archivo, isJoven queda false para todas las filas creadas", async () => {
+    const doc = `${DOC_PREFIX}SINCOLJOVEN`;
+    const csv = ["Nombre,Categoria,Documento", `${NAME_PREFIX} Sin Columna Joven,Colaborador,${doc}`].join("\n");
+
+    const res = await attachCsv(authedPost("/api/people/import"), csv, "sin-joven.csv");
+    expect(res.status).toBe(200);
+    expect(res.body.summary.created).toBe(1);
+
+    const created = await prisma.person.findUnique({ where: { documentId: doc } });
+    expect(created.isJoven).toBe(false);
+  });
+
   it("archivo .xls legacy se rechaza con mensaje explícito", async () => {
     const res = await authedPost("/api/people/import").attach("file", Buffer.from("contenido"), "legacy.xls");
     expect(res.status).toBe(400);

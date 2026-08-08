@@ -14,6 +14,8 @@ import { apiClient } from './client.js';
  * @property {number} teamCount
  * @property {'DRAFT'|'FINALIZED'} status
  * @property {string|null} finalizedAt
+ * @property {boolean} youthTeamEnabled Último `enabled` pedido para el equipo de jóvenes en un `generate-teams` de este mes (default a precargar en el próximo sorteo, no gobierna nada por sí solo).
+ * @property {number} youthTeamSize Ídem para `size`.
  * @property {string} createdAt
  * @property {string} updatedAt
  */
@@ -32,6 +34,7 @@ import { apiClient } from './client.js';
  * @property {string} id
  * @property {string} label
  * @property {number} orderIndex
+ * @property {'REGULAR'|'YOUTH'} teamType
  * @property {TeamMemberDto[]} members
  */
 
@@ -69,14 +72,16 @@ export function getMonthTeams(id) {
 }
 
 /**
- * Sortea (o re-sortea) líder/apoyo/ministros de todos los equipos del mes.
- * Destructivo: reemplaza por completo el sorteo anterior, incluidas
- * ediciones manuales previas.
+ * Sortea (o re-sortea) líder/apoyo/ministros de todos los equipos del mes y,
+ * opcionalmente, el equipo de jóvenes (`YOUTH`). Destructivo: reemplaza por
+ * completo el sorteo anterior, incluidas ediciones manuales previas (y
+ * borra/recrea el equipo `YOUTH` si existía).
  * @param {string} id
+ * @param {{ youthTeam?: { enabled: boolean, size?: number, leaderPersonId?: string } }} [data]
  * @returns {Promise<{ teams: TeamDto[], warnings: Array<{ code: string, message: string }> }>}
  */
-export function generateTeams(id) {
-  return apiClient.post(`/months/${id}/generate-teams`);
+export function generateTeams(id, data = {}) {
+  return apiClient.post(`/months/${id}/generate-teams`, data);
 }
 
 /**

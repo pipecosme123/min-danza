@@ -98,6 +98,40 @@
   color: var(--color-text-secondary);
 }
 
+/* Mismo tratamiento visual que `.error-message` (Ver `ErrorMessage.css`):
+   fondo traslúcido derivado de `--color-danger`, funciona igual en ambos
+   temas sin necesitar una variable aparte. */
+.team-generator__resort-warning {
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  background-color: rgb(185 28 28 / 0.08);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}
+
+.team-generator__youth-fields {
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+}
+
+.team-generator__youth-fields .field {
+  margin-bottom: var(--space-3);
+}
+
+.team-generator__youth-fields .field:last-child {
+  margin-bottom: 0;
+}
+
+.team-generator__youth-empty {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
 .team-generator__roster-empty {
   padding: var(--space-3);
   background-color: var(--color-bg-secondary);

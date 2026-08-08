@@ -14,6 +14,7 @@ import { Modal } from '../components/ui/Modal.jsx';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog.jsx';
 import { FileUpload } from '../components/ui/FileUpload.jsx';
 import { Field } from '../components/ui/Field.jsx';
+import { Checkbox } from '../components/ui/Checkbox.jsx';
 import { Pagination } from '../components/ui/Pagination.jsx';
 import { ImportReport } from '../components/domain/ImportReport.jsx';
 import './PeopleManager.css';
@@ -25,7 +26,7 @@ const CATEGORY_LABELS = {
   MINISTRO: 'Ministro',
 };
 
-const EMPTY_FORM = { fullName: '', documentId: '', category: '', notes: '' };
+const EMPTY_FORM = { fullName: '', documentId: '', category: '', isJoven: false, notes: '' };
 
 const INITIAL_LIST_PARAMS = { page: 1, pageSize: PAGE_SIZE, sort: 'fullName', active: true };
 
@@ -45,6 +46,8 @@ export function PeopleManager() {
   const [category, setCategory] = useState('');
   // 'active' (default, igual que antes) | 'inactive' (solo inactivas) | 'all'.
   const [statusFilter, setStatusFilter] = useState('active');
+  // 'all' (default) | 'yes' (solo jóvenes) | 'no' (solo no jóvenes).
+  const [jovenFilter, setJovenFilter] = useState('all');
   const [page, setPage] = useState(1);
 
   function buildListParams() {
@@ -53,6 +56,8 @@ export function PeopleManager() {
     if (category) params.category = category;
     if (statusFilter === 'active') params.active = true;
     else if (statusFilter === 'inactive') params.active = false;
+    if (jovenFilter === 'yes') params.isJoven = true;
+    else if (jovenFilter === 'no') params.isJoven = false;
     return params;
   }
 
@@ -66,7 +71,7 @@ export function PeopleManager() {
     setPage(1);
     setSelectedIds(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, category, statusFilter]);
+  }, [debouncedSearch, category, statusFilter, jovenFilter]);
 
   // La primera carga ya la hace `immediate: true` de arriba; este efecto
   // solo reacciona a cambios posteriores de filtros/página.
@@ -77,7 +82,7 @@ export function PeopleManager() {
     }
     execute(buildListParams()).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, debouncedSearch, category, statusFilter]);
+  }, [page, debouncedSearch, category, statusFilter, jovenFilter]);
 
   // Si una baja/edición deja vacía la página actual (y no es la primera),
   // retrocede una página automáticamente en vez de mostrar un vacío confuso.
@@ -124,6 +129,7 @@ export function PeopleManager() {
         fullName: createForm.fullName,
         documentId: toNullableTrimmed(createForm.documentId),
         category: createForm.category,
+        isJoven: createForm.isJoven,
         notes: toNullableTrimmed(createForm.notes),
         ...(confirmDuplicateName ? { confirmDuplicateName: true } : {}),
       };
@@ -167,6 +173,7 @@ export function PeopleManager() {
       fullName: person.fullName,
       documentId: person.documentId || '',
       category: person.category,
+      isJoven: Boolean(person.isJoven),
       notes: person.notes || '',
     });
     setEditError(null);
@@ -189,6 +196,7 @@ export function PeopleManager() {
     const newDocument = toNullableTrimmed(editForm.documentId);
     if (newDocument !== (editTarget.documentId ?? null)) changes.documentId = newDocument;
     if (editForm.category !== editTarget.category) changes.category = editForm.category;
+    if (editForm.isJoven !== Boolean(editTarget.isJoven)) changes.isJoven = editForm.isJoven;
     const newNotes = toNullableTrimmed(editForm.notes);
     if (newNotes !== (editTarget.notes ?? null)) changes.notes = newNotes;
     return changes;
@@ -274,6 +282,8 @@ export function PeopleManager() {
   const [bulkCategoryValue, setBulkCategoryValue] = useState('INSTRUCTOR');
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
   const [bulkStatusValue, setBulkStatusValue] = useState('active');
+  const [bulkJovenOpen, setBulkJovenOpen] = useState(false);
+  const [bulkJovenValue, setBulkJovenValue] = useState('true');
 
   function toggleSelectionMode() {
     setSelectionMode((prev) => !prev);
@@ -342,6 +352,18 @@ export function PeopleManager() {
     }
   }
 
+  function openBulkJovenModal() {
+    setBulkJovenValue('true');
+    setBulkJovenOpen(true);
+  }
+
+  async function submitBulkJoven(event) {
+    event.preventDefault();
+    setBulkJovenOpen(false);
+    const isJoven = bulkJovenValue === 'true';
+    await runBulkAction(Array.from(selectedIds), (id) => updatePerson(id, { isJoven }));
+  }
+
   // ---- Import masivo ----
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState(null);
@@ -380,7 +402,7 @@ export function PeopleManager() {
   // ---- Tabla ----
   const people = data?.data ?? [];
   const pagination = data?.pagination ?? null;
-  const hasActiveFilters = Boolean(debouncedSearch.trim()) || Boolean(category);
+  const hasActiveFilters = Boolean(debouncedSearch.trim()) || Boolean(category) || jovenFilter !== 'all';
 
   const pageIds = people.map((p) => p.id);
   const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
@@ -440,7 +462,12 @@ export function PeopleManager() {
     {
       key: 'category',
       header: 'Categoría',
-      render: (row) => <Badge variant="primary">{CATEGORY_LABELS[row.category] || row.category}</Badge>,
+      render: (row) => (
+        <div className="people-manager__category-cell">
+          <Badge variant="primary">{CATEGORY_LABELS[row.category] || row.category}</Badge>
+          {row.isJoven ? <Badge variant="success">Joven</Badge> : null}
+        </div>
+      ),
     },
     {
       key: 'active',
@@ -528,6 +555,11 @@ export function PeopleManager() {
           <option value="inactive">Inactivas</option>
           <option value="all">Todas</option>
         </Field>
+        <Field label="Joven" as="select" value={jovenFilter} onChange={(event) => setJovenFilter(event.target.value)}>
+          <option value="all">Todas</option>
+          <option value="yes">Solo jóvenes</option>
+          <option value="no">Solo no jóvenes</option>
+        </Field>
       </div>
 
       {selectionMode && selectedIds.size > 0 ? (
@@ -541,6 +573,9 @@ export function PeopleManager() {
             </Button>
             <Button variant="secondary" size="sm" onClick={openBulkStatusModal} disabled={bulkSubmitting}>
               Cambiar estado
+            </Button>
+            <Button variant="secondary" size="sm" onClick={openBulkJovenModal} disabled={bulkSubmitting}>
+              Cambiar Joven
             </Button>
             <Button variant="ghost" size="sm" onClick={clearSelection} disabled={bulkSubmitting}>
               Cancelar selección
@@ -612,6 +647,12 @@ export function PeopleManager() {
             <option value="INSTRUCTOR">Instructor</option>
             <option value="MINISTRO">Ministro</option>
           </Field>
+          <Checkbox
+            label="Joven"
+            hint="Elegible para el equipo de jóvenes. Es independiente de la categoría de arriba."
+            checked={createForm.isJoven}
+            onChange={(checked) => updateCreateField('isJoven', checked)}
+          />
           <Field
             label="Notas (opcional)"
             as="textarea"
@@ -670,6 +711,12 @@ export function PeopleManager() {
               <option value="INSTRUCTOR">Instructor</option>
               <option value="MINISTRO">Ministro</option>
             </Field>
+            <Checkbox
+              label="Joven"
+              hint="Elegible para el equipo de jóvenes. Es independiente de la categoría de arriba."
+              checked={editForm.isJoven}
+              onChange={(checked) => updateEditField('isJoven', checked)}
+            />
             <Field
               label="Notas (opcional)"
               as="textarea"
@@ -725,8 +772,9 @@ export function PeopleManager() {
         ) : (
           <>
             <p>
-              Selecciona un archivo CSV o Excel (.xlsx) con las columnas nombre, documento (opcional) y categoría. El
-              archivo no debe superar 2&nbsp;MB ni 2000 filas.
+              Selecciona un archivo CSV o Excel (.xlsx) con las columnas nombre, documento (opcional), categoría y,
+              opcionalmente, si la persona es joven (columna «Joven», con «Sí» o «No»). El archivo no debe superar
+              2&nbsp;MB ni 2000 filas.
             </p>
             <FileUpload
               label="Elegir archivo"
@@ -804,6 +852,33 @@ export function PeopleManager() {
               Cancelar
             </Button>
             <Button type="submit" variant={bulkStatusValue === 'inactive' ? 'danger' : 'primary'} loading={bulkSubmitting}>
+              Aplicar
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Cambiar Joven en lote */}
+      <Modal open={bulkJovenOpen} onClose={() => setBulkJovenOpen(false)} title="Cambiar Joven">
+        <form onSubmit={submitBulkJoven} noValidate>
+          <p>
+            Se va a cambiar la marca de Joven de {selectedIds.size} persona{selectedIds.size === 1 ? '' : 's'}{' '}
+            seleccionada{selectedIds.size === 1 ? '' : 's'}. Es independiente de la categoría de cada persona.
+          </p>
+          <Field
+            label="Marcar como"
+            as="select"
+            value={bulkJovenValue}
+            onChange={(event) => setBulkJovenValue(event.target.value)}
+          >
+            <option value="true">Joven</option>
+            <option value="false">No joven</option>
+          </Field>
+          <div className="people-manager__form-actions">
+            <Button type="button" variant="secondary" onClick={() => setBulkJovenOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" loading={bulkSubmitting}>
               Aplicar
             </Button>
           </div>

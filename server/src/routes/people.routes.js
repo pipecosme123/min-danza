@@ -83,6 +83,10 @@ const listQuerySchema = z.object({
     .enum(["true", "false"], { message: "active debe ser 'true' o 'false'" })
     .optional()
     .transform((v) => (v === undefined ? undefined : v === "true")),
+  isJoven: z
+    .enum(["true", "false"], { message: "isJoven debe ser 'true' o 'false'" })
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === "true")),
   sort: z.enum(["fullName", "-fullName", "createdAt", "-createdAt"]).default("fullName"),
 });
 
@@ -90,6 +94,7 @@ const createBodySchema = z.object({
   fullName: fullNameSchema,
   documentId: documentIdOptionalSchema,
   category: categorySchema,
+  isJoven: z.boolean().optional().default(false),
   notes: notesSchema,
   confirmDuplicateName: z.boolean().optional().default(false),
 });
@@ -98,6 +103,7 @@ const patchBodySchema = z.object({
   fullName: fullNameSchema.optional(),
   documentId: documentIdOptionalSchema,
   category: categorySchema.optional(),
+  isJoven: z.boolean().optional(),
   notes: notesSchema,
   active: z.boolean().optional(),
 });

@@ -146,6 +146,32 @@ describe("POST /api/people", () => {
     expect(Array.isArray(res.body.error.details)).toBe(true);
   });
 
+  it("isJoven es independiente de category: se guarda y se lee de vuelta (default false si se omite)", async () => {
+    const withoutFlag = await authed(request(app).post("/api/people")).send({
+      fullName: `${NAME_PREFIX} Sin Flag Joven`,
+      category: "INSTRUCTOR",
+    });
+    expect(withoutFlag.status).toBe(201);
+    expect(withoutFlag.body.isJoven).toBe(false);
+    createdPersonIds.push(withoutFlag.body.id);
+
+    const withFlag = await authed(request(app).post("/api/people")).send({
+      fullName: `${NAME_PREFIX} Con Flag Joven`,
+      category: "MINISTRO",
+      isJoven: true,
+    });
+    expect(withFlag.status).toBe(201);
+    expect(withFlag.body.isJoven).toBe(true);
+    createdPersonIds.push(withFlag.body.id);
+
+    const patched = await authed(request(app).patch(`/api/people/${withFlag.body.id}`)).send({ isJoven: false });
+    expect(patched.status).toBe(200);
+    expect(patched.body.person.isJoven).toBe(false);
+
+    const reloaded = await authed(request(app).get(`/api/people?search=${encodeURIComponent(`${NAME_PREFIX} Con Flag Joven`)}`));
+    expect(reloaded.body.data.find((p) => p.id === withFlag.body.id).isJoven).toBe(false);
+  });
+
   it("sin token devuelve 401", async () => {
     const res = await request(app)
       .post("/api/people")
@@ -169,6 +195,28 @@ describe("GET /api/people", () => {
     );
     expect(filtered.status).toBe(200);
     expect(filtered.body.data.every((p) => p.category === "INSTRUCTOR")).toBe(true);
+  });
+
+  it("filtra por isJoven, independiente de category", async () => {
+    await createPersonDirect({ suffix: "Joven Uno", fullName: `${NAME_PREFIX} Joven Uno`, category: "INSTRUCTOR", isJoven: true });
+    await createPersonDirect({ suffix: "Joven Dos", fullName: `${NAME_PREFIX} Joven Dos`, category: "MINISTRO", isJoven: true });
+    await createPersonDirect({ suffix: "No Joven", fullName: `${NAME_PREFIX} No Joven`, category: "MINISTRO", isJoven: false });
+
+    const jovenes = await authed(
+      request(app).get(`/api/people?search=${encodeURIComponent(`${NAME_PREFIX} Joven`)}&isJoven=true`),
+    );
+    expect(jovenes.status).toBe(200);
+    expect(jovenes.body.data.length).toBeGreaterThanOrEqual(2);
+    expect(jovenes.body.data.every((p) => p.isJoven === true)).toBe(true);
+
+    const noJovenes = await authed(
+      request(app).get(`/api/people?search=${encodeURIComponent(`${NAME_PREFIX} No Joven`)}&isJoven=false`),
+    );
+    expect(noJovenes.status).toBe(200);
+    expect(noJovenes.body.data.every((p) => p.isJoven === false)).toBe(true);
+
+    const badValue = await authed(request(app).get("/api/people?isJoven=si"));
+    expect(badValue.status).toBe(400);
   });
 
   it("página fuera de rango devuelve data: [] (no 404)", async () => {
@@ -241,7 +289,7 @@ describe("PATCH /api/people/:id", () => {
       data: { monthCycleId: monthCycle.id, label: "Equipo 1", orderIndex: 1 },
     });
     await prisma.teamMember.create({
-      data: { teamId: team.id, monthCycleId: monthCycle.id, personId: person.id, role: "COLLABORATOR" },
+      data: { teamId: team.id, monthCycleId: monthCycle.id, personId: person.id, role: "COLLABORATOR", teamType: "REGULAR" },
     });
 
     const res = await authed(request(app).patch(`/api/people/${person.id}`)).send({ active: false });
@@ -260,7 +308,7 @@ describe("PATCH /api/people/:id", () => {
       data: { monthCycleId: monthCycle.id, label: "Equipo 1", orderIndex: 1 },
     });
     const member = await prisma.teamMember.create({
-      data: { teamId: team.id, monthCycleId: monthCycle.id, personId: person.id, role: "LEADER" },
+      data: { teamId: team.id, monthCycleId: monthCycle.id, personId: person.id, role: "LEADER", teamType: "REGULAR" },
     });
     expect(member.manualOverride).toBe(false);
 
@@ -315,7 +363,7 @@ describe("DELETE /api/people/:id", () => {
       data: { monthCycleId: monthCycle.id, label: "Equipo 1", orderIndex: 1 },
     });
     await prisma.teamMember.create({
-      data: { teamId: team.id, monthCycleId: monthCycle.id, personId: person.id, role: "COLLABORATOR" },
+      data: { teamId: team.id, monthCycleId: monthCycle.id, personId: person.id, role: "COLLABORATOR", teamType: "REGULAR" },
     });
 
     const res = await authed(request(app).delete(`/api/people/${person.id}?purge=true`));

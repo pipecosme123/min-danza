@@ -7,8 +7,9 @@ import { ToastViewport } from "../components/ui/Toast.jsx";
 
 // Se mockea `api/months.js` y `api/people.js` completos para no depender de
 // un servidor real y poder controlar cada escenario (mes vacío, sorteo,
-// re-sorteo, pool insuficiente, edición manual) de forma determinista. Ver
-// docs/architecture/phase3-teams-contract.md para el contrato exacto.
+// re-sorteo, pool insuficiente, edición manual, equipo de jóvenes) de forma
+// determinista. Ver docs/architecture/phase3-teams-contract.md (incl. §9,
+// equipo de jóvenes) para el contrato exacto.
 vi.mock("../api/months.js", () => ({
   getMonths: vi.fn(),
   createMonth: vi.fn(),
@@ -34,6 +35,8 @@ function sampleMonth(overrides = {}) {
     teamCount: 2,
     status: "DRAFT",
     finalizedAt: null,
+    youthTeamEnabled: true,
+    youthTeamSize: 10,
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-01T00:00:00.000Z",
     ...overrides,
@@ -47,6 +50,7 @@ function sampleTeams() {
         id: "team-1",
         label: "Equipo 1",
         orderIndex: 1,
+        teamType: "REGULAR",
         members: [
           { id: "tm-1", personId: "p-1", fullName: "Ana Gómez", role: "LEADER", manualOverride: false },
           { id: "tm-2", personId: "p-2", fullName: "Beto Ruiz", role: "COLLABORATOR", manualOverride: false },
@@ -56,6 +60,7 @@ function sampleTeams() {
         id: "team-2",
         label: "Equipo 2",
         orderIndex: 2,
+        teamType: "REGULAR",
         members: [
           { id: "tm-3", personId: "p-3", fullName: "Carla Díaz", role: "LEADER", manualOverride: false },
         ],
@@ -64,16 +69,49 @@ function sampleTeams() {
   };
 }
 
+function sampleYouthTeam() {
+  return {
+    id: "team-youth",
+    label: "Servicio de jóvenes",
+    orderIndex: 3,
+    teamType: "YOUTH",
+    members: [
+      { id: "tm-y1", personId: "p-5", fullName: "Elena Cruz", role: "LEADER", manualOverride: true },
+      { id: "tm-y2", personId: "p-6", fullName: "Franco Ibarra", role: "COLLABORATOR", manualOverride: false },
+    ],
+  };
+}
+
 function samplePeoplePage() {
   return {
     data: [
-      { id: "p-1", fullName: "Ana Gómez", documentId: null, category: "INSTRUCTOR", active: true, notes: null },
-      { id: "p-2", fullName: "Beto Ruiz", documentId: null, category: "MINISTRO", active: true, notes: null },
-      { id: "p-3", fullName: "Carla Díaz", documentId: null, category: "INSTRUCTOR", active: true, notes: null },
-      { id: "p-4", fullName: "Diego Lara", documentId: null, category: "MINISTRO", active: true, notes: null },
+      { id: "p-1", fullName: "Ana Gómez", documentId: null, category: "INSTRUCTOR", isJoven: false, active: true, notes: null },
+      { id: "p-2", fullName: "Beto Ruiz", documentId: null, category: "MINISTRO", isJoven: false, active: true, notes: null },
+      { id: "p-3", fullName: "Carla Díaz", documentId: null, category: "INSTRUCTOR", isJoven: false, active: true, notes: null },
+      { id: "p-4", fullName: "Diego Lara", documentId: null, category: "MINISTRO", isJoven: false, active: true, notes: null },
     ],
     pagination: { page: 1, pageSize: 100, total: 4, totalPages: 1 },
   };
+}
+
+function youthPeoplePage() {
+  return {
+    data: [
+      { id: "p-5", fullName: "Elena Cruz", documentId: null, category: "MINISTRO", isJoven: true, active: true, notes: null },
+      { id: "p-6", fullName: "Franco Ibarra", documentId: null, category: "INSTRUCTOR", isJoven: true, active: true, notes: null },
+    ],
+    pagination: { page: 1, pageSize: 100, total: 2, totalPages: 1 },
+  };
+}
+
+// Mock genérico de `getPeople` que responde según el filtro pedido: pool de
+// jóvenes cuando se pide `isJoven: true` (selector de líder del equipo de
+// jóvenes), padrón activo general en cualquier otro caso (edición manual de
+// roster). Evita depender del orden exacto de llamadas entre ambos flujos.
+function mockGetPeopleByFilter() {
+  getPeople.mockImplementation((params) =>
+    Promise.resolve(params && params.isJoven ? youthPeoplePage() : samplePeoplePage()),
+  );
 }
 
 function renderPage() {
@@ -145,9 +183,57 @@ describe("TeamGenerator", () => {
     expect(screen.getByRole("button", { name: "Ver ese mes" })).toBeInTheDocument();
   });
 
-  it("sortea los equipos de un mes sin equipos todavía y muestra el grid resultante", async () => {
+  it("el diálogo de sorteo trae el equipo de jóvenes habilitado por defecto y exige elegir líder antes de confirmar", async () => {
     getMonths.mockResolvedValue({ data: [sampleMonth()] });
     getMonthTeams.mockResolvedValueOnce({ teams: [] });
+    mockGetPeopleByFilter();
+    generateTeams.mockResolvedValueOnce({
+      teams: [...sampleTeams().teams, sampleYouthTeam()],
+      warnings: [],
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText("Este mes todavía no tiene equipos sorteados")).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Sortear equipos" }));
+    expect(screen.getByRole("heading", { name: "Sortear los equipos del mes" })).toBeInTheDocument();
+
+    const dialog = screen.getByRole("dialog");
+    const youthCheckbox = within(dialog).getByRole("checkbox", { name: "Habilitar equipo de jóvenes" });
+    expect(youthCheckbox).toBeChecked();
+
+    // Sin elegir líder, no se puede confirmar.
+    const confirmButton = within(dialog).getByRole("button", { name: "Confirmar sorteo" });
+    expect(confirmButton).toBeDisabled();
+
+    await waitFor(() => expect(within(dialog).getByRole("option", { name: "Elena Cruz" })).toBeInTheDocument());
+
+    await user.selectOptions(
+      within(dialog).getByLabelText(/^Líder del equipo de jóvenes/),
+      "p-5",
+    );
+    expect(confirmButton).toBeEnabled();
+
+    // Cambia la cantidad del default 10 a 5.
+    fireEvent.change(within(dialog).getByLabelText(/^Cantidad de personas/), { target: { value: "5" } });
+
+    await user.click(confirmButton);
+
+    await waitFor(() =>
+      expect(generateTeams).toHaveBeenCalledWith("month-1", {
+        youthTeam: { enabled: true, size: 5, leaderPersonId: "p-5" },
+      }),
+    );
+    await waitFor(() => expect(screen.getByText("Servicio de jóvenes")).toBeInTheDocument());
+  });
+
+  it("al desmarcar el equipo de jóvenes no pide líder ni tamaño y lo manda como deshabilitado", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValueOnce({ teams: [] });
+    mockGetPeopleByFilter();
     generateTeams.mockResolvedValueOnce({ teams: sampleTeams().teams, warnings: [] });
     const user = userEvent.setup();
     renderPage();
@@ -157,19 +243,29 @@ describe("TeamGenerator", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Sortear equipos" }));
+    const dialog = screen.getByRole("dialog");
 
-    await waitFor(() => expect(generateTeams).toHaveBeenCalledWith("month-1"));
-    await waitFor(() => expect(screen.getByText("Equipo 1")).toBeInTheDocument());
-    expect(screen.getByText("Equipo 2")).toBeInTheDocument();
-    expect(screen.getByText("Ana Gómez")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("checkbox", { name: "Habilitar equipo de jóvenes" }));
+    expect(within(dialog).queryByLabelText(/^Líder del equipo de jóvenes/)).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/^Cantidad de personas/)).not.toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Confirmar sorteo" }));
+
+    await waitFor(() =>
+      expect(generateTeams).toHaveBeenCalledWith("month-1", { youthTeam: { enabled: false } }),
+    );
   });
 
-  it("pide confirmación antes de re-sortear equipos ya existentes y muestra los warnings devueltos", async () => {
+  it("pide confirmación antes de re-sortear equipos ya existentes y muestra los warnings devueltos (incluido el de jóvenes)", async () => {
     getMonths.mockResolvedValue({ data: [sampleMonth()] });
     getMonthTeams.mockResolvedValueOnce(sampleTeams());
+    mockGetPeopleByFilter();
     generateTeams.mockResolvedValueOnce({
       teams: sampleTeams().teams,
-      warnings: [{ code: "LIDER_REPETIDO_POSIBLE", message: "Es posible que se repita algún líder." }],
+      warnings: [
+        { code: "LIDER_REPETIDO_POSIBLE", message: "Es posible que se repita algún líder." },
+        { code: "JOVENES_REPETIDOS_POSIBLE", message: "Es posible que se repita alguien del equipo de jóvenes." },
+      ],
     });
     const user = userEvent.setup();
     renderPage();
@@ -182,15 +278,23 @@ describe("TeamGenerator", () => {
     expect(generateTeams).not.toHaveBeenCalled();
 
     const dialog = screen.getByRole("dialog");
+    await waitFor(() => expect(within(dialog).getByRole("option", { name: "Elena Cruz" })).toBeInTheDocument());
+    await user.selectOptions(within(dialog).getByLabelText(/^Líder del equipo de jóvenes/), "p-5");
     await user.click(within(dialog).getByRole("button", { name: "Sí, volver a sortear" }));
 
-    await waitFor(() => expect(generateTeams).toHaveBeenCalledWith("month-1"));
+    await waitFor(() =>
+      expect(generateTeams).toHaveBeenCalledWith("month-1", {
+        youthTeam: { enabled: true, size: 10, leaderPersonId: "p-5" },
+      }),
+    );
     await waitFor(() => expect(screen.getByText("Es posible que se repita algún líder.")).toBeInTheDocument());
+    expect(screen.getByText("Es posible que se repita alguien del equipo de jóvenes.")).toBeInTheDocument();
   });
 
   it("muestra un mensaje claro y accionable cuando el pool de instructores es insuficiente", async () => {
     getMonths.mockResolvedValue({ data: [sampleMonth()] });
     getMonthTeams.mockResolvedValueOnce({ teams: [] });
+    mockGetPeopleByFilter();
     generateTeams.mockRejectedValueOnce(
       new ApiError("No hay suficientes instructores activos para formar los equipos.", {
         status: 409,
@@ -205,12 +309,76 @@ describe("TeamGenerator", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Sortear equipos" }));
+    const dialog = screen.getByRole("dialog");
+    // Se desmarca el equipo de jóvenes para aislar el error del pool de instructores.
+    await user.click(within(dialog).getByRole("checkbox", { name: "Habilitar equipo de jóvenes" }));
+    await user.click(within(dialog).getByRole("button", { name: "Confirmar sorteo" }));
 
     await waitFor(() => expect(screen.getByText(/solo hay 1 disponible/)).toBeInTheDocument());
     expect(screen.getByRole("link", { name: "Ir a Personas" })).toBeInTheDocument();
   });
 
-  it("permite editar manualmente un equipo: quitar a alguien y agregar a otra persona", async () => {
+  it("muestra POOL_JOVENES_INSUFICIENTE con un mensaje entendible", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValueOnce({ teams: [] });
+    mockGetPeopleByFilter();
+    generateTeams.mockRejectedValueOnce(
+      new ApiError("No hay suficientes personas para el equipo de jóvenes.", {
+        status: 409,
+        details: { code: "POOL_JOVENES_INSUFICIENTE", available: 2, needed: 10 },
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText("Este mes todavía no tiene equipos sorteados")).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Sortear equipos" }));
+    const dialog = screen.getByRole("dialog");
+    await waitFor(() => expect(within(dialog).getByRole("option", { name: "Elena Cruz" })).toBeInTheDocument());
+    await user.selectOptions(within(dialog).getByLabelText(/^Líder del equipo de jóvenes/), "p-5");
+    await user.click(within(dialog).getByRole("button", { name: "Confirmar sorteo" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/No hay suficientes personas marcadas como «Joven».*hay 2, se necesitan 10/),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("muestra LIDER_JOVENES_INVALIDO con un mensaje entendible", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValueOnce({ teams: [] });
+    mockGetPeopleByFilter();
+    generateTeams.mockRejectedValueOnce(
+      new ApiError("Líder de jóvenes inválido.", {
+        status: 400,
+        details: { code: "LIDER_JOVENES_INVALIDO" },
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText("Este mes todavía no tiene equipos sorteados")).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Sortear equipos" }));
+    const dialog = screen.getByRole("dialog");
+    await waitFor(() => expect(within(dialog).getByRole("option", { name: "Elena Cruz" })).toBeInTheDocument());
+    await user.selectOptions(within(dialog).getByLabelText(/^Líder del equipo de jóvenes/), "p-5");
+    await user.click(within(dialog).getByRole("button", { name: "Confirmar sorteo" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/La persona elegida como líder del equipo de jóvenes no es válida/),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("permite editar manualmente un equipo regular: quitar a alguien y agregar a otra persona", async () => {
     getMonths.mockResolvedValue({ data: [sampleMonth()] });
     getMonthTeams.mockResolvedValueOnce(sampleTeams());
     getPeople.mockResolvedValueOnce(samplePeoplePage());
@@ -219,6 +387,7 @@ describe("TeamGenerator", () => {
         id: "team-1",
         label: "Equipo 1",
         orderIndex: 1,
+        teamType: "REGULAR",
         members: [
           { id: "tm-1", personId: "p-1", fullName: "Ana Gómez", role: "LEADER", manualOverride: false },
           { id: "tm-4", personId: "p-4", fullName: "Diego Lara", role: "COLLABORATOR", manualOverride: false },
@@ -231,6 +400,7 @@ describe("TeamGenerator", () => {
           id: "team-1",
           label: "Equipo 1",
           orderIndex: 1,
+          teamType: "REGULAR",
           members: [
             { id: "tm-1", personId: "p-1", fullName: "Ana Gómez", role: "LEADER", manualOverride: false },
             { id: "tm-4", personId: "p-4", fullName: "Diego Lara", role: "COLLABORATOR", manualOverride: false },
@@ -250,6 +420,10 @@ describe("TeamGenerator", () => {
 
     await waitFor(() => expect(getPeople).toHaveBeenCalled());
     expect(screen.getByRole("heading", { name: "Editar Equipo 1" })).toBeInTheDocument();
+
+    // El equipo es REGULAR: el selector de rol sigue ofreciendo las 3 opciones.
+    const roleSelect = screen.getAllByLabelText(/Rol de/)[0];
+    expect(within(roleSelect).getByRole("option", { name: "Apoyo" })).toBeInTheDocument();
 
     // Quitar a Beto Ruiz (ministro) del equipo.
     await user.click(screen.getByRole("button", { name: "Quitar a Beto Ruiz del equipo" }));
@@ -292,5 +466,28 @@ describe("TeamGenerator", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeDisabled();
     expect(updateTeam).not.toHaveBeenCalled();
+  });
+
+  it("renderiza el equipo de jóvenes devuelto por la API y, al editarlo, el selector de rol no ofrece «Apoyo»", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValueOnce({ teams: [...sampleTeams().teams, sampleYouthTeam()] });
+    getPeople.mockResolvedValueOnce(samplePeoplePage());
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Servicio de jóvenes")).toBeInTheDocument());
+    expect(screen.getByText("Elena Cruz")).toBeInTheDocument();
+
+    const youthCard = screen.getByText("Servicio de jóvenes").closest("article");
+    await user.click(within(youthCard).getByRole("button", { name: "Editar integrantes" }));
+
+    await waitFor(() => expect(getPeople).toHaveBeenCalled());
+    expect(screen.getByRole("heading", { name: "Editar Servicio de jóvenes" })).toBeInTheDocument();
+
+    const roleSelects = screen.getAllByLabelText(/Rol de/);
+    roleSelects.forEach((select) => {
+      expect(within(select).queryByRole("option", { name: "Apoyo" })).not.toBeInTheDocument();
+    });
   });
 });

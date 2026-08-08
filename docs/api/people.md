@@ -62,6 +62,7 @@ listado, como cuerpo directo en `POST`, dentro de `{ person }` en `PATCH`/`DELET
   "fullName": "María Fernanda Ruiz",
   "documentId": "1234567",
   "category": "INSTRUCTOR",
+  "isJoven": false,
   "active": true,
   "notes": null,
   "createdAt": "2026-08-07T14:03:11.412Z",
@@ -70,6 +71,10 @@ listado, como cuerpo directo en `POST`, dentro de `{ person }` en `PATCH`/`DELET
 ```
 
 No se devuelven campos adicionales ni `null` en lugar del objeto.
+
+> `isJoven` (Fase "equipo de jóvenes") es **independiente** de `category`: una
+> persona puede ser `INSTRUCTOR` o `MINISTRO` y, a la vez, pertenecer (o no) al
+> pool de sorteo del equipo de jóvenes. No lo reemplaza ni lo condiciona.
 
 ---
 
@@ -86,6 +91,7 @@ Lista paginada con búsqueda y filtros.
 | `search` | string | — | `1..100` caracteres. `contains` case-insensitive sobre `fullName` **o** `documentId` (OR). Para la parte de documento, el término de búsqueda se normaliza con la misma función `normalizeDocument()` que al guardar, así que `search=1.234` encuentra a alguien con `documentId: "1234"`. |
 | `category` | `INSTRUCTOR` \| `MINISTRO` | — | |
 | `active` | `"true"` \| `"false"` | *(sin filtro)* | **La API es neutral: sin este param devuelve activos e inactivos juntos.** La pantalla `PeopleManager` del frontend envía `active=true` por defecto y tiene un toggle "Ver inactivos" que lo quita — ese default es una decisión de UI, no de la API. |
+| `isJoven` | `"true"` \| `"false"` | *(sin filtro)* | Filtra por elegibilidad para el equipo de jóvenes, independiente de `category`. Sin este param devuelve personas `isJoven: true` e `isJoven: false` juntas. |
 | `sort` | `fullName` \| `-fullName` \| `createdAt` \| `-createdAt` | `fullName` | |
 
 Cualquier valor fuera de estas reglas (`page=0`, `active=si`, `sort=nombre`, etc.) → **400**
@@ -120,6 +126,7 @@ Crea una persona nueva. Toda persona nace `active: true`; el body **no** acepta 
   "fullName": "Ana Gómez",
   "documentId": "1.234.567",
   "category": "MINISTRO",
+  "isJoven": false,
   "notes": null,
   "confirmDuplicateName": false
 }
@@ -130,6 +137,7 @@ Crea una persona nueva. Toda persona nace `active: true`; el body **no** acepta 
 | `fullName` | Sí | Se normaliza (`trim` + colapsar espacios internos) antes de validar. `3..120` caracteres. Regex `^\p{L}[\p{L}\p{M}\s'.-]*$` — **rechaza dígitos** a propósito (detecta filas basura / errores de captura). |
 | `documentId` | No | `string \| null`. `""` o `null` se guardan como `null` (nunca `""`, para no romper el índice único con la segunda persona sin documento). Si trae valor: se normaliza (`trim` + mayúsculas + quitar espacios/puntos/guiones) y valida `3..30` caracteres, solo `[A-Z0-9]`. `"1.234.567"` se guarda como `"1234567"`. |
 | `category` | Sí | Enum exacto `INSTRUCTOR` \| `MINISTRO`. Sin alias aquí (los alias de texto libre son solo del import). |
+| `isJoven` | No | `boolean`, default `false`. Independiente de `category` (ver nota en el DTO arriba). |
 | `notes` | No | `string \| null`, máx. 500 caracteres. |
 | `confirmDuplicateName` | No | `boolean`, default `false`. Ver 409 `NOMBRE_DUPLICADO` abajo. |
 
@@ -168,8 +176,8 @@ dado de baja (`active: true`).
 ### Body
 
 Al menos uno de: `fullName`, `documentId` (`string | null`; `null` la borra),
-`category`, `notes` (`string | null`), `active` (`boolean`). Mismas reglas de formato
-que en `POST` para cada campo.
+`category`, `isJoven` (`boolean`), `notes` (`string | null`), `active` (`boolean`).
+Mismas reglas de formato que en `POST` para cada campo.
 
 Body vacío (o con solo claves `undefined`) → **400**:
 ```json
@@ -284,6 +292,7 @@ bajos colapsados a un solo espacio) y se compara contra esta tabla:
 | `category` | **Sí** | `categoria`, `categoría`, `tipo`, `rol`, `category` |
 | `documentId` | No | `documento`, `documento de identidad`, `cedula`, `cédula`, `identificacion`, `identificación`, `cc`, `document`, `documentid` |
 | `notes` | No | `notas`, `observaciones`, `comentarios`, `notes` |
+| `isJoven` | No | `joven`, `jovenes`, `jóvenes`, `es joven` |
 
 - Falta `fullName` o `category` → **400** `COLUMNA_REQUERIDA_FALTANTE` (`details.missing`
   lista cuáles). El archivo entero se rechaza.
@@ -310,6 +319,24 @@ No hay abreviaturas de una letra (`I`/`M`). Cualquier otro texto → error de fi
 > por compatibilidad hacia atrás con archivos viejos, aunque el vocabulario vigente sea
 > `INSTRUCTOR`/`MINISTRO`. `APOYO` mapea a `MINISTRO`: en el dominio, "apoyo" es un rol
 > dentro del equipo que se asigna por sorteo (Fase 3), no una categoría del padrón.
+
+### Valores aceptados en la columna opcional `Joven`
+
+Columna **opcional**, independiente de `category`. La celda se normaliza igual que la
+de categoría (`trim` → mayúsculas → sin tildes) y se compara contra una tabla cerrada de
+valores afirmativos:
+
+| Valor normalizado de la celda | `isJoven` |
+|---|---|
+| `SI`, `TRUE`, `1`, `X` (cubre `"Sí"`, `"sí"`, `"si"` una vez sin tilde) | `true` |
+| Cualquier otro valor (`"No"`, `"false"`, `"0"`, vacío, texto libre) | `false` |
+
+A diferencia de `category`, esta columna **nunca produce un error de fila**: cualquier
+valor no reconocido como afirmativo se interpreta como `false`, nunca bloquea la fila.
+Si la columna no está presente en el archivo, `isJoven` queda `false` para **todas** las
+filas que se crean; si la fila corresponde a alguien que ya existe (actualización por
+documento), la ausencia de la columna **no toca** su `isJoven` actual (mismo criterio que
+`notes`: solo se actualiza si el archivo trae la columna).
 
 ### 200 → reporte de import
 

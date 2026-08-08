@@ -34,6 +34,18 @@ enum TeamRole {
   @@map("team_role")
 }
 
+/// REGULAR = uno de los `teamCount` equipos del mes (líder/apoyo/colaborador).
+/// YOUTH   = equipo de jóvenes del mes, armado en el mismo flujo de sorteo
+/// pero con su propia composición (solo LEADER + COLLABORATOR, ver
+/// teamGeneration.service.js). Valores en inglés porque es vocabulario
+/// interno, no llega de ningún CSV.
+enum TeamType {
+  REGULAR
+  YOUTH
+
+  @@map("team_type")
+}
+
 /// FIXED         = turno fijo semanal (miércoles / domingo)
 /// EXTRAORDINARY = evento extraordinario creado por el admin (SÍ cuenta al balance)
 /// SPECIAL       = evento del último sábado (NO cuenta al balance, roster manual)
@@ -94,6 +106,10 @@ model Person {
   /// que "opcional + único" convive sin problema.
   documentId String?        @unique @map("document_id")
   category   PersonCategory
+  /// Independiente de `category`: una persona puede ser MINISTRO (o
+  /// INSTRUCTOR) Y también pertenecer al pool del equipo de jóvenes. No
+  /// reemplaza ni condiciona la categoría.
+  isJoven    Boolean        @default(false) @map("is_joven")
   /// Baja lógica. NUNCA se borra una persona que ya participó en un mes
   /// (las FK desde TeamMember son onDelete: Restrict).
   active     Boolean        @default(true)
@@ -106,6 +122,8 @@ model Person {
 
   /// Consulta caliente: pool de sorteo = personas activas por categoría.
   @@index([active, category])
+  /// Consulta caliente: pool de sorteo del equipo de jóvenes.
+  @@index([active, isJoven])
   @@index([fullName])
   @@map("person")
 }
@@ -120,6 +138,12 @@ model MonthCycle {
   teamCount   Int         @map("team_count")
   status      MonthStatus @default(DRAFT)
   finalizedAt DateTime?   @map("finalized_at")
+  /// Último valor usado/mostrado en el form de generate-teams para el equipo
+  /// de jóvenes. NO gobierna la generación: el body de cada POST
+  /// generate-teams manda explícitamente `youthTeam.enabled`/`size` cada vez;
+  /// esto es solo el default que la UI precarga.
+  youthTeamEnabled Boolean @default(true) @map("youth_team_enabled")
+  youthTeamSize    Int     @default(10) @map("youth_team_size")
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
 
@@ -134,10 +158,14 @@ model MonthCycle {
 model Team {
   id           String   @id @default(cuid())
   monthCycleId String   @map("month_cycle_id")
-  /// Etiqueta visible: "Equipo 1", "Equipo 2"...
+  /// Etiqueta visible: "Equipo 1", "Equipo 2"... o "Servicio de jóvenes".
   label        String
-  /// Orden estable de presentación e identificador interno 1..teamCount.
+  /// Orden estable de presentación e identificador interno 1..teamCount
+  /// (el equipo YOUTH, si existe, toma el siguiente índice disponible).
   orderIndex   Int      @map("order_index")
+  /// REGULAR (default) para los `teamCount` equipos del sorteo normal, YOUTH
+  /// para el equipo de jóvenes (a lo sumo uno por mes).
+  teamType     TeamType @default(REGULAR) @map("team_type")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -157,15 +185,26 @@ model Team {
 model TeamMember {
   id             String   @id @default(cuid())
   teamId         String   @map("team_id")
-  /// Denormalizado desde Team a propósito: habilita el único
-  /// @@unique([monthCycleId, personId]) — "una persona, un solo equipo al mes".
-  /// La FK compuesta garantiza que este valor SIEMPRE coincide con
-  /// team.monthCycleId; no es posible desincronizarlo.
+  /// Denormalizado desde Team a propósito: antes habilitaba directamente
+  /// @@unique([monthCycleId, personId]) ("una persona, un solo equipo al
+  /// mes"). ESA invariante ahora es más fina — una persona puede estar en su
+  /// equipo REGULAR y también en el equipo YOUTH del mismo mes — así que el
+  /// unique vive como índice único PARCIAL en SQL crudo
+  /// (team_member_one_regular_team_per_person, WHERE team_type = 'REGULAR';
+  /// ver migración add_youth_team). La FK compuesta garantiza que este valor
+  /// SIEMPRE coincide con team.monthCycleId; no es posible desincronizarlo.
   monthCycleId   String   @map("month_cycle_id")
   personId       String   @map("person_id")
   role           TeamRole
+  /// Denormalizado desde Team.teamType, mismo motivo que monthCycleId
+  /// arriba: el índice único parcial de "un equipo regular por persona y
+  /// mes" necesita filtrar por team_type sin JOIN. Se rellena siempre al
+  /// crear, igual que monthCycleId.
+  teamType       TeamType @map("team_type")
   /// true cuando el admin forzó el rol a mano (p. ej. promover un MINISTRO
-  /// a LEADER). El sorteo automático NUNCA escribe true aquí.
+  /// a LEADER, o elegir al líder del equipo de jóvenes). El sorteo
+  /// automático de equipos REGULAR nunca escribe true aquí; el líder del
+  /// equipo YOUTH siempre lo hace (se elige a mano, no por sorteo).
   manualOverride Boolean  @default(false) @map("manual_override")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
@@ -174,7 +213,6 @@ model TeamMember {
   person Person @relation(fields: [personId], references: [id], onDelete: Restrict)
 
   @@unique([teamId, personId])
-  @@unique([monthCycleId, personId])
   @@index([teamId, role])
   @@index([personId])
   @@map("team_member")

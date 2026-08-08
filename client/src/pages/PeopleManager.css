@@ -18,8 +18,15 @@
 
 @media (min-width: 720px) {
   .people-manager__filters {
-    grid-template-columns: 2fr 1fr 1fr;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
   }
+}
+
+.people-manager__category-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
 }
 
 .people-manager__row-checkbox {

@@ -27,6 +27,41 @@ const memberSchema = z.object({
   role: z.enum(["LEADER", "SUPPORT", "COLLABORATOR"]),
 });
 
+// El equipo de jóvenes se arma en el MISMO POST generate-teams (ver
+// teamGeneration.service.js), no es un roster manual aparte.
+// leaderPersonId es obligatorio solo cuando enabled: true (superRefine);
+// la validación de que esa persona exista/esté activa/sea isJoven vive en
+// el service (requiere ir a la base) -> 400 LIDER_JOVENES_INVALIDO ahí.
+const youthTeamSchema = z
+  .object({
+    enabled: z.boolean(),
+    size: z.coerce
+      .number()
+      .int("youthTeam.size debe ser un entero")
+      .min(1, "youthTeam.size debe ser >= 1")
+      .default(10),
+    leaderPersonId: z.string().min(1).max(40).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.enabled && !data.leaderPersonId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "youthTeam.leaderPersonId es obligatorio cuando youthTeam.enabled es true.",
+        path: ["leaderPersonId"],
+      });
+    }
+  });
+
+// .default({}) porque el body es opcional en su totalidad: los llamados
+// existentes a POST generate-teams sin youthTeam (ni body en absoluto, como
+// en la mayoría de teamGeneration.test.js) no envían Content-Type json, así
+// que req.body llega `undefined` a este schema.
+const generateTeamsBodySchema = z
+  .object({
+    youthTeam: youthTeamSchema.optional(),
+  })
+  .default({});
+
 const patchBodySchema = z
   .object({
     members: z.array(memberSchema),
@@ -46,14 +81,19 @@ const patchBodySchema = z
     }
   });
 
-router.post("/months/:id/generate-teams", requireAuth, validate({ params: monthIdParamSchema }), async (req, res, next) => {
-  try {
-    const result = await generateTeams(req.params.id);
-    res.json(result);
-  } catch (err) {
-    next(err);
+router.post(
+  "/months/:id/generate-teams",
+  requireAuth,
+  validate({ params: monthIdParamSchema, body: generateTeamsBodySchema }),
+  async (req, res, next) => {
+    try {
+      const result = await generateTeams(req.params.id, { youthTeam: req.body.youthTeam });
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
 router.get("/months/:id/teams", requireAuth, validate({ params: monthIdParamSchema }), async (req, res, next) => {
   try {

@@ -11,8 +11,8 @@ import { Spinner } from '../components/ui/Spinner.jsx';
 import { ErrorMessage } from '../components/ui/ErrorMessage.jsx';
 import { EmptyState } from '../components/ui/EmptyState.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
-import { ConfirmDialog } from '../components/ui/ConfirmDialog.jsx';
 import { Field } from '../components/ui/Field.jsx';
+import { Checkbox } from '../components/ui/Checkbox.jsx';
 import { TeamCard } from '../components/domain/TeamCard.jsx';
 import { ROLE_LABELS, sortMembers } from '../components/domain/MemberList.jsx';
 import './TeamGenerator.css';
@@ -25,6 +25,31 @@ const CATEGORY_LABELS = {
 // Mismas etiquetas que `MemberList` (Líder/Apoyo/Ministro), reutilizadas acá
 // para los selects de edición manual en vez de duplicar el mapeo.
 const ROLE_OPTIONS = Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, label }));
+
+// El equipo de jóvenes (`teamType: "YOUTH"`) solo admite Líder/Ministro
+// (colaborador): nunca "Apoyo", no tiene un pool de apoyo separado como los
+// equipos regulares (ver §9 del contrato de Fase 3).
+const YOUTH_ROLE_OPTIONS = ROLE_OPTIONS.filter((opt) => opt.value !== 'SUPPORT');
+
+const DEFAULT_YOUTH_SIZE = '10';
+
+/** Traduce los códigos de error nuevos del equipo de jóvenes a lenguaje llano. */
+function describeGenerateError(info) {
+  if (info.code === 'POOL_INSTRUCTOR_INSUFICIENTE') {
+    return `Se necesitan al menos ${info.details.needed} instructores activos para formar ${
+      info.details.needed
+    } ${info.details.needed === 1 ? 'equipo' : 'equipos'}, pero solo hay ${
+      info.details.available
+    } disponible${info.details.available === 1 ? '' : 's'}. Agrega más instructores en «Personas» antes de sortear.`;
+  }
+  if (info.code === 'POOL_JOVENES_INSUFICIENTE') {
+    return `No hay suficientes personas marcadas como «Joven» para armar ese equipo (hay ${info.details.available}, se necesitan ${info.details.needed}). Marca a más personas como «Joven» en «Personas», o reduce la cantidad.`;
+  }
+  if (info.code === 'LIDER_JOVENES_INVALIDO') {
+    return 'La persona elegida como líder del equipo de jóvenes no es válida: debe estar activa y marcada como «Joven». Elige otra persona.';
+  }
+  return info.message;
+}
 
 const now = new Date();
 const EMPTY_MONTH_FORM = {
@@ -85,6 +110,10 @@ export function TeamGenerator() {
   }, [effectiveMonthId]);
 
   const teams = teamsData?.teams ?? [];
+  // Defensivo: la API ya devuelve los equipos ordenados por `orderIndex`
+  // (el equipo de jóvenes cae al final, `orderIndex = teamCount + 1`), pero
+  // ordenamos también acá para no depender del orden exacto del backend.
+  const sortedTeams = [...teams].sort((a, b) => a.orderIndex - b.orderIndex);
 
   function refetchTeams() {
     if (effectiveMonthId) fetchTeams(effectiveMonthId).catch(() => {});
@@ -150,35 +179,63 @@ export function TeamGenerator() {
   const createDisabled =
     !createForm.year.trim() || !createForm.month.trim() || !createForm.teamCount.trim();
 
-  // ---- Sorteo / re-sorteo ----
+  // ---- Sorteo / re-sorteo (incluye la configuración del equipo de jóvenes) ----
+  const [generateModalOpen, setGenerateModalOpen] = useState(false);
   const [generateSubmitting, setGenerateSubmitting] = useState(false);
   const [generateError, setGenerateError] = useState(null);
-  const [resortConfirmOpen, setResortConfirmOpen] = useState(false);
+  const [youthEnabled, setYouthEnabled] = useState(true);
+  const [youthSize, setYouthSize] = useState(DEFAULT_YOUTH_SIZE);
+  const [youthLeaderId, setYouthLeaderId] = useState('');
 
-  async function runGenerate() {
-    if (!effectiveMonthId) return;
+  const {
+    data: youthPeopleData,
+    loading: youthPeopleLoading,
+    error: youthPeopleError,
+    execute: fetchYouthPeople,
+  } = useApi(getPeople);
+  const youthLeaderOptions = youthPeopleData?.data ?? [];
+
+  function loadYouthLeaderOptions() {
+    fetchYouthPeople({ isJoven: true, active: true, pageSize: 100, sort: 'fullName' }).catch(() => {});
+  }
+
+  function openGenerateModal() {
+    setGenerateError(null);
+    setYouthEnabled(selectedMonth?.youthTeamEnabled ?? true);
+    setYouthSize(String(selectedMonth?.youthTeamSize ?? DEFAULT_YOUTH_SIZE));
+    setYouthLeaderId('');
+    setGenerateModalOpen(true);
+    loadYouthLeaderOptions();
+  }
+
+  function closeGenerateModal() {
+    setGenerateModalOpen(false);
+  }
+
+  const isResort = teams.length > 0;
+  const youthSizeNumber = Number(youthSize);
+  const youthFormInvalid = youthEnabled && (!youthLeaderId || !Number.isInteger(youthSizeNumber) || youthSizeNumber < 1);
+
+  async function submitGenerate(event) {
+    event.preventDefault();
+    if (!effectiveMonthId || youthFormInvalid) return;
     setGenerateSubmitting(true);
     setGenerateError(null);
     try {
-      const result = await generateTeams(effectiveMonthId);
+      const payload = {
+        youthTeam: youthEnabled
+          ? { enabled: true, size: youthSizeNumber, leaderPersonId: youthLeaderId }
+          : { enabled: false },
+      };
+      const result = await generateTeams(effectiveMonthId, payload);
       setTeamsData({ teams: result.teams });
-      showSuccess('Se sortearon los equipos del mes.');
+      showSuccess(isResort ? 'Se volvieron a sortear los equipos del mes.' : 'Se sortearon los equipos del mes.');
       (result.warnings || []).forEach((warning) => showWarning(warning.message));
-      setResortConfirmOpen(false);
+      setGenerateModalOpen(false);
     } catch (err) {
       setGenerateError(describeApiError(err));
-      setResortConfirmOpen(false);
     } finally {
       setGenerateSubmitting(false);
-    }
-  }
-
-  function handleGenerateClick() {
-    setGenerateError(null);
-    if (teams.length > 0) {
-      setResortConfirmOpen(true);
-    } else {
-      runGenerate();
     }
   }
 
@@ -227,7 +284,12 @@ export function TeamGenerator() {
     setAddPersonId(personId);
     const person = activePeople.find((p) => p.id === personId);
     if (person) {
-      setAddRole(person.category === 'INSTRUCTOR' ? 'SUPPORT' : 'COLLABORATOR');
+      // El equipo de jóvenes no tiene rol "Apoyo": cualquier persona que se
+      // agregue ahí entra como colaboradora salvo que el admin la marque
+      // como líder a mano.
+      setAddRole(
+        editTeam?.teamType === 'YOUTH' ? 'COLLABORATOR' : person.category === 'INSTRUCTOR' ? 'SUPPORT' : 'COLLABORATOR',
+      );
     }
   }
 
@@ -277,6 +339,8 @@ export function TeamGenerator() {
 
   const editLeaderCount = editRoster.filter((m) => m.role === 'LEADER').length;
   const rosterLeaderIssue = editRoster.length > 0 && editLeaderCount !== 1;
+  // El equipo de jóvenes solo admite Líder/Ministro (colaborador), nunca Apoyo.
+  const editRoleOptions = editTeam?.teamType === 'YOUTH' ? YOUTH_ROLE_OPTIONS : ROLE_OPTIONS;
 
   const monthFinalized = selectedMonth?.status === 'FINALIZED';
 
@@ -339,35 +403,10 @@ export function TeamGenerator() {
                   ? `Todavía no se sortearon los ${selectedMonth?.teamCount ?? ''} equipos de este mes.`
                   : `${teams.length} ${teams.length === 1 ? 'equipo sorteado' : 'equipos sorteados'} para este mes.`}
             </p>
-            <Button
-              onClick={handleGenerateClick}
-              loading={generateSubmitting}
-              disabled={monthFinalized || teamsLoading}
-            >
+            <Button onClick={openGenerateModal} disabled={monthFinalized || teamsLoading}>
               {teams.length > 0 ? 'Re-sortear equipos' : 'Sortear equipos'}
             </Button>
           </div>
-
-          {generateError ? (
-            <div className="team-generator__generate-error">
-              <ErrorMessage
-                message={
-                  generateError.code === 'POOL_INSTRUCTOR_INSUFICIENTE'
-                    ? `Se necesitan al menos ${generateError.details.needed} instructores activos para formar ${
-                        generateError.details.needed
-                      } ${generateError.details.needed === 1 ? 'equipo' : 'equipos'}, pero solo hay ${
-                        generateError.details.available
-                      } disponible${generateError.details.available === 1 ? '' : 's'}. Agrega más instructores en «Personas» antes de sortear.`
-                    : generateError.message
-                }
-              />
-              {generateError.code === 'POOL_INSTRUCTOR_INSUFICIENTE' ? (
-                <Link to="/admin/personas">
-                  <Button variant="secondary">Ir a Personas</Button>
-                </Link>
-              ) : null}
-            </div>
-          ) : null}
 
           {teamsLoading ? <Spinner label="Cargando equipos..." /> : null}
 
@@ -382,10 +421,11 @@ export function TeamGenerator() {
 
           {!teamsLoading && !teamsError && teams.length > 0 ? (
             <div className="team-generator__grid">
-              {teams.map((team) => (
+              {sortedTeams.map((team) => (
                 <TeamCard
                   key={team.id}
                   team={team}
+                  className={team.teamType === 'YOUTH' ? 'team-card--youth' : ''}
                   actions={
                     <Button
                       variant="secondary"
@@ -465,20 +505,101 @@ export function TeamGenerator() {
         </form>
       </Modal>
 
-      {/* Re-sortear (destructivo) */}
-      <ConfirmDialog
-        open={resortConfirmOpen}
-        onClose={() => setResortConfirmOpen(false)}
-        onConfirm={runGenerate}
-        title="Volver a sortear los equipos"
-        description={`Esto reemplaza por completo el sorteo actual de ${
-          selectedMonth ? formatMonthYear(selectedMonth.year, selectedMonth.month) : 'este mes'
-        }, incluida cualquier edición manual que hayas hecho. Esta acción no se puede deshacer. ¿Deseas continuar?`}
-        confirmLabel="Sí, volver a sortear"
-        cancelLabel="Cancelar"
-        variant="danger"
-        loading={generateSubmitting}
-      />
+      {/* Sortear / re-sortear equipos (incluye el equipo de jóvenes) */}
+      <Modal
+        open={generateModalOpen}
+        onClose={closeGenerateModal}
+        title={isResort ? 'Volver a sortear los equipos' : 'Sortear los equipos del mes'}
+      >
+        <form onSubmit={submitGenerate} noValidate>
+          {isResort ? (
+            <p className="team-generator__resort-warning" role="alert">
+              Esto reemplaza por completo el sorteo actual de{' '}
+              {selectedMonth ? formatMonthYear(selectedMonth.year, selectedMonth.month) : 'este mes'}, incluida
+              cualquier edición manual que hayas hecho. Esta acción no se puede deshacer.
+            </p>
+          ) : (
+            <p className="team-generator__edit-hint">
+              El sistema sortea un líder por equipo y reparte el resto de instructores y ministros de forma pareja.
+            </p>
+          )}
+
+          <Checkbox
+            label="Habilitar equipo de jóvenes"
+            hint="Además de los equipos regulares, arma un equipo aparte para el servicio de jóvenes con personas marcadas como «Joven»."
+            checked={youthEnabled}
+            onChange={setYouthEnabled}
+          />
+
+          {youthEnabled ? (
+            <div className="team-generator__youth-fields">
+              <Field
+                as="select"
+                label="Líder del equipo de jóvenes"
+                required
+                value={youthLeaderId}
+                onChange={(event) => setYouthLeaderId(event.target.value)}
+                disabled={youthPeopleLoading}
+              >
+                <option value="">{youthPeopleLoading ? 'Cargando personas...' : 'Selecciona una persona'}</option>
+                {youthLeaderOptions.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {person.fullName}
+                  </option>
+                ))}
+              </Field>
+
+              {youthPeopleError ? (
+                <ErrorMessage message="No se pudo cargar el listado de jóvenes." onRetry={loadYouthLeaderOptions} />
+              ) : null}
+
+              {!youthPeopleLoading && !youthPeopleError && youthLeaderOptions.length === 0 ? (
+                <p className="team-generator__youth-empty">
+                  Todavía no hay personas activas marcadas como «Joven». Marca al menos una persona en «Personas»
+                  antes de sortear este equipo.
+                </p>
+              ) : null}
+
+              <Field
+                label="Cantidad de personas"
+                type="number"
+                min={1}
+                required
+                hint="El líder cuenta como una de estas personas."
+                value={youthSize}
+                onChange={(event) => setYouthSize(event.target.value)}
+              />
+            </div>
+          ) : null}
+
+          {generateError ? (
+            <div className="team-generator__generate-error">
+              <ErrorMessage message={describeGenerateError(generateError)} />
+              {generateError.code === 'POOL_INSTRUCTOR_INSUFICIENTE' ? (
+                <Link to="/admin/personas">
+                  <Button type="button" variant="secondary">
+                    Ir a Personas
+                  </Button>
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="team-generator__form-actions">
+            <Button type="button" variant="secondary" onClick={closeGenerateModal} disabled={generateSubmitting}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              variant={isResort ? 'danger' : 'primary'}
+              loading={generateSubmitting}
+              disabled={youthFormInvalid}
+            >
+              {isResort ? 'Sí, volver a sortear' : 'Confirmar sorteo'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Editar integrantes de un equipo */}
       <Modal
@@ -511,7 +632,7 @@ export function TeamGenerator() {
                         value={m.role}
                         onChange={(event) => changeRosterRole(m.personId, event.target.value)}
                       >
-                        {ROLE_OPTIONS.map((opt) => (
+                        {editRoleOptions.map((opt) => (
                           <option key={opt.value} value={opt.value}>
                             {opt.label}
                           </option>
@@ -564,7 +685,7 @@ export function TeamGenerator() {
                   value={addRole}
                   onChange={(event) => setAddRole(event.target.value)}
                 >
-                  {ROLE_OPTIONS.map((opt) => (
+                  {editRoleOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
                     </option>

@@ -14,6 +14,11 @@ const MONTH_SELECT = {
   teamCount: true,
   status: true,
   finalizedAt: true,
+  // Último enabled/size usados en generate-teams para el equipo de jóvenes.
+  // Solo gobiernan el default que la UI precarga en el form; no afectan
+  // ningún sorteo ya corrido (ver teamGeneration.service.js#generateTeams).
+  youthTeamEnabled: true,
+  youthTeamSize: true,
   createdAt: true,
   updatedAt: true,
 };
@@ -30,6 +35,7 @@ const TEAM_SELECT = {
   id: true,
   label: true,
   orderIndex: true,
+  teamType: true,
   members: { select: MEMBER_SELECT },
 };
 
@@ -38,6 +44,7 @@ function serializeTeam(team) {
     id: team.id,
     label: team.label,
     orderIndex: team.orderIndex,
+    teamType: team.teamType,
     members: team.members.map((m) => ({
       id: m.id,
       personId: m.personId,
@@ -100,7 +107,13 @@ function assertDraft(month) {
 // Sorteo — generate-teams
 // ---------------------------------------------------------------------------
 
-export async function generateTeams(monthCycleId) {
+/**
+ * @param {string} monthCycleId
+ * @param {{ youthTeam?: { enabled: boolean, size?: number, leaderPersonId?: string } }} [options]
+ */
+export async function generateTeams(monthCycleId, options = {}) {
+  const { youthTeam } = options;
+
   return prisma.$transaction(async (tx) => {
     const month = await loadMonthOrThrow(tx, monthCycleId);
     assertDraft(month);
@@ -171,7 +184,80 @@ export async function generateTeams(monthCycleId) {
     // Paso 7: ministros -> COLLABORATOR round-robin.
     const shuffledCollaborators = shuffle(ministroPool);
 
-    // Paso 8: transacción — borrar equipos existentes, crear equipos nuevos, crear miembros.
+    // --- Equipo de jóvenes (YOUTH), si se pidió. TODO se valida antes de
+    // escribir nada (mismo criterio que POOL_INSTRUCTOR_INSUFICIENTE arriba):
+    // un error acá no debe dejar a medio camino los equipos regulares. ---
+    const youthEnabled = Boolean(youthTeam?.enabled);
+    let youthPlan = null;
+
+    if (youthEnabled) {
+      const leaderPersonId = youthTeam.leaderPersonId;
+      const size = youthTeam.size ?? 10;
+
+      const leaderPerson = leaderPersonId
+        ? await tx.person.findUnique({
+            where: { id: leaderPersonId },
+            select: { id: true, active: true, isJoven: true },
+          })
+        : null;
+
+      if (!leaderPerson || !leaderPerson.active || !leaderPerson.isJoven) {
+        throw new ValidationError(
+          "El líder del equipo de jóvenes debe ser una persona activa marcada como joven (isJoven: true).",
+          { code: "LIDER_JOVENES_INVALIDO" }
+        );
+      }
+
+      // Pool de colaboradores: activos + isJoven, sin filtrar por category
+      // (INSTRUCTOR o MINISTRO da igual), excluyendo al líder ya elegido.
+      const jovenPool = await tx.person.findMany({
+        where: { active: true, isJoven: true, id: { not: leaderPersonId } },
+        select: { id: true },
+      });
+
+      const totalAvailable = jovenPool.length + 1; // + el líder
+      if (totalAvailable < size) {
+        throw new ConflictError(
+          "No hay suficientes personas activas marcadas como joven para formar el equipo de jóvenes.",
+          { code: "POOL_JOVENES_INSUFICIENTE", available: totalAvailable, needed: size }
+        );
+      }
+
+      const neededCollaborators = size - 1;
+
+      // Mismo criterio de "mes anterior" que previousCycle arriba: priorizar
+      // a quienes NO estuvieron en el equipo YOUTH de ese mes.
+      let previousYouthMemberIds = new Set();
+      if (previousCycle) {
+        const previousYouthMembers = await tx.teamMember.findMany({
+          where: { monthCycleId: previousCycle.id, teamType: "YOUTH" },
+          select: { personId: true },
+        });
+        previousYouthMemberIds = new Set(previousYouthMembers.map((m) => m.personId));
+      }
+
+      const preferredJovenPool = jovenPool.filter((p) => !previousYouthMemberIds.has(p.id));
+
+      let jovenSourcePool;
+      if (preferredJovenPool.length >= neededCollaborators) {
+        jovenSourcePool = preferredJovenPool;
+      } else {
+        jovenSourcePool = jovenPool;
+        warnings.push({
+          code: "JOVENES_REPETIDOS_POSIBLE",
+          message:
+            "No había suficientes jóvenes fuera del equipo de jóvenes del mes anterior; se relajó la restricción y es posible que se repita alguno.",
+        });
+      }
+
+      const shuffledJovenSource = shuffle(jovenSourcePool);
+      const chosenCollaborators = shuffledJovenSource.slice(0, neededCollaborators);
+
+      youthPlan = { leaderPersonId, collaborators: chosenCollaborators };
+    }
+
+    // Paso 8: transacción — borrar equipos existentes (regulares + YOUTH,
+    // cascada borra sus TeamMember), crear equipos nuevos, crear miembros.
     await tx.team.deleteMany({ where: { monthCycleId } });
 
     const teams = [];
@@ -181,6 +267,7 @@ export async function generateTeams(monthCycleId) {
           monthCycleId,
           label: `Equipo ${i + 1}`,
           orderIndex: i + 1,
+          teamType: "REGULAR",
         },
       });
       teams.push(team);
@@ -195,6 +282,7 @@ export async function generateTeams(monthCycleId) {
         personId: person.id,
         role: "LEADER",
         manualOverride: false,
+        teamType: "REGULAR",
       });
     });
 
@@ -206,6 +294,7 @@ export async function generateTeams(monthCycleId) {
         personId: person.id,
         role: "SUPPORT",
         manualOverride: false,
+        teamType: "REGULAR",
       });
     });
 
@@ -217,12 +306,61 @@ export async function generateTeams(monthCycleId) {
         personId: person.id,
         role: "COLLABORATOR",
         manualOverride: false,
+        teamType: "REGULAR",
       });
     });
+
+    if (youthPlan) {
+      const youthTeamRow = await tx.team.create({
+        data: {
+          monthCycleId,
+          label: "Servicio de jóvenes",
+          orderIndex: teamCount + 1,
+          teamType: "YOUTH",
+        },
+      });
+      teams.push(youthTeamRow);
+
+      memberRows.push({
+        teamId: youthTeamRow.id,
+        monthCycleId,
+        personId: youthPlan.leaderPersonId,
+        role: "LEADER",
+        // El líder del equipo de jóvenes SIEMPRE se elige a mano (nunca por
+        // sorteo automático) -> manualOverride true, a diferencia de los
+        // líderes regulares de arriba.
+        manualOverride: true,
+        teamType: "YOUTH",
+      });
+
+      youthPlan.collaborators.forEach((person) => {
+        memberRows.push({
+          teamId: youthTeamRow.id,
+          monthCycleId,
+          personId: person.id,
+          role: "COLLABORATOR",
+          manualOverride: false,
+          teamType: "YOUTH",
+        });
+      });
+    }
 
     if (memberRows.length > 0) {
       await tx.teamMember.createMany({ data: memberRows });
     }
+
+    // Persiste el último enabled/size pedidos como default para el próximo
+    // form (ver comentario en MONTH_SELECT); no afecta al sorteo que ya
+    // quedó fijado arriba. Si esta llamada vino con youthTeam.enabled false
+    // (o ausente), se conserva el último tamaño conocido para no perder el
+    // valor que la UI venía mostrando.
+    await tx.monthCycle.update({
+      where: { id: monthCycleId },
+      data: {
+        youthTeamEnabled: youthEnabled,
+        youthTeamSize: youthEnabled ? youthTeam.size ?? 10 : month.youthTeamSize,
+      },
+    });
 
     const fullTeams = await tx.team.findMany({
       where: { monthCycleId },
@@ -292,6 +430,14 @@ async function updateTeamTransaction(teamId, members) {
 
     const monthCycleId = team.monthCycleId;
 
+    // El equipo YOUTH solo admite LEADER/COLLABORATOR: nunca tuvo (ni tiene)
+    // un pool de "apoyo" separado, a diferencia de los equipos REGULAR.
+    if (team.teamType === "YOUTH" && members.some((m) => m.role === "SUPPORT")) {
+      throw new ValidationError("El equipo de jóvenes no admite el rol SUPPORT.", {
+        code: "ROL_INVALIDO_EQUIPO_JOVENES",
+      });
+    }
+
     if (members.length > 0) {
       const leaderCount = members.filter((m) => m.role === "LEADER").length;
       if (leaderCount === 0) {
@@ -324,13 +470,19 @@ async function updateTeamTransaction(teamId, members) {
       }
     }
 
-    // Paso 2: si la persona hoy pertenece a OTRO equipo del mismo mes, borrar esa fila.
+    // Paso 2: si la persona hoy pertenece a OTRO equipo del MISMO tipo en el
+    // mismo mes, borrar esa fila (se "muda"). Filtrado por teamType a
+    // propósito: una persona puede estar en su equipo REGULAR y en el
+    // equipo YOUTH el mismo mes a la vez (ver índice único parcial
+    // team_member_one_regular_team_per_person), así que editar un equipo de
+    // un tipo nunca debe tocar la membresía del otro tipo.
     if (personIds.length > 0) {
       await tx.teamMember.deleteMany({
         where: {
           monthCycleId,
           personId: { in: personIds },
           teamId: { not: teamId },
+          teamType: team.teamType,
         },
       });
     }
@@ -356,8 +508,17 @@ async function updateTeamTransaction(teamId, members) {
     );
     for (const m of orderedMembers) {
       const person = peopleById.get(m.personId);
-      const expectedCategory = m.role === "COLLABORATOR" ? "MINISTRO" : "INSTRUCTOR";
-      const manualOverride = person.category !== expectedCategory;
+      let manualOverride;
+      if (team.teamType === "YOUTH") {
+        // El equipo de jóvenes no tiene "categoría esperada" por rol (isJoven
+        // es independiente de category, y el sorteo automático de jóvenes
+        // nunca pasa por este PATCH): cualquier edición manual de su roster
+        // es, por definición, una excepción manual.
+        manualOverride = true;
+      } else {
+        const expectedCategory = m.role === "COLLABORATOR" ? "MINISTRO" : "INSTRUCTOR";
+        manualOverride = person.category !== expectedCategory;
+      }
 
       const existingMember = await tx.teamMember.findUnique({
         where: { teamId_personId: { teamId, personId: m.personId } },
@@ -376,6 +537,7 @@ async function updateTeamTransaction(teamId, members) {
             personId: m.personId,
             role: m.role,
             manualOverride,
+            teamType: team.teamType,
           },
         });
       }
