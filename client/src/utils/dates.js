@@ -8,6 +8,31 @@
 
 const WEEKDAY_LABELS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
+export const MONTH_LABELS = [
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
+];
+
+/**
+ * @param {number} year
+ * @param {number} month 1..12
+ * @returns {string} ej. "Agosto 2026"
+ */
+export function formatMonthYear(year, month) {
+  const label = MONTH_LABELS[month - 1] || String(month);
+  return `${label.charAt(0).toUpperCase()}${label.slice(1)} ${year}`;
+}
+
 /**
  * @param {string|Date} dateInput Fecha civil, típicamente "YYYY-MM-DD" desde la API.
  * @returns {string} ej. "Domingo 3 de agosto"

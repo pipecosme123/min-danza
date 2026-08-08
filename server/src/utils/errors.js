@@ -23,8 +23,8 @@ export class HttpError extends AppError {
 }
 
 export class NotFoundError extends HttpError {
-  constructor(message = "Recurso no encontrado") {
-    super(404, message);
+  constructor(message = "Recurso no encontrado", details) {
+    super(404, message, details);
     this.name = "NotFoundError";
   }
 }

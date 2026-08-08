@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPerson, deactivatePerson, getPeople, importPeople, updatePerson } from '../api/people.js';
-import { ApiError } from '../api/client.js';
+import { describeApiError } from '../utils/apiError.js';
 import { useApi } from '../hooks/useApi.js';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
 import { useToast } from '../hooks/useToast.js';
@@ -28,26 +28,6 @@ const CATEGORY_LABELS = {
 const EMPTY_FORM = { fullName: '', documentId: '', category: '', notes: '' };
 
 const INITIAL_LIST_PARAMS = { page: 1, pageSize: PAGE_SIZE, sort: 'fullName', active: true };
-
-/**
- * Traduce un `ApiError` a un mensaje en lenguaje llano y, cuando el servidor
- * lo envía, al código de dominio (`DOCUMENTO_DUPLICADO`, `NOMBRE_DUPLICADO`,
- * ...). Centralizado acá para no repetir la misma rama if/else en cada
- * handler (alta, edición, baja, import).
- */
-function describeApiError(err) {
-  if (!(err instanceof ApiError)) {
-    return { message: 'Ocurrió un problema inesperado. Intenta de nuevo.', code: null, details: null };
-  }
-  const { details } = err;
-  if (details && !Array.isArray(details) && details.code) {
-    return { message: err.message, code: details.code, details };
-  }
-  if (Array.isArray(details) && details.length > 0) {
-    return { message: details.map((d) => d.message).join(' '), code: 'VALIDACION', details };
-  }
-  return { message: err.message, code: null, details: null };
-}
 
 function toNullableTrimmed(value) {
   const trimmed = value.trim();

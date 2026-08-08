@@ -1,0 +1,149 @@
+.team-generator__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.team-generator__toolbar .field {
+  flex: 1 1 260px;
+  margin-bottom: 0;
+}
+
+.team-generator__finalized-notice {
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  background-color: var(--color-info-bg);
+  border: 1px solid var(--color-info-border);
+  color: var(--color-info-text);
+  border-radius: var(--radius-md);
+  font-weight: var(--font-weight-medium);
+}
+
+.team-generator__action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+}
+
+.team-generator__action-summary {
+  margin: 0;
+  font-weight: var(--font-weight-medium);
+}
+
+.team-generator__generate-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.team-generator__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+
+@media (min-width: 640px) {
+  .team-generator__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .team-generator__grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.team-generator__create-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 var(--space-4);
+}
+
+@media (min-width: 480px) {
+  .team-generator__create-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.team-generator__form-error,
+.team-generator__form-actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.team-generator__form-error {
+  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: var(--space-4);
+}
+
+.team-generator__form-actions {
+  justify-content: flex-end;
+  margin-top: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.team-generator__edit-hint {
+  color: var(--color-text-secondary);
+}
+
+.team-generator__roster-empty {
+  padding: var(--space-3);
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+}
+
+.roster-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.roster-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.roster-row__name {
+  flex: 1 1 160px;
+  font-weight: var(--font-weight-medium);
+}
+
+.roster-row__role-select {
+  min-height: 40px;
+}
+
+.roster-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+}
+
+.roster-add-row .field {
+  flex: 1 1 220px;
+  margin-bottom: 0;
+}
