@@ -5,6 +5,7 @@ const VARIANT_LABELS = {
   success: 'Éxito',
   error: 'Error',
   info: 'Aviso',
+  warning: 'Atención',
 };
 
 /**

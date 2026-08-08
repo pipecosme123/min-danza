@@ -9,12 +9,14 @@ Las reglas de negocio completas (cómo se sortean líderes, la excepción del ú
 el evento del último sábado, uniformes, etc.) están documentadas en [`CLAUDE.md`](./CLAUDE.md).
 El diseño del esquema de datos de esta fase está en
 [`docs/architecture/phase1-schema-design.md`](./docs/architecture/phase1-schema-design.md).
+La referencia completa de la API de personas (endpoints, formato de import, catálogo de
+errores) está en [`docs/api/people.md`](./docs/api/people.md).
 
 Stack: Node.js + Express + Prisma + PostgreSQL en `/server`; Vite + React (SPA) en `/client`.
 
 ## Estado actual del proyecto (importante, léelo antes de asumir nada)
 
-Esto es **Fase 1** (scaffolding base) del plan. Lo que existe hoy:
+Esto es **Fase 2** (personas: import masivo + CRUD) del plan, ya cerrada. Lo que existe hoy:
 
 - Esquema de Prisma completo (`server/prisma/schema.prisma`) con su migración inicial ya
   aplicada (`server/prisma/migrations/20260807223909_init/`).
@@ -22,18 +24,24 @@ Esto es **Fase 1** (scaffolding base) del plan. Lo que existe hoy:
 - `POST /api/auth/login` **funcional de verdad**: valida contra la base, devuelve JWT (expira
   a las 8 horas), aplica rate limiting.
 - `GET /health` **funcional**: confirma conexión real a la base de datos.
+- `GET /api/people`, `POST /api/people`, `PATCH /api/people/:id`, `DELETE /api/people/:id`
+  (con `?purge=true`) y `POST /api/people/import` (`.csv`/`.xlsx`) **funcionales de verdad**,
+  contra la base real. Ver [`docs/api/people.md`](./docs/api/people.md) para el contrato
+  completo.
 - Middlewares reales: `requireAuth` (JWT), `rateLimit` (login y endpoint público),
-  `errorHandler` (nunca filtra stack traces ni detalles de Prisma al cliente).
+  `errorHandler` (nunca filtra stack traces ni detalles de Prisma al cliente),
+  `validate` (zod, sobre body/query/params).
 - Frontend: routing completo (`/`, `/admin/login`, `/admin/*`), login funcional contra el
-  backend, sesión persistida en `localStorage`, y las pantallas de administración
-  (`PeopleManager`, `TeamGenerator`, `EventsManager`, `SpecialSaturdayManager`,
-  `UniformsManager`) existen como UI navegable pero **muestran estados vacíos/placeholder**
-  porque el backend detrás todavía no hace nada.
+  backend, sesión persistida en `localStorage`. `PeopleManager` es una pantalla completa y
+  funcional (listado paginado, búsqueda, filtros, alta, edición, baja/reactivación, import
+  masivo con reporte). El resto de pantallas administrativas (`TeamGenerator`,
+  `EventsManager`, `SpecialSaturdayManager`, `UniformsManager`) existen como UI navegable
+  pero **muestran estados vacíos/placeholder** porque el backend detrás todavía no hace nada.
 
-Todo lo demás — importar personas, generar equipos, generar el calendario del mes, eventos
-extraordinarios, evento del último sábado, uniformes, página pública real — **todavía no está
-implementado**. Ver la sección [Qué NO funciona todavía](#qué-no-funciona-todavía-fase-1) antes
-de reportar algo como "bug": puede ser simplemente que esa fase no se ha construido.
+Todo lo demás — generar equipos, generar el calendario del mes, eventos extraordinarios,
+evento del último sábado, uniformes, página pública real — **todavía no está implementado**.
+Ver la sección [Qué NO funciona todavía](#qué-no-funciona-todavía-fase-2) antes de reportar
+algo como "bug": puede ser simplemente que esa fase no se ha construido.
 
 ## Requisitos previos
 
@@ -209,17 +217,21 @@ Vite imprime la URL local, normalmente `http://localhost:5173`.
 
 ## Pruebas de humo (smoke tests)
 
-**Todavía no existen.** Verificado en `server/package.json` y `client/package.json`:
+Existen y pasan, verificado corriendo ambas suites contra la base de datos real (Docker
+levantado como en el paso 2):
 
-- `server/package.json` → `"test": "echo \"Error: no test specified\" && exit 1"` (el
-  placeholder que deja `npm init` por defecto, no una suite real).
-- `client/package.json` no declara ningún script `test`.
+```bash
+cd server && npm test   # vitest run — 61 pruebas, 7 archivos (incluye people.crud.test.js
+                         # y people.import.test.js, contra el servidor y la base reales)
+cd ../client && npm test  # vitest run — 15 pruebas, 4 archivos
+```
 
-Esto es trabajo pendiente de `qa-tester`, no algo que este quickstart pueda documentar todavía.
-Cuando exista una suite real, esta sección debe actualizarse con el comando exacto (ej.
-`npm test` o `npm run test:smoke`) en vez de inventarlo aquí.
+Backend: incluye pruebas de regresión de bugs ya corregidos (un bug de auth, un *focus trap*
+de `Modal.jsx`, y una condición de carrera en `POST /api/people` que podía devolver un 409
+genérico sin `details.code` en altas concurrentes con el mismo documento — ver
+`server/src/services/people.service.js`).
 
-## Qué NO funciona todavía (Fase 1)
+## Qué NO funciona todavía (Fase 2)
 
 Todos estos endpoints existen (montados y protegidos con `requireAuth` donde corresponde) pero
 responden **`501 Not Implemented`** con un mensaje indicando la fase que los va a implementar
@@ -227,7 +239,6 @@ responden **`501 Not Implemented`** con un mensaje indicando la fase que los va 
 
 | Endpoint | Fase que lo implementa |
 |---|---|
-| `GET /api/people`, `POST /api/people`, `PATCH /api/people/:id`, `POST /api/people/import` | Fase 2 (personas / import CSV-Excel) |
 | `GET /api/months`, `POST /api/months`, `GET /api/months/:id` | Fase 3 (ciclo mensual) |
 | `POST /api/months/:id/generate-teams`, `GET /api/months/:id/teams`, `PATCH /api/teams/:teamId` | Fase 3 (generación/edición de equipos) |
 | `POST /api/months/:id/events`, `DELETE /api/events/:eventId` | Fase 4 (eventos extraordinarios) |
@@ -236,20 +247,25 @@ responden **`501 Not Implemented`** con un mensaje indicando la fase que los va 
 | `GET /api/uniforms`, `POST /api/uniforms`, `GET/PUT /api/uniforms/weekday-config` | Fase 3-4 (uniformes) |
 | `GET /api/schedule/:year/:month` | Fase 5 (página pública real) — hoy responde `501` incluso sin autenticación, aunque el `publicLimiter` (rate limit) ya está activo sobre esta ruta |
 
-En el frontend, las pantallas correspondientes (`PeopleManager`, `TeamGenerator`,
-`EventsManager`, `SpecialSaturdayManager`, `UniformsManager`, `PublicSchedule`) ya están
-construidas como navegación y layout, pero muestran estados vacíos o mensajes de "esta función
-se activará cuando el servidor esté conectado" — **no son bugs**, es el estado esperado de esta
-fase.
+`GET /api/people`, `POST /api/people`, `PATCH /api/people/:id`, `DELETE /api/people/:id` y
+`POST /api/people/import` **ya no están en esta lista**: quedaron implementados en la Fase 2
+(ver [`docs/api/people.md`](./docs/api/people.md)).
+
+En el frontend, las pantallas correspondientes (`TeamGenerator`, `EventsManager`,
+`SpecialSaturdayManager`, `UniformsManager`, `PublicSchedule`) ya están construidas como
+navegación y layout, pero muestran estados vacíos o mensajes de "esta función se activará
+cuando el servidor esté conectado" — **no son bugs**, es el estado esperado de esta fase.
+`PeopleManager` es la excepción: es una pantalla completa y funcional contra el backend real.
 
 Lo único end-to-end real hoy es: `POST /api/auth/login` (backend) ↔ pantalla de login
-(frontend) ↔ sesión persistida y `ProtectedRoute` del router.
+(frontend) ↔ sesión persistida y `ProtectedRoute` del router; y el CRUD + import de personas
+completo, descrito arriba.
 
 ## Estructura del repositorio
 
 ```
 server/    API Express + Prisma + PostgreSQL — ver server/.env.example para configuración
 client/    SPA Vite + React — ver client/.env.example para configuración
-docs/      Documentación de arquitectura y diseño (ver docs/architecture/)
+docs/      Documentación de arquitectura/diseño (docs/architecture/) y referencia de API (docs/api/)
 CLAUDE.md  Reglas de negocio confirmadas — fuente de verdad del dominio
 ```

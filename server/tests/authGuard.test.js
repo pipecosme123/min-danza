@@ -43,14 +43,14 @@ describe("Endpoints administrativos exigen JWT válido", () => {
     expect(res.status).toBe(401);
   });
 
-  it("GET /api/people con token válido pasa el auth guard (responde 501, no 401)", async () => {
+  it("GET /api/people con token válido pasa el auth guard (responde 200, no 401)", async () => {
     const validToken = jwt.sign({ sub: "fake-admin-id", username: "admin" }, env.JWT_SECRET, {
       expiresIn: "5m",
     });
     const res = await request(app).get("/api/people").set("Authorization", `Bearer ${validToken}`);
-    // 501 = "no implementado todavía" (esperado en esta fase). Lo que nos
-    // importa verificar es que NO es 401: el guard reconoció el token.
-    expect(res.status).toBe(501);
+    // Fase 2: GET /api/people ya está implementado (antes respondía 501).
+    // Lo que nos importa verificar es que NO es 401: el guard reconoció el token.
+    expect(res.status).toBe(200);
   });
 
   // Cubre el resto de routers administrativos con el mismo patrón, para

@@ -67,10 +67,13 @@ async function request(path, { method = 'GET', body, headers, signal } = {}) {
 
   if (!response.ok) {
     if (response.status === 401) notifyUnauthorized();
-    throw new ApiError(payload?.message || `Error ${response.status} al comunicarse con el servidor.`, {
-      status: response.status,
-      details: payload,
-    });
+    throw new ApiError(
+      payload?.error?.message ?? payload?.message ?? `Error ${response.status} al comunicarse con el servidor.`,
+      {
+        status: response.status,
+        details: payload?.error?.details ?? null,
+      },
+    );
   }
 
   return payload;

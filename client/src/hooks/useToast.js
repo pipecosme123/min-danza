@@ -42,6 +42,7 @@ export function useToast() {
   const showSuccess = useCallback((message) => addToast({ message, variant: 'success' }), []);
   const showError = useCallback((message) => addToast({ message, variant: 'error', duration: 7000 }), []);
   const showInfo = useCallback((message) => addToast({ message, variant: 'info' }), []);
+  const showWarning = useCallback((message) => addToast({ message, variant: 'warning', duration: 9000 }), []);
 
-  return { toasts: state, showToast, showSuccess, showError, showInfo, dismissToast: removeToast };
+  return { toasts: state, showToast, showSuccess, showError, showInfo, showWarning, dismissToast: removeToast };
 }

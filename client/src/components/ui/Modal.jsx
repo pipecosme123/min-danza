@@ -1,6 +1,15 @@
 import { useEffect, useId, useRef } from 'react';
 import './Modal.css';
 
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Elementos que pueden recibir foco con Tab dentro de un contenedor, en orden de aparición. */
+function getFocusableElements(container) {
+  if (!container) return [];
+  return Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR));
+}
+
 /**
  * Modal accesible de base. `ConfirmDialog` se construye sobre este mismo
  * componente (composición, no reescritura) para confirmar acciones
@@ -9,6 +18,8 @@ import './Modal.css';
  * - Cierra con Escape y con click en el fondo.
  * - Al abrir, mueve el foco dentro del diálogo; al cerrar, lo devuelve a
  *   quien lo abrió.
+ * - Atrapa el foco: `Tab`/`Shift+Tab` circulan solo entre los elementos
+ *   focalizables del diálogo, nunca hacia el contenido de fondo.
  * - `role="dialog"` + `aria-modal` + `aria-labelledby` para lectores de
  *   pantalla.
  *
@@ -36,6 +47,30 @@ export function Modal({ open, onClose, title, children, footer }) {
       if (event.key === 'Escape') {
         event.stopPropagation();
         onClose();
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+
+      const focusableElements = getFocusableElements(dialogNode);
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = focusableElements[0];
+      const last = focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      } else if (!dialogNode.contains(document.activeElement)) {
+        // El foco se salió del diálogo (ej. estaba en el fondo antes de abrir).
+        event.preventDefault();
+        first.focus();
       }
     }
 
