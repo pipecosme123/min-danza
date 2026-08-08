@@ -256,6 +256,19 @@ export async function generateTeams(monthCycleId, options = {}) {
       youthPlan = { leaderPersonId, collaborators: chosenCollaborators };
     }
 
+    // Paso 7.5: si el mes ya tenía horario generado (Fase 4), se pierde con
+    // el re-sorteo — los equipos que ese horario tenía asignados ya no
+    // existirán. Se borra explícitamente (en vez de dejarlo huérfano) y se
+    // avisa con un warning; ver docs/architecture/phase4-schedule-contract.md §9.
+    const existingSlotCount = await tx.serviceSlot.count({ where: { monthCycleId } });
+    if (existingSlotCount > 0) {
+      await tx.serviceSlot.deleteMany({ where: { monthCycleId } });
+      warnings.push({
+        code: "HORARIO_BORRADO_POR_RESORTEO",
+        message: "Se borró el horario del mes porque los equipos cambiaron. Volvé a generarlo desde la sección de Eventos.",
+      });
+    }
+
     // Paso 8: transacción — borrar equipos existentes (regulares + YOUTH,
     // cascada borra sus TeamMember), crear equipos nuevos, crear miembros.
     await tx.team.deleteMany({ where: { monthCycleId } });

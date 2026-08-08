@@ -58,19 +58,24 @@ describe("Endpoints administrativos exigen JWT válido", () => {
   it.each([
     ["GET", "/api/months"],
     ["GET", "/api/uniforms"],
+    ["POST", "/api/uniforms"],
+    ["PATCH", "/api/uniforms/algun-id"],
+    ["GET", "/api/uniforms/weekday-config"],
+    ["PATCH", "/api/uniforms/weekday-config/WEDNESDAY"],
+    ["GET", "/api/uniforms/youth-service-config"],
+    ["PATCH", "/api/uniforms/youth-service-config"],
     ["PATCH", "/api/assignments/algun-id"],
-    // teams/events/specialSaturday se montan en "/" (no en su propio
-    // prefijo) y aplican requireAuth por ruta individual en vez de
-    // router.use(requireAuth) — justo el patrón que casi se rompió antes.
-    // Ver comentarios en teams.routes.js / events.routes.js /
-    // specialSaturday.routes.js.
+    // teams/events se montan en "/" (no en su propio prefijo) y aplican
+    // requireAuth por ruta individual en vez de router.use(requireAuth) —
+    // justo el patrón que casi se rompió antes. Ver comentarios en
+    // teams.routes.js / events.routes.js.
     ["POST", "/api/months/algun-id/generate-teams"],
     ["GET", "/api/months/algun-id/teams"],
     ["PATCH", "/api/teams/algun-id"],
+    ["POST", "/api/months/algun-id/generate-schedule"],
+    ["GET", "/api/months/algun-id/schedule"],
     ["POST", "/api/months/algun-id/events"],
     ["DELETE", "/api/events/algun-id"],
-    ["GET", "/api/months/algun-id/special-saturday"],
-    ["PUT", "/api/months/algun-id/special-saturday/members"],
   ])("%s %s sin token devuelve 401", async (method, path) => {
     const res = await request(app)[method.toLowerCase()](path);
     expect(res.status).toBe(401);

@@ -288,15 +288,11 @@ export async function deletePerson(id, { purge = false } = {}) {
     if (purge) {
       // P18: borrado físico solo si no hay ningún historial. Precondición
       // dura verificada DENTRO de la transacción (evita TOCTOU).
-      const [teamMemberships, specialEventRoles] = await Promise.all([
-        tx.teamMember.count({ where: { personId: id } }),
-        tx.specialSaturdayMember.count({ where: { personId: id } }),
-      ]);
-      if (teamMemberships > 0 || specialEventRoles > 0) {
+      const teamMemberships = await tx.teamMember.count({ where: { personId: id } });
+      if (teamMemberships > 0) {
         throw new ConflictError("No se puede borrar físicamente: la persona tiene historial de participación.", {
           code: "PERSONA_CON_HISTORIAL",
           teamMemberships,
-          specialEventRoles,
         });
       }
       await tx.person.delete({ where: { id } });

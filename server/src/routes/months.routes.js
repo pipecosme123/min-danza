@@ -9,10 +9,19 @@ import { z } from "zod";
 import { validate } from "../middleware/validate.js";
 import { requireAuth } from "../middleware/auth.js";
 import { listMonthCycles, createMonthCycle, getMonthCycle } from "../services/teamGeneration.service.js";
+import { generateSchedule, getMonthSchedule } from "../services/scheduleGeneration.service.js";
 
 const router = Router();
 
 router.use(requireAuth);
+
+const generateScheduleBodySchema = z
+  .object({
+    regenerate: z.boolean().optional(),
+  })
+  // .default({}) porque el body es opcional en su totalidad, mismo patrón
+  // que generateTeamsBodySchema en teams.routes.js.
+  .default({});
 
 const createBodySchema = z.object({
   year: z.coerce.number().int("year debe ser un entero").min(2000, "year debe ser >= 2000").max(2100, "year debe ser <= 2100"),
@@ -48,6 +57,28 @@ router.get("/:id", validate({ params: idParamSchema }), async (req, res, next) =
   try {
     const month = await getMonthCycle(req.params.id);
     res.json(month);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post(
+  "/:id/generate-schedule",
+  validate({ params: idParamSchema, body: generateScheduleBodySchema }),
+  async (req, res, next) => {
+    try {
+      const result = await generateSchedule(req.params.id, { regenerate: req.body.regenerate ?? false });
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.get("/:id/schedule", validate({ params: idParamSchema }), async (req, res, next) => {
+  try {
+    const result = await getMonthSchedule(req.params.id);
+    res.json(result);
   } catch (err) {
     next(err);
   }

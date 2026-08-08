@@ -29,6 +29,14 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   const previouslyFocusedRef = useRef(null);
+  // `onClose` casi siempre es una función nueva en cada render del padre
+  // (inline o redeclarada dentro del componente). Se lee vía ref dentro del
+  // listener de Escape para no tener que incluirla en las dependencias del
+  // efecto de abajo — si estuviera ahí, cada tecleo en un campo del modal
+  // dispararía el efecto de nuevo y devolvería el foco al botón «Cerrar»
+  // (el primer elemento focalizable), cortando cualquier intento de escribir.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -46,7 +54,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
     function handleKeyDown(event) {
       if (event.key === 'Escape') {
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -82,7 +90,9 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
         previouslyFocusedRef.current.focus();
       }
     };
-  }, [open, onClose]);
+    // Deliberadamente solo `open`: ver el comentario de `onCloseRef` arriba.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   if (!open) return null;
 

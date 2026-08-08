@@ -2,8 +2,8 @@
 // docs/architecture/phase2-people-contract.md. Golpea la base Postgres real
 // de desarrollo (igual que auth.test.js); todo lo creado por este archivo
 // se limpia en afterAll vía borrado físico directo con Prisma (no hay
-// TeamMember/SpecialSaturdayMember reales todavía salvo los que el propio
-// test de purge crea y también limpia).
+// TeamMember reales todavía salvo los que el propio test de purge crea y
+// también limpia).
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";

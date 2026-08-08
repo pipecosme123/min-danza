@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -67,5 +68,34 @@ describe("Modal — focus trap", () => {
       await user.tab();
       expect(backgroundButton).not.toHaveFocus();
     }
+  });
+});
+
+// Regresión: en casi todos los llamadores `onClose` es una función nueva en
+// cada render (inline o redeclarada dentro del componente que abre el
+// modal). Si el modal contiene un campo controlado, cada tecleo dispara un
+// re-render del padre -> nuevo `onClose` -> si el efecto de foco dependiera
+// de `onClose`, se re-ejecutaría en cada tecleo y devolvería el foco al
+// botón «Cerrar», dejando escribir una sola letra por vez.
+function ControlledFormModal() {
+  const [value, setValue] = useState("");
+  return (
+    <Modal open onClose={() => {}} title="Nuevo uniforme">
+      <input aria-label="Nombre" value={value} onChange={(event) => setValue(event.target.value)} />
+    </Modal>
+  );
+}
+
+describe("Modal — el foco no se roba en cada re-render del padre", () => {
+  it("escribir varias letras seguidas en un campo del modal no devuelve el foco al botón «Cerrar»", async () => {
+    const user = userEvent.setup();
+    render(<ControlledFormModal />);
+
+    const input = screen.getByLabelText("Nombre");
+    await user.click(input);
+    await user.type(input, "Uniforme A");
+
+    expect(input).toHaveValue("Uniforme A");
+    expect(input).toHaveFocus();
   });
 });

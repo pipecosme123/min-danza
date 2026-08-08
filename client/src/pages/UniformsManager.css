@@ -1,0 +1,46 @@
+.uniforms-manager__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-4);
+}
+
+.uniforms-manager__config-section {
+  margin-top: var(--space-6);
+  padding: var(--space-4);
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+}
+
+.uniforms-manager__config-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-lg);
+}
+
+.uniforms-manager__config-description {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-secondary);
+}
+
+.uniforms-manager__config-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 var(--space-4);
+}
+
+@media (min-width: 480px) {
+  .uniforms-manager__config-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.uniforms-manager__config-grid .field {
+  margin-bottom: 0;
+}
+
+.uniforms-manager__form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+  flex-wrap: wrap;
+}

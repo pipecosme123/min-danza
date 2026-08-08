@@ -1,0 +1,33 @@
+.schedule-slot-card__team-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.schedule-slot-card__team-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.schedule-slot-card__team-select-label {
+  flex: 1 1 160px;
+}
+
+.schedule-slot-card__team-select {
+  min-height: var(--tap-target-min);
+  width: 100%;
+}
+
+.schedule-slot-card__team-name {
+  flex: 1 1 160px;
+  font-weight: var(--font-weight-medium);
+}
+
+.schedule-slot-card__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-2);
+}

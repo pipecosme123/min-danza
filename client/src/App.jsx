@@ -10,7 +10,6 @@ import { AdminDashboard } from './pages/AdminDashboard.jsx';
 import { PeopleManager } from './pages/PeopleManager.jsx';
 import { TeamGenerator } from './pages/TeamGenerator.jsx';
 import { EventsManager } from './pages/EventsManager.jsx';
-import { SpecialSaturdayManager } from './pages/SpecialSaturdayManager.jsx';
 import { UniformsManager } from './pages/UniformsManager.jsx';
 import { NotFound } from './pages/NotFound.jsx';
 
@@ -35,7 +34,6 @@ function App() {
               <Route path="personas" element={<PeopleManager />} />
               <Route path="equipos" element={<TeamGenerator />} />
               <Route path="eventos" element={<EventsManager />} />
-              <Route path="sabado-especial" element={<SpecialSaturdayManager />} />
               <Route path="uniformes" element={<UniformsManager />} />
             </Route>
 

@@ -79,6 +79,16 @@ export function formatCivilDate({ year, month, day }) {
   return `${year}-${mm}-${dd}`;
 }
 
+/**
+ * Formatea un valor `ServiceSlot.date` tal cual vuelve del cliente Prisma
+ * (un JS Date en medianoche UTC, por @db.Date) como "YYYY-MM-DD". Usa los
+ * getters UTC a propósito — los locales introducirían el mismo desfase de un
+ * día que el resto de este archivo evita (ver comentario de cabecera).
+ */
+export function formatDbDate(date) {
+  return formatCivilDate({ year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() });
+}
+
 /** Normaliza "H:mm" o "HH:mm" a "HH:mm" cero-padded (formato de ServiceSlot.startTime). */
 export function formatTime(hour, minute) {
   const hh = String(hour).padStart(2, "0");

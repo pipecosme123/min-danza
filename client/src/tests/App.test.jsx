@@ -50,4 +50,19 @@ describe("App — enrutamiento de alto nivel", () => {
     // que al menos hay contenido de error visible (no un documento vacío).
     expect(document.body.textContent.trim().length).toBeGreaterThan(0);
   });
+
+  it("«Sábado especial» ya no aparece como sección de navegación del panel de administración", () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "un-token-cualquiera");
+    renderAppAt("/admin/personas");
+
+    expect(screen.queryByRole("link", { name: "Sábado especial" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/sábado especial/i)).not.toBeInTheDocument();
+  });
+
+  it("la ruta retirada /admin/sabado-especial ya no existe (NotFound)", () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "un-token-cualquiera");
+    renderAppAt("/admin/sabado-especial");
+
+    expect(screen.getByRole("heading", { name: "Página no encontrada" })).toBeInTheDocument();
+  });
 });

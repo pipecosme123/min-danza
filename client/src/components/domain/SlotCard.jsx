@@ -5,17 +5,17 @@ import './SlotCard.css';
 const SLOT_TYPE_LABELS = {
   FIXED: 'Turno fijo',
   EXTRAORDINARY: 'Evento extraordinario',
-  SPECIAL: 'Evento especial',
+  YOUTH_SERVICE: 'Servicio de jóvenes',
 };
 
 /**
  * Tarjeta de un turno/evento con el o los equipos asignados. Unidad visual
- * base de `CalendarGrid` en la página pública y de los listados de
- * `EventsManager`/`SpecialSaturdayManager`.
+ * base de `CalendarGrid` en la página pública y en `EventsManager`
+ * (a través de `ScheduleSlotCard`, la variante editable del panel admin).
  *
  * @param {{
  *   slot: {
- *     date: string, startTime: string, slotType: 'FIXED'|'EXTRAORDINARY'|'SPECIAL',
+ *     date: string, startTime: string, slotType: 'FIXED'|'EXTRAORDINARY'|'YOUTH_SERVICE',
  *     title?: string, teamsNeeded: number,
  *     uniform?: { name: string, colorHex?: string } | null,
  *     teams: Array<{ id: string, label: string }>,

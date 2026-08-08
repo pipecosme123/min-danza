@@ -48,11 +48,12 @@ enum TeamType {
 
 /// FIXED         = turno fijo semanal (miércoles / domingo)
 /// EXTRAORDINARY = evento extraordinario creado por el admin (SÍ cuenta al balance)
-/// SPECIAL       = evento del último sábado (NO cuenta al balance, roster manual)
+/// YOUTH_SERVICE = Servicio de jóvenes, ver Fase 4 (último sábado del mes,
+/// equipo = el Team teamType YOUTH del mes, SÍ cuenta al balance)
 enum SlotType {
   FIXED
   EXTRAORDINARY
-  SPECIAL
+  YOUTH_SERVICE
 
   @@map("slot_type")
 }
@@ -117,8 +118,7 @@ model Person {
   createdAt  DateTime       @default(now()) @map("created_at")
   updatedAt  DateTime       @updatedAt @map("updated_at")
 
-  teamMemberships   TeamMember[]
-  specialEventRoles SpecialSaturdayMember[]
+  teamMemberships TeamMember[]
 
   /// Consulta caliente: pool de sorteo = personas activas por categoría.
   @@index([active, category])
@@ -131,21 +131,21 @@ model Person {
 // --------------------------- CICLO MENSUAL ---------------------------------
 
 model MonthCycle {
-  id          String      @id @default(cuid())
-  year        Int
-  month       Int
+  id               String      @id @default(cuid())
+  year             Int
+  month            Int
   /// Cuántos equipos definió el admin para este mes.
-  teamCount   Int         @map("team_count")
-  status      MonthStatus @default(DRAFT)
-  finalizedAt DateTime?   @map("finalized_at")
+  teamCount        Int         @map("team_count")
+  status           MonthStatus @default(DRAFT)
+  finalizedAt      DateTime?   @map("finalized_at")
   /// Último valor usado/mostrado en el form de generate-teams para el equipo
   /// de jóvenes. NO gobierna la generación: el body de cada POST
   /// generate-teams manda explícitamente `youthTeam.enabled`/`size` cada vez;
   /// esto es solo el default que la UI precarga.
-  youthTeamEnabled Boolean @default(true) @map("youth_team_enabled")
-  youthTeamSize    Int     @default(10) @map("youth_team_size")
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime    @updatedAt @map("updated_at")
+  youthTeamEnabled Boolean     @default(true) @map("youth_team_enabled")
+  youthTeamSize    Int         @default(10) @map("youth_team_size")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
 
   teams        Team[]
   serviceSlots ServiceSlot[]
@@ -230,8 +230,9 @@ model Uniform {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  serviceSlots    ServiceSlot[]
-  weekdayUniforms WeekdayUniform[]
+  serviceSlots         ServiceSlot[]
+  weekdayUniforms      WeekdayUniform[]
+  youthServiceUniforms YouthServiceUniform[]
 
   @@map("uniform")
 }
@@ -248,6 +249,20 @@ model WeekdayUniform {
   uniform Uniform @relation(fields: [uniformId], references: [id], onDelete: Restrict)
 
   @@map("weekday_uniform")
+}
+
+/// Config del uniforme del "Servicio de jóvenes" (último sábado del mes).
+/// Es un singleton deliberado: como máximo una fila. El service la
+/// lee/escribe con findFirst/upsert sobre esa única fila, nunca por id
+/// conocido de antemano (no hay UI de "crear una nueva fila").
+model YouthServiceUniform {
+  id        String   @id @default(cuid())
+  uniformId String   @map("uniform_id")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  uniform Uniform @relation(fields: [uniformId], references: [id], onDelete: Restrict)
+
+  @@map("youth_service_uniform")
 }
 
 // ---------------------------- HORARIO / SLOTS ------------------------------
@@ -279,22 +294,24 @@ model ServiceSlot {
   /// Ordena correctamente en forma lexicográfica. Ver D7.
   startTime           String   @map("start_time") @db.VarChar(5)
   slotType            SlotType @map("slot_type")
-  /// Nombre visible del evento (solo EXTRAORDINARY/SPECIAL). Los FIXED lo
-  /// dejan en null y la UI los rotula por día/hora.
+  /// Nombre visible del evento (solo EXTRAORDINARY/YOUTH_SERVICE). Los FIXED
+  /// lo dejan en null y la UI los rotula por día/hora.
   title               String?
   /// 1 por defecto; 2 en el último domingo y opcionalmente en extraordinarios.
   teamsNeeded         Int      @default(1) @map("teams_needed")
-  /// false SOLO para SPECIAL (garantizado por CHECK en la migración).
+  /// Si el slot suma o no a recomputeBalance. En esta fase todo slot que se
+  /// genera (FIXED, EXTRAORDINARY, YOUTH_SERVICE) nace en true — no hay
+  /// ningún camino que produzca false. El campo se conserva para no cerrar
+  /// la puerta a un futuro tipo de evento que no deba contar.
   countsTowardBalance Boolean  @default(true) @map("counts_toward_balance")
   uniformId           String?  @map("uniform_id")
   notes               String?
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
-  monthCycle     MonthCycle              @relation(fields: [monthCycleId], references: [id], onDelete: Cascade)
-  uniform        Uniform?                @relation(fields: [uniformId], references: [id], onDelete: SetNull)
-  assignments    SlotAssignment[]
-  specialMembers SpecialSaturdayMember[]
+  monthCycle  MonthCycle       @relation(fields: [monthCycleId], references: [id], onDelete: Cascade)
+  uniform     Uniform?         @relation(fields: [uniformId], references: [id], onDelete: SetNull)
+  assignments SlotAssignment[]
 
   /// Hace idempotente la generación de slots fijos del mes: re-ejecutarla no
   /// duplica. Incluye slotType para no bloquear un extraordinario que caiga a
@@ -336,21 +353,4 @@ model SlotAssignment {
   @@index([teamId])
   @@index([monthCycleId, teamId])
   @@map("slot_assignment")
-}
-
-/// Roster manual del evento del último sábado. Cuelga del ServiceSlot SPECIAL
-/// (no del MonthCycle) — ver D11. Es deliberadamente independiente de
-/// TeamMember: estar aquí NO excluye a la persona de su equipo regular.
-model SpecialSaturdayMember {
-  id            String   @id @default(cuid())
-  serviceSlotId String   @map("service_slot_id")
-  personId      String   @map("person_id")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  serviceSlot ServiceSlot @relation(fields: [serviceSlotId], references: [id], onDelete: Cascade)
-  person      Person      @relation(fields: [personId], references: [id], onDelete: Restrict)
-
-  @@unique([serviceSlotId, personId])
-  @@index([personId])
-  @@map("special_saturday_member")
 }
