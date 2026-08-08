@@ -19,8 +19,8 @@ datasource db {
 /// Categoría de la persona en el padrón. Los valores están en español a
 /// propósito: son los que llegan literalmente en el CSV/XLSX de carga masiva.
 enum PersonCategory {
-  ELEGIBLE_LIDER
-  COLABORADOR
+  INSTRUCTOR
+  MINISTRO
 
   @@map("person_category")
 }
@@ -164,7 +164,7 @@ model TeamMember {
   monthCycleId   String   @map("month_cycle_id")
   personId       String   @map("person_id")
   role           TeamRole
-  /// true cuando el admin forzó el rol a mano (p. ej. promover un COLABORADOR
+  /// true cuando el admin forzó el rol a mano (p. ej. promover un MINISTRO
   /// a LEADER). El sorteo automático NUNCA escribe true aquí.
   manualOverride Boolean  @default(false) @map("manual_override")
   createdAt      DateTime @default(now()) @map("created_at")

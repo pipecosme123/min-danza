@@ -11,7 +11,7 @@ import { apiClient } from './client.js';
  * @property {string} id
  * @property {string} fullName
  * @property {string|null} documentId
- * @property {'ELEGIBLE_LIDER'|'COLABORADOR'} category
+ * @property {'INSTRUCTOR'|'MINISTRO'} category
  * @property {boolean} active
  * @property {string|null} notes
  * @property {string} createdAt
@@ -23,7 +23,7 @@ import { apiClient } from './client.js';
  * @property {number} [page]
  * @property {number} [pageSize]
  * @property {string} [search]
- * @property {'ELEGIBLE_LIDER'|'COLABORADOR'} [category]
+ * @property {'INSTRUCTOR'|'MINISTRO'} [category]
  * @property {boolean} [active]
  * @property {'fullName'|'-fullName'|'createdAt'|'-createdAt'} [sort]
  */
@@ -51,7 +51,7 @@ export function getPeople(params = {}) {
 }
 
 /**
- * @param {{ fullName: string, documentId?: string|null, category: 'ELEGIBLE_LIDER'|'COLABORADOR', notes?: string|null, confirmDuplicateName?: boolean }} data
+ * @param {{ fullName: string, documentId?: string|null, category: 'INSTRUCTOR'|'MINISTRO', notes?: string|null, confirmDuplicateName?: boolean }} data
  * @returns {Promise<Person>}
  */
 export function createPerson(data) {
@@ -60,7 +60,7 @@ export function createPerson(data) {
 
 /**
  * @param {string} id
- * @param {Partial<{ fullName: string, documentId: string|null, category: 'ELEGIBLE_LIDER'|'COLABORADOR', notes: string|null, active: boolean }>} data
+ * @param {Partial<{ fullName: string, documentId: string|null, category: 'INSTRUCTOR'|'MINISTRO', notes: string|null, active: boolean }>} data
  * @returns {Promise<{ person: Person, warnings: Array<{ code: string, message: string }> }>}
  */
 export function updatePerson(id, data) {

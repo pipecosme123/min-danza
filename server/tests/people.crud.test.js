@@ -51,7 +51,7 @@ function authed(req) {
 async function createPersonDirect(overrides = {}) {
   const res = await authed(request(app).post("/api/people")).send({
     fullName: `${NAME_PREFIX} ${overrides.suffix ?? "Base"}`,
-    category: "COLABORADOR",
+    category: "MINISTRO",
     documentId: uniqueDoc(),
     ...overrides,
   });
@@ -65,7 +65,7 @@ describe("POST /api/people", () => {
     const res = await authed(request(app).post("/api/people")).send({
       fullName: `  ${NAME_PREFIX}   Documento   Normalizado  `,
       documentId: "1.234.567",
-      category: "ELEGIBLE_LIDER",
+      category: "INSTRUCTOR",
     });
 
     expect(res.status).toBe(201);
@@ -80,7 +80,7 @@ describe("POST /api/people", () => {
     const res = await authed(request(app).post("/api/people")).send({
       fullName: `${NAME_PREFIX} Colision Documento`,
       documentId: "1234567",
-      category: "COLABORADOR",
+      category: "MINISTRO",
     });
 
     expect(res.status).toBe(409);
@@ -94,12 +94,12 @@ describe("POST /api/people", () => {
       authed(request(app).post("/api/people")).send({
         fullName: `${NAME_PREFIX} Carrera A`,
         documentId: doc,
-        category: "COLABORADOR",
+        category: "MINISTRO",
       }),
       authed(request(app).post("/api/people")).send({
         fullName: `${NAME_PREFIX} Carrera B`,
         documentId: doc,
-        category: "COLABORADOR",
+        category: "MINISTRO",
       }),
     ]);
 
@@ -121,7 +121,7 @@ describe("POST /api/people", () => {
 
     const dup = await authed(request(app).post("/api/people")).send({
       fullName: `${NAME_PREFIX} Homonimo`,
-      category: "COLABORADOR",
+      category: "MINISTRO",
     });
     expect(dup.status).toBe(409);
     expect(dup.body.error.details.code).toBe("NOMBRE_DUPLICADO");
@@ -129,7 +129,7 @@ describe("POST /api/people", () => {
 
     const confirmed = await authed(request(app).post("/api/people")).send({
       fullName: `${NAME_PREFIX} Homonimo`,
-      category: "COLABORADOR",
+      category: "MINISTRO",
       confirmDuplicateName: true,
     });
     expect(confirmed.status).toBe(201);
@@ -140,7 +140,7 @@ describe("POST /api/people", () => {
   it("body inválido (nombre con dígitos) devuelve 400 de validación", async () => {
     const res = await authed(request(app).post("/api/people")).send({
       fullName: "Persona123",
-      category: "COLABORADOR",
+      category: "MINISTRO",
     });
     expect(res.status).toBe(400);
     expect(Array.isArray(res.body.error.details)).toBe(true);
@@ -149,15 +149,15 @@ describe("POST /api/people", () => {
   it("sin token devuelve 401", async () => {
     const res = await request(app)
       .post("/api/people")
-      .send({ fullName: `${NAME_PREFIX} Sin Token`, category: "COLABORADOR" });
+      .send({ fullName: `${NAME_PREFIX} Sin Token`, category: "MINISTRO" });
     expect(res.status).toBe(401);
   });
 });
 
 describe("GET /api/people", () => {
   it("lista, pagina y filtra por categoría/búsqueda", async () => {
-    await createPersonDirect({ suffix: "Buscable Uno", fullName: `${NAME_PREFIX} Buscable Uno`, category: "ELEGIBLE_LIDER" });
-    await createPersonDirect({ suffix: "Buscable Dos", fullName: `${NAME_PREFIX} Buscable Dos`, category: "COLABORADOR" });
+    await createPersonDirect({ suffix: "Buscable Uno", fullName: `${NAME_PREFIX} Buscable Uno`, category: "INSTRUCTOR" });
+    await createPersonDirect({ suffix: "Buscable Dos", fullName: `${NAME_PREFIX} Buscable Dos`, category: "MINISTRO" });
 
     const res = await authed(request(app).get(`/api/people?search=${encodeURIComponent(`${NAME_PREFIX} Buscable`)}`));
     expect(res.status).toBe(200);
@@ -165,10 +165,10 @@ describe("GET /api/people", () => {
     expect(res.body.pagination).toMatchObject({ page: 1, pageSize: 25 });
 
     const filtered = await authed(
-      request(app).get(`/api/people?search=${encodeURIComponent(`${NAME_PREFIX} Buscable`)}&category=ELEGIBLE_LIDER`)
+      request(app).get(`/api/people?search=${encodeURIComponent(`${NAME_PREFIX} Buscable`)}&category=INSTRUCTOR`)
     );
     expect(filtered.status).toBe(200);
-    expect(filtered.body.data.every((p) => p.category === "ELEGIBLE_LIDER")).toBe(true);
+    expect(filtered.body.data.every((p) => p.category === "INSTRUCTOR")).toBe(true);
   });
 
   it("página fuera de rango devuelve data: [] (no 404)", async () => {
@@ -250,8 +250,8 @@ describe("PATCH /api/people/:id", () => {
     expect(res.body.warnings.some((w) => w.code === "PERSONA_EN_EQUIPO_ACTIVO")).toBe(true);
   });
 
-  it("P16: degradar ELEGIBLE_LIDER -> COLABORADOR a alguien que lidera un equipo marca manualOverride y devuelve warning", async () => {
-    const person = await createPersonDirect({ suffix: "Lider A Degradar", category: "ELEGIBLE_LIDER" });
+  it("P16: degradar INSTRUCTOR -> MINISTRO a alguien que lidera un equipo marca manualOverride y devuelve warning", async () => {
+    const person = await createPersonDirect({ suffix: "Lider A Degradar", category: "INSTRUCTOR" });
     const monthCycle = await prisma.monthCycle.create({
       data: { year: 2098, month: 4, teamCount: 1, status: "DRAFT" },
     });
@@ -264,10 +264,10 @@ describe("PATCH /api/people/:id", () => {
     });
     expect(member.manualOverride).toBe(false);
 
-    const res = await authed(request(app).patch(`/api/people/${person.id}`)).send({ category: "COLABORADOR" });
+    const res = await authed(request(app).patch(`/api/people/${person.id}`)).send({ category: "MINISTRO" });
     expect(res.status).toBe(200);
-    expect(res.body.person.category).toBe("COLABORADOR");
-    expect(res.body.warnings.some((w) => w.code === "LIDER_DEGRADADO_A_COLABORADOR")).toBe(true);
+    expect(res.body.person.category).toBe("MINISTRO");
+    expect(res.body.warnings.some((w) => w.code === "LIDER_DEGRADADO_A_MINISTRO")).toBe(true);
 
     const reloaded = await prisma.teamMember.findUnique({ where: { id: member.id } });
     expect(reloaded.manualOverride).toBe(true);

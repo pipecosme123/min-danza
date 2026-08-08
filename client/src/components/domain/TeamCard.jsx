@@ -3,7 +3,7 @@ import './TeamCard.css';
 
 /**
  * Tarjeta de un equipo mensual: nombre, cantidad de integrantes y su
- * detalle (líder/apoyo/colaboradores). La usan `TeamGenerator` (vista de
+ * detalle (líder/apoyo/ministros). La usan `TeamGenerator` (vista de
  * administración) y, en fases futuras, la página pública.
  *
  * @param {{ team: { id: string, label: string, members: Array }, actions?: React.ReactNode }} props

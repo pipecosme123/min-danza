@@ -14,10 +14,10 @@ Decisiones numeradas `P1…P20`. Lo que de verdad depende del usuario está aisl
 
 | # | Invariante | Cómo se protege aquí |
 |---|---|---|
-| A1 | `category` decide el pool del sorteo de líderes (Fase 3) | Nunca se infiere ni se asigna por defecto: una fila sin categoría es **error**, no un `COLABORADOR` silencioso (P6) |
+| A1 | `category` decide el pool del sorteo de líderes (Fase 3) | Nunca se infiere ni se asigna por defecto: una fila sin categoría es **error**, no un `MINISTRO` silencioso (P6) |
 | A2 | Un duplicado en el padrón infla el pool y desbalancea equipos | Deduplicación por documento normalizado y, en su defecto, por nombre normalizado (P7-P10) |
 | A3 | Nunca se pierde historial de participación | `DELETE` = baja lógica por defecto; el borrado físico solo con `?purge=true` y **cero** membresías (P17-P18) |
-| A4 | I3 de Fase 1: un `COLABORADOR` solo es líder con override explícito | Degradar la categoría de alguien que hoy es `LEADER` marca `TeamMember.manualOverride = true` en la misma transacción (P16) |
+| A4 | I3 de Fase 1: un `MINISTRO` solo es líder con override explícito | Degradar la categoría de alguien que hoy es `LEADER` marca `TeamMember.manualOverride = true` en la misma transacción (P16) |
 | A5 | Dar de baja a alguien no lo saca de un mes ya armado | `DELETE`/`active=false` **no** toca `TeamMember`; solo devuelve un warning (P19) |
 
 ---
@@ -57,12 +57,12 @@ Se normaliza la celda (trim → mayúsculas → quitar tildes → colapsar espac
 
 | Valor normalizado | Resultado |
 |---|---|
-| `ELEGIBLE LIDER`, `ELEGIBLE_LIDER`, `ELEGIBLE`, `ELEGIBLE A LIDER`, `LIDER`, `LIDERES`, `ELEGIBLE PARA LIDER` | `ELEGIBLE_LIDER` |
-| `COLABORADOR`, `COLABORADORA`, `COLABORADORES`, `COLAB`, `APOYO` | `COLABORADOR` |
+| `INSTRUCTOR`, `INSTRUCTORES`, `ELEGIBLE LIDER`, `ELEGIBLE_LIDER`, `ELEGIBLE`, `ELEGIBLE A LIDER`, `LIDER`, `LIDERES`, `ELEGIBLE PARA LIDER` | `INSTRUCTOR` |
+| `MINISTRO`, `MINISTRA`, `MINISTROS`, `COLABORADOR`, `COLABORADORA`, `COLABORADORES`, `COLAB`, `APOYO` | `MINISTRO` |
 
-Cualquier otra cosa → error de fila `CATEGORIA_INVALIDA`. **Sin abreviaturas de una letra** (`L`/`C`): el riesgo de falso positivo supera la comodidad.
+Cualquier otra cosa → error de fila `CATEGORIA_INVALIDA`. **Sin abreviaturas de una letra** (`I`/`M`): el riesgo de falso positivo supera la comodidad.
 
-> `APOYO` mapea a `COLABORADOR` a propósito: en el dominio, "apoyo" es un **rol dentro del equipo** que se asigna por sorteo a los `ELEGIBLE_LIDER` sobrantes (`TeamRole.SUPPORT`), no una categoría del padrón. Si alguien escribe "Apoyo" en el CSV está describiendo a un colaborador. Si esto resulta confuso en la práctica, quitar el alias es un cambio de una línea.
+> `APOYO` mapea a `MINISTRO` a propósito: en el dominio, "apoyo" es un **rol dentro del equipo** que se asigna por sorteo a los `INSTRUCTOR` sobrantes (`TeamRole.SUPPORT`), no una categoría del padrón. Si alguien escribe "Apoyo" en el CSV está describiendo a un ministro. Los alias en español ("Elegible líder", "Colaborador", etc.) se conservan por compatibilidad hacia atrás con archivos viejos aunque el vocabulario vigente sea `INSTRUCTOR`/`MINISTRO`. Si esto resulta confuso en la práctica, quitar el alias es un cambio de una línea.
 
 ### P6 — Celda de categoría vacía
 Error de fila `CATEGORIA_VACIA`. **Nunca** se aplica un valor por defecto (A1).
@@ -106,7 +106,7 @@ Gana la **primera** aparición; las siguientes se reportan en `skipped` con `DUP
 | Coincide por **nombre** (la fila no trae documento, o lo trae y no existe en BD pero el nombre sí) | **No** actualiza. Reporta con `personId` | `skipped` / `NOMBRE_DUPLICADO_EN_BD` |
 | No coincide con nada | **Crea** con `active = true` | `created` |
 
-**Justificación del asimetría documento vs. nombre:** actualizar por documento es seguro (identidad verificada) y es lo que hace útil reimportar un padrón corregido. Actualizar por nombre no lo es: dos homónimos harían que un `ELEGIBLE_LIDER` real pase a `COLABORADOR` silenciosamente y desaparezca del pool de líderes (A1/A2). Ante la duda, el import informa y el admin decide.
+**Justificación del asimetría documento vs. nombre:** actualizar por documento es seguro (identidad verificada) y es lo que hace útil reimportar un padrón corregido. Actualizar por nombre no lo es: dos homónimos harían que un `INSTRUCTOR` real pase a `MINISTRO` silenciosamente y desaparezca del pool de líderes (A1/A2). Ante la duda, el import informa y el admin decide.
 
 La reactivación automática se descarta por la misma razón: una baja es una decisión deliberada del admin, y reimportar el padrón completo no debe deshacerla sin que nadie lo note. El reporte deja el caso visible.
 
@@ -148,7 +148,7 @@ Todos bajo `requireAuth` (ya aplicado en `people.routes.js` con `router.use(requ
   "id": "clx…",
   "fullName": "María Fernanda Ruiz",
   "documentId": "1234567",
-  "category": "ELEGIBLE_LIDER",
+  "category": "INSTRUCTOR",
   "active": true,
   "notes": null,
   "createdAt": "2026-08-07T14:03:11.412Z",
@@ -179,11 +179,11 @@ Nunca se devuelven campos adicionales. Nunca se devuelve `null` en lugar del obj
     "ignoredColumns": ["Telefono"]
   },
   "created": [
-    { "row": 2, "personId": "clx1…", "fullName": "María Fernanda Ruiz", "category": "ELEGIBLE_LIDER" }
+    { "row": 2, "personId": "clx1…", "fullName": "María Fernanda Ruiz", "category": "INSTRUCTOR" }
   ],
   "updated": [
     { "row": 9, "personId": "clx2…", "fullName": "Juan Pérez",
-      "changes": { "category": { "from": "COLABORADOR", "to": "ELEGIBLE_LIDER" } } }
+      "changes": { "category": { "from": "MINISTRO", "to": "INSTRUCTOR" } } }
   ],
   "skipped": [
     { "row": 14, "code": "DUPLICADO_EN_ARCHIVO_DOCUMENTO", "personId": null,
@@ -193,7 +193,7 @@ Nunca se devuelven campos adicionales. Nunca se devuelve `null` en lugar del obj
   ],
   "errors": [
     { "row": 33, "column": "Categoría", "value": "lider2", "code": "CATEGORIA_INVALIDA",
-      "message": "«lider2» no es una categoría válida. Usa «Elegible líder» o «Colaborador»." }
+      "message": "«lider2» no es una categoría válida. Usa «Instructor» o «Ministro»." }
   ],
   "truncated": false
 }
@@ -220,7 +220,7 @@ Nunca se devuelven campos adicionales. Nunca se devuelve `null` en lugar del obj
 | `page` | int ≥ 1 | `1` | |
 | `pageSize` | int 1..100 | `25` | |
 | `search` | string 1..100 | — | `contains` case-insensitive sobre `fullName` **o** `documentId` (OR). El término se normaliza con `normalizeDocument` para la parte de documento, de modo que buscar `1.234` encuentre `1234`. |
-| `category` | `ELEGIBLE_LIDER` \| `COLABORADOR` | — | |
+| `category` | `INSTRUCTOR` \| `MINISTRO` | — | |
 | `active` | `"true"` \| `"false"` | — | **Sin filtro por defecto: devuelve activos e inactivos.** |
 | `sort` | `fullName` \| `-fullName` \| `createdAt` \| `-createdAt` | `fullName` | |
 
@@ -244,7 +244,7 @@ Limitación conocida y aceptada: el orden y la búsqueda dependen de la collatio
 ### `POST /api/people`
 
 ```json
-{ "fullName": "Ana Gómez", "documentId": "1.234.567", "category": "COLABORADOR",
+{ "fullName": "Ana Gómez", "documentId": "1.234.567", "category": "MINISTRO",
   "notes": null, "confirmDuplicateName": false }
 ```
 
@@ -276,10 +276,10 @@ Body con **al menos una** de: `fullName`, `documentId` (`string | null`, `null` 
 - **409** `DOCUMENTO_DUPLICADO` (mismo shape que en `POST`). Cambiar el nombre **no** dispara 409 aquí (renombrar no es crear).
 
 ### P16 — Efecto colateral obligatorio al degradar categoría (invariante A4)
-Si el cambio es `ELEGIBLE_LIDER → COLABORADOR` y esa persona tiene alguna fila `TeamMember` con `role = 'LEADER'`, en **la misma transacción** se marca `manualOverride = true` en esas filas, y se devuelve:
+Si el cambio es `INSTRUCTOR → MINISTRO` y esa persona tiene alguna fila `TeamMember` con `role = 'LEADER'`, en **la misma transacción** se marca `manualOverride = true` en esas filas, y se devuelve:
 
 ```json
-{ "code": "LIDER_DEGRADADO_A_COLABORADOR",
+{ "code": "LIDER_DEGRADADO_A_MINISTRO",
   "message": "Esta persona lidera 1 equipo (Agosto 2026). Su liderazgo quedó marcado como excepción manual." }
 ```
 
@@ -335,7 +335,7 @@ const documentId = z.string()
       .regex(/^[A-Z0-9]+$/, "El documento solo admite letras y números")
   );
 
-const category = z.enum(["ELEGIBLE_LIDER", "COLABORADOR"]);   // sin alias: los alias
+const category = z.enum(["INSTRUCTOR", "MINISTRO"]);   // sin alias: los alias
                                                               // son cosa del parser del import
 const notes = z.string().trim().max(500).nullish();
 const idParam = z.object({ id: z.string().min(1).max(40) });   // formato de cuid NO se valida;
@@ -394,6 +394,6 @@ Backend (vitest + supertest, siguiendo el patrón de `server/tests/*.test.js`): 
 No bloquean la implementación — todos tienen una decisión tomada y funcionando; son puntos donde una preferencia distinta del usuario cambiaría el comportamiento:
 
 1. **El import no reactiva a nadie automáticamente** (P11, caso `PERSONA_INACTIVA`). Alternativa: reactivar si el documento coincide. Si el flujo real es "cada mes reimporto la lista completa de quienes participan", la reactivación automática sería más cómoda; hoy prima no deshacer bajas en silencio.
-2. **`APOYO` mapea a `COLABORADOR`** en la columna de categoría (P5). Confirmar que en el vocabulario del usuario "apoyo" no es una tercera categoría del padrón — el esquema solo admite dos.
+2. **`APOYO` mapea a `MINISTRO`** en la columna de categoría (P5). Confirmar que en el vocabulario del usuario "apoyo" no es una tercera categoría del padrón — el esquema solo admite dos.
 3. **Existencia del borrado físico `?purge=true`** (P18). Si se prefiere prohibirlo por completo, se elimina sin tocar el resto del contrato.
 4. **Tope de 2000 filas y 2 MB** (P2). Fijado por criterio; si el padrón real es de decenas de personas sobra, y si algún día son miles hay que revisar (y pasar a parseo en streaming).

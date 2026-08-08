@@ -56,8 +56,8 @@ datasource db {
 /// Categoría de la persona en el padrón. Los valores están en español a
 /// propósito: son los que llegan literalmente en el CSV/XLSX de carga masiva.
 enum PersonCategory {
-  ELEGIBLE_LIDER
-  COLABORADOR
+  INSTRUCTOR
+  MINISTRO
 
   @@map("person_category")
 }
@@ -201,7 +201,7 @@ model TeamMember {
   monthCycleId   String   @map("month_cycle_id")
   personId       String   @map("person_id")
   role           TeamRole
-  /// true cuando el admin forzó el rol a mano (p. ej. promover un COLABORADOR
+  /// true cuando el admin forzó el rol a mano (p. ej. promover un MINISTRO
   /// a LEADER). El sorteo automático NUNCA escribe true aquí.
   manualOverride Boolean  @default(false) @map("manual_override")
   createdAt      DateTime @default(now()) @map("created_at")
@@ -562,7 +562,7 @@ Consecuencia de diseño: el conteo de participaciones **es** `COUNT(slot_assignm
 
 **D1 — Prisma 6.19.x, no Prisma 7.** `npm i prisma@latest` hoy instala 7.x, que **rompe** la sintaxis clásica: prohíbe `url = env("DATABASE_URL")` en el datasource y exige `prisma.config.ts` + un driver adapter (`@prisma/adapter-pg`). Verifiqué que el cuerpo del esquema de arriba es idéntico y válido en ambas versiones; solo cambia el encabezado. Para Fase 1 recomiendo **fijar `prisma@^6.19` y `@prisma/client@^6.19`** (menos piezas móviles, `prisma db seed` clásico, toda la documentación existente aplica). El Apéndice A tiene el delta exacto si el usuario prefiere 7.x.
 
-**D2 — Valores de enum en dos idiomas, a propósito.** `PersonCategory` en español (`ELEGIBLE_LIDER`/`COLABORADOR`) porque son los literales que llegan en el CSV y los que `CLAUDE.md` confirmó con el usuario; el resto de enums en inglés como el resto del código. Es una inconsistencia deliberada: alinearlos obligaría a traducir en el import o a cambiar vocabulario ya acordado.
+**D2 — Valores de enum en dos idiomas, a propósito.** `PersonCategory` en español (`INSTRUCTOR`/`MINISTRO`) porque son los literales que llegan en el CSV y los que `CLAUDE.md` confirmó con el usuario; el resto de enums en inglés como el resto del código. Es una inconsistencia deliberada: alinearlos obligaría a traducir en el import o a cambiar vocabulario ya acordado.
 
 **D3 — Enums nativos de Postgres, no `String`.** Integridad a nivel de motor y tipado en el cliente Prisma. Costo: agregar un valor exige migración (`ALTER TYPE ... ADD VALUE`, barato en PG ≥ 12). Los cinco enums son cerrados y estables, así que el costo casi nunca se paga.
 
@@ -601,7 +601,7 @@ Consecuencia de diseño: el conteo de participaciones **es** `COUNT(slot_assignm
 5. Sin objeción del usuario, quedan aceptadas las recomendaciones del arquitecto en los puntos de menor impacto (revisables si algo no calza al implementar):
    - Rutas del frontend en español (§4).
    - Uniforme de eventos `EXTRAORDINARY` hereda el `WeekdayUniform` del día como sugerencia editable, no obligatoria.
-   - Una `Person` `COLABORADOR` inactiva conserva su aparición en meses pasados (historial, D13).
+   - Una `Person` `MINISTRO` inactiva conserva su aparición en meses pasados (historial, D13).
    - Si el admin baja `teamCount` en un mes `FINALIZED`, se prohíbe; en `DRAFT`, se regenera equipos/asignaciones desde cero avisando en la UI.
 
 ---

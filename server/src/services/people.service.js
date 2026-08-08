@@ -236,12 +236,12 @@ export async function updatePerson(id, patch) {
 
     const warnings = [];
 
-    // P16 / invariante A4: degradar ELEGIBLE_LIDER -> COLABORADOR a alguien
+    // P16 / invariante A4: degradar INSTRUCTOR -> MINISTRO a alguien
     // que hoy lidera algún equipo marca esas filas como excepción manual,
     // en la MISMA transacción que el cambio de categoría. No existe todavía
     // ningún TeamMember en la base (Fase 3 no arrancó), así que este bloque
     // es hoy un no-op real, pero el código queda listo para cuando existan.
-    if (existing.category === "ELEGIBLE_LIDER" && data.category === "COLABORADOR") {
+    if (existing.category === "INSTRUCTOR" && data.category === "MINISTRO") {
       const leaderRows = await tx.teamMember.findMany({
         where: { personId: id, role: "LEADER" },
         select: {
@@ -257,7 +257,7 @@ export async function updatePerson(id, patch) {
         const label = formatMonthLabel(leaderRows[0].team.monthCycle);
         const count = leaderRows.length;
         warnings.push({
-          code: "LIDER_DEGRADADO_A_COLABORADOR",
+          code: "LIDER_DEGRADADO_A_MINISTRO",
           message: `Esta persona lidera ${count} equipo${count > 1 ? "s" : ""} (${label}). Su liderazgo quedó marcado como excepción manual.`,
         });
       }

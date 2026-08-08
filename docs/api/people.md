@@ -61,7 +61,7 @@ listado, como cuerpo directo en `POST`, dentro de `{ person }` en `PATCH`/`DELET
   "id": "clx1a2b3c",
   "fullName": "María Fernanda Ruiz",
   "documentId": "1234567",
-  "category": "ELEGIBLE_LIDER",
+  "category": "INSTRUCTOR",
   "active": true,
   "notes": null,
   "createdAt": "2026-08-07T14:03:11.412Z",
@@ -84,7 +84,7 @@ Lista paginada con búsqueda y filtros.
 | `page` | entero | `1` | `>= 1`. Página fuera de rango devuelve `data: []`, **no 404**. |
 | `pageSize` | entero | `25` | `1..100`. |
 | `search` | string | — | `1..100` caracteres. `contains` case-insensitive sobre `fullName` **o** `documentId` (OR). Para la parte de documento, el término de búsqueda se normaliza con la misma función `normalizeDocument()` que al guardar, así que `search=1.234` encuentra a alguien con `documentId: "1234"`. |
-| `category` | `ELEGIBLE_LIDER` \| `COLABORADOR` | — | |
+| `category` | `INSTRUCTOR` \| `MINISTRO` | — | |
 | `active` | `"true"` \| `"false"` | *(sin filtro)* | **La API es neutral: sin este param devuelve activos e inactivos juntos.** La pantalla `PeopleManager` del frontend envía `active=true` por defecto y tiene un toggle "Ver inactivos" que lo quita — ese default es una decisión de UI, no de la API. |
 | `sort` | `fullName` \| `-fullName` \| `createdAt` \| `-createdAt` | `fullName` | |
 
@@ -119,7 +119,7 @@ Crea una persona nueva. Toda persona nace `active: true`; el body **no** acepta 
 {
   "fullName": "Ana Gómez",
   "documentId": "1.234.567",
-  "category": "COLABORADOR",
+  "category": "MINISTRO",
   "notes": null,
   "confirmDuplicateName": false
 }
@@ -129,7 +129,7 @@ Crea una persona nueva. Toda persona nace `active: true`; el body **no** acepta 
 |---|---|---|
 | `fullName` | Sí | Se normaliza (`trim` + colapsar espacios internos) antes de validar. `3..120` caracteres. Regex `^\p{L}[\p{L}\p{M}\s'.-]*$` — **rechaza dígitos** a propósito (detecta filas basura / errores de captura). |
 | `documentId` | No | `string \| null`. `""` o `null` se guardan como `null` (nunca `""`, para no romper el índice único con la segunda persona sin documento). Si trae valor: se normaliza (`trim` + mayúsculas + quitar espacios/puntos/guiones) y valida `3..30` caracteres, solo `[A-Z0-9]`. `"1.234.567"` se guarda como `"1234567"`. |
-| `category` | Sí | Enum exacto `ELEGIBLE_LIDER` \| `COLABORADOR`. Sin alias aquí (los alias de texto libre son solo del import). |
+| `category` | Sí | Enum exacto `INSTRUCTOR` \| `MINISTRO`. Sin alias aquí (los alias de texto libre son solo del import). |
 | `notes` | No | `string \| null`, máx. 500 caracteres. |
 | `confirmDuplicateName` | No | `boolean`, default `false`. Ver 409 `NOMBRE_DUPLICADO` abajo. |
 
@@ -195,11 +195,11 @@ Body vacío (o con solo claves `undefined`) → **400**:
 `warnings` siempre está presente (puede ser `[]`). Puede traer, según lo que dispare el
 cambio:
 
-- `LIDER_DEGRADADO_A_COLABORADOR` — si `category` pasa de `ELEGIBLE_LIDER` a
-  `COLABORADOR` y esa persona lidera (`TeamMember.role = 'LEADER'`) algún equipo. En la
+- `LIDER_DEGRADADO_A_MINISTRO` — si `category` pasa de `INSTRUCTOR` a
+  `MINISTRO` y esa persona lidera (`TeamMember.role = 'LEADER'`) algún equipo. En la
   misma transacción se marca `manualOverride = true` en esas filas.
   ```json
-  { "code": "LIDER_DEGRADADO_A_COLABORADOR",
+  { "code": "LIDER_DEGRADADO_A_MINISTRO",
     "message": "Esta persona lidera 1 equipo (Agosto 2026). Su liderazgo quedó marcado como excepción manual." }
   ```
 - `PERSONA_EN_EQUIPO_ACTIVO` — si `active` pasa a `false` y la persona pertenece a
@@ -299,15 +299,17 @@ y se busca en esta tabla cerrada:
 
 | Valor normalizado de la celda | Se guarda como |
 |---|---|
-| `ELEGIBLE LIDER`, `ELEGIBLE`, `ELEGIBLE A LIDER`, `LIDER`, `LIDERES`, `ELEGIBLE PARA LIDER` | `ELEGIBLE_LIDER` |
-| `COLABORADOR`, `COLABORADORA`, `COLABORADORES`, `COLAB`, `APOYO` | `COLABORADOR` |
+| `INSTRUCTOR`, `INSTRUCTORES`, `ELEGIBLE LIDER`, `ELEGIBLE`, `ELEGIBLE A LIDER`, `LIDER`, `LIDERES`, `ELEGIBLE PARA LIDER` | `INSTRUCTOR` |
+| `MINISTRO`, `MINISTRA`, `MINISTROS`, `COLABORADOR`, `COLABORADORA`, `COLABORADORES`, `COLAB`, `APOYO` | `MINISTRO` |
 
-No hay abreviaturas de una letra (`L`/`C`). Cualquier otro texto → error de fila
+No hay abreviaturas de una letra (`I`/`M`). Cualquier otro texto → error de fila
 `CATEGORIA_INVALIDA`. Celda vacía (columna presente, sin valor) → `CATEGORIA_VACIA`;
 **nunca** se asigna una categoría por defecto.
 
-> `APOYO` mapea a `COLABORADOR`: en el dominio, "apoyo" es un rol dentro del equipo que
-> se asigna por sorteo (Fase 3), no una categoría del padrón.
+> Los alias en español ("Elegible líder", "Colaborador", etc.) se conservan a propósito
+> por compatibilidad hacia atrás con archivos viejos, aunque el vocabulario vigente sea
+> `INSTRUCTOR`/`MINISTRO`. `APOYO` mapea a `MINISTRO`: en el dominio, "apoyo" es un rol
+> dentro del equipo que se asigna por sorteo (Fase 3), no una categoría del padrón.
 
 ### 200 → reporte de import
 
@@ -328,11 +330,11 @@ rama de error para ver qué pasó.
     "ignoredColumns": ["Telefono"]
   },
   "created": [
-    { "row": 2, "personId": "clx1…", "fullName": "María Fernanda Ruiz", "category": "ELEGIBLE_LIDER" }
+    { "row": 2, "personId": "clx1…", "fullName": "María Fernanda Ruiz", "category": "INSTRUCTOR" }
   ],
   "updated": [
     { "row": 9, "personId": "clx2…", "fullName": "Juan Pérez",
-      "changes": { "category": { "from": "COLABORADOR", "to": "ELEGIBLE_LIDER" } } }
+      "changes": { "category": { "from": "MINISTRO", "to": "INSTRUCTOR" } } }
   ],
   "skipped": [
     { "row": 14, "code": "DUPLICADO_EN_ARCHIVO_DOCUMENTO", "personId": null,
@@ -342,7 +344,7 @@ rama de error para ver qué pasó.
   ],
   "errors": [
     { "row": 33, "column": "Categoría", "value": "lider2", "code": "CATEGORIA_INVALIDA",
-      "message": "«lider2» no es una categoría válida. Usa «Elegible líder» o «Colaborador»." }
+      "message": "«lider2» no es una categoría válida. Usa «Instructor» o «Ministro»." }
   ],
   "truncated": false
 }
@@ -426,7 +428,7 @@ técnica:
    - Si no hay documento y el **nombre** coincide con alguien que ya existe, el
      sistema **no actualiza nada** — dos personas distintas pueden llamarse igual, y
      actualizar a ciegas por nombre podría, por ejemplo, convertir sin querer a un
-     "elegible a líder" real en "colaborador". El archivo reporta el caso y no toca
+     "instructor" real en "ministro". El archivo reporta el caso y no toca
      nada; el administrador revisa y decide a mano.
    - Si no coincide con nadie, se **crea** una persona nueva.
 

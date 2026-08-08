@@ -53,21 +53,21 @@ describe("POST /api/people/import — archivo mixto (creados/actualizados/omitid
     const docNuevo = `${DOC_PREFIX}NEW1`;
 
     const existingActive = await prisma.person.create({
-      data: { fullName: `${NAME_PREFIX} Existente Activa`, documentId: docExisteActiva, category: "COLABORADOR" },
+      data: { fullName: `${NAME_PREFIX} Existente Activa`, documentId: docExisteActiva, category: "MINISTRO" },
     });
     const existingInactive = await prisma.person.create({
       data: {
         fullName: `${NAME_PREFIX} Existente Inactiva`,
         documentId: docExisteInactiva,
-        category: "COLABORADOR",
+        category: "MINISTRO",
         active: false,
       },
     });
     const existingSameNameNoDoc = await prisma.person.create({
-      data: { fullName: `${NAME_PREFIX} Nombre Sin Documento`, category: "COLABORADOR" },
+      data: { fullName: `${NAME_PREFIX} Nombre Sin Documento`, category: "MINISTRO" },
     });
     const existingNoChange = await prisma.person.create({
-      data: { fullName: `${NAME_PREFIX} Sin Cambios`, documentId: docSinCambios, category: "COLABORADOR" },
+      data: { fullName: `${NAME_PREFIX} Sin Cambios`, documentId: docSinCambios, category: "MINISTRO" },
     });
 
     const csv = [
@@ -104,7 +104,7 @@ describe("POST /api/people/import — archivo mixto (creados/actualizados/omitid
 
     const updatedEntry = res.body.updated[0];
     expect(updatedEntry.personId).toBe(existingActive.id);
-    expect(updatedEntry.changes.category).toEqual({ from: "COLABORADOR", to: "ELEGIBLE_LIDER" });
+    expect(updatedEntry.changes.category).toEqual({ from: "MINISTRO", to: "INSTRUCTOR" });
 
     const reactivateAttempt = res.body.skipped.find((s) => s.code === "PERSONA_INACTIVA");
     expect(reactivateAttempt.personId).toBe(existingInactive.id);
@@ -117,7 +117,7 @@ describe("POST /api/people/import — archivo mixto (creados/actualizados/omitid
 
     // Confirma que la actualización realmente se escribió en la base.
     const reloaded = await prisma.person.findUnique({ where: { id: existingActive.id } });
-    expect(reloaded.category).toBe("ELEGIBLE_LIDER");
+    expect(reloaded.category).toBe("INSTRUCTOR");
 
     // La persona inactiva NO se reactivó (P11).
     const reloadedInactive = await prisma.person.findUnique({ where: { id: existingInactive.id } });
@@ -159,10 +159,10 @@ describe("POST /api/people/import — formatos de archivo", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.summary.created).toBe(1);
-    expect(res.body.created[0].category).toBe("COLABORADOR"); // alias "Apoyo" -> COLABORADOR (P5)
+    expect(res.body.created[0].category).toBe("MINISTRO"); // alias "Apoyo" -> MINISTRO (P5)
   });
 
-  it("A1: celda de categoría vacía (columna presente pero sin valor) es error de fila, NUNCA se asigna COLABORADOR por defecto", async () => {
+  it("A1: celda de categoría vacía (columna presente pero sin valor) es error de fila, NUNCA se asigna MINISTRO por defecto", async () => {
     const csv = [
       "Nombre,Categoria,Documento",
       `${NAME_PREFIX} Categoria Vacia,,${DOC_PREFIX}CATVACIA`,
@@ -175,7 +175,7 @@ describe("POST /api/people/import — formatos de archivo", () => {
     expect(res.body.errors[0].code).toBe("CATEGORIA_VACIA");
 
     // Confirma también contra la base: no se creó a nadie con esta fila
-    // (ni con COLABORADOR ni con ninguna otra categoría inferida).
+    // (ni con MINISTRO ni con ninguna otra categoría inferida).
     const created = await prisma.person.findUnique({ where: { documentId: `${DOC_PREFIX}CATVACIA` } });
     expect(created).toBeNull();
   });

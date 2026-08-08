@@ -65,7 +65,7 @@ const documentIdOptionalSchema = z
     return result.data;
   });
 
-const categorySchema = z.enum(["ELEGIBLE_LIDER", "COLABORADOR"]);
+const categorySchema = z.enum(["INSTRUCTOR", "MINISTRO"]);
 const notesSchema = z.string().trim().max(500, "Las notas no pueden superar 500 caracteres").nullish();
 const idParamSchema = z.object({ id: z.string().min(1).max(40) });
 

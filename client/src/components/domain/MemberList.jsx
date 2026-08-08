@@ -5,7 +5,7 @@ import './MemberList.css';
 export const ROLE_LABELS = {
   LEADER: 'Líder',
   SUPPORT: 'Apoyo',
-  COLLABORATOR: 'Colaborador',
+  COLLABORATOR: 'Ministro',
 };
 
 const ROLE_BADGE_VARIANTS = {

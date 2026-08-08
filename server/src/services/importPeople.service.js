@@ -50,18 +50,27 @@ const CANONICAL_ALIASES = {
 };
 
 // P5 — tabla CERRADA de valores aceptados en la columna de categoría.
+// Los alias en español ("Elegible líder", "Colaborador", etc.) se conservan
+// a propósito por compatibilidad hacia atrás: un CSV viejo con esas palabras
+// debe seguir funcionando después del rename de vocabulario INSTRUCTOR/
+// MINISTRO, solo que ahora crea personas con la categoría nueva.
 const CATEGORY_TABLE = {
-  "ELEGIBLE LIDER": "ELEGIBLE_LIDER",
-  ELEGIBLE: "ELEGIBLE_LIDER",
-  "ELEGIBLE A LIDER": "ELEGIBLE_LIDER",
-  LIDER: "ELEGIBLE_LIDER",
-  LIDERES: "ELEGIBLE_LIDER",
-  "ELEGIBLE PARA LIDER": "ELEGIBLE_LIDER",
-  COLABORADOR: "COLABORADOR",
-  COLABORADORA: "COLABORADOR",
-  COLABORADORES: "COLABORADOR",
-  COLAB: "COLABORADOR",
-  APOYO: "COLABORADOR",
+  INSTRUCTOR: "INSTRUCTOR",
+  INSTRUCTORES: "INSTRUCTOR",
+  "ELEGIBLE LIDER": "INSTRUCTOR",
+  ELEGIBLE: "INSTRUCTOR",
+  "ELEGIBLE A LIDER": "INSTRUCTOR",
+  LIDER: "INSTRUCTOR",
+  LIDERES: "INSTRUCTOR",
+  "ELEGIBLE PARA LIDER": "INSTRUCTOR",
+  MINISTRO: "MINISTRO",
+  MINISTRA: "MINISTRO",
+  MINISTROS: "MINISTRO",
+  COLABORADOR: "MINISTRO",
+  COLABORADORA: "MINISTRO",
+  COLABORADORES: "MINISTRO",
+  COLAB: "MINISTRO",
+  APOYO: "MINISTRO",
 };
 
 function normalizeHeader(s) {
@@ -288,7 +297,7 @@ function validateCategoryCell(raw) {
     return {
       ok: false,
       code: "CATEGORIA_INVALIDA",
-      message: `«${raw.trim()}» no es una categoría válida. Usa «Elegible líder» o «Colaborador».`,
+      message: `«${raw.trim()}» no es una categoría válida. Usa «Instructor» o «Ministro».`,
     };
   }
   return { ok: true, value: mapped };

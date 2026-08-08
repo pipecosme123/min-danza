@@ -21,8 +21,8 @@ import './PeopleManager.css';
 const PAGE_SIZE = 25;
 
 const CATEGORY_LABELS = {
-  ELEGIBLE_LIDER: 'Elegible a líder',
-  COLABORADOR: 'Colaborador',
+  INSTRUCTOR: 'Instructor',
+  MINISTRO: 'Ministro',
 };
 
 const EMPTY_FORM = { fullName: '', documentId: '', category: '', notes: '' };
@@ -366,8 +366,8 @@ export function PeopleManager() {
       <header className="page-header">
         <h1>Personas</h1>
         <p className="page-header__description">
-          Administra el padrón de personas elegibles para liderar y colaboradoras: carga masiva por archivo, alta,
-          edición y baja individual.
+          Administra el padrón de instructores y ministros: carga masiva por archivo, alta, edición y baja
+          individual.
         </p>
       </header>
 
@@ -387,8 +387,8 @@ export function PeopleManager() {
         />
         <Field label="Categoría" as="select" value={category} onChange={(event) => setCategory(event.target.value)}>
           <option value="">Todas las categorías</option>
-          <option value="ELEGIBLE_LIDER">Elegible a líder</option>
-          <option value="COLABORADOR">Colaborador</option>
+          <option value="INSTRUCTOR">Instructor</option>
+          <option value="MINISTRO">Ministro</option>
         </Field>
         <label className="people-manager__checkbox">
           <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />
@@ -456,8 +456,8 @@ export function PeopleManager() {
             <option value="" disabled>
               Selecciona una categoría
             </option>
-            <option value="ELEGIBLE_LIDER">Elegible a líder</option>
-            <option value="COLABORADOR">Colaborador</option>
+            <option value="INSTRUCTOR">Instructor</option>
+            <option value="MINISTRO">Ministro</option>
           </Field>
           <Field
             label="Notas (opcional)"
@@ -514,8 +514,8 @@ export function PeopleManager() {
               value={editForm.category}
               onChange={(event) => updateEditField('category', event.target.value)}
             >
-              <option value="ELEGIBLE_LIDER">Elegible a líder</option>
-              <option value="COLABORADOR">Colaborador</option>
+              <option value="INSTRUCTOR">Instructor</option>
+              <option value="MINISTRO">Ministro</option>
             </Field>
             <Field
               label="Notas (opcional)"

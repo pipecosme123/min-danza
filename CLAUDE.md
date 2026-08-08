@@ -11,16 +11,16 @@ El plan de implementación completo (fases, estructura de carpetas, verificació
 ## Reglas de negocio (confirmadas con el usuario)
 
 **Personas**
-- Categoría `ELEGIBLE_LIDER` o `COLABORADOR`.
+- Categoría `INSTRUCTOR` o `MINISTRO`.
 - Carga inicial masiva vía CSV/Excel (nombre, documento opcional, categoría). Un formulario de auto-inscripción queda para una fase futura, no ahora.
 
 **Equipos mensuales**
 - Se conforman **una sola vez al mes**; ese mismo equipo rota de horario/servicio durante todo el mes (no se vuelve a sortear por evento).
 - Cantidad de personas y de equipos es dinámica: el administrador define cuántos equipos se forman ese mes; el sistema reparte a las personas de forma equitativa.
-- **Líder**: exactamente 1 por equipo, sorteado del pool `ELEGIBLE_LIDER`, evitando repetir al líder del mes inmediatamente anterior cuando sea posible (si el pool no alcanza para excluir a todos, se relaja la restricción).
-- **Apoyo**: los `ELEGIBLE_LIDER` que no salieron sorteados como líder se reparten equitativamente entre los equipos.
-- **Colaboradores**: se reparten equitativamente; **no pueden ser líder** salvo que el administrador los promueva manualmente en un equipo puntual (excepción manual, no ocurre por sorteo automático).
-- El sistema elige líderes/apoyo/colaboradores aleatoriamente; el admin puede re-sortear antes de finalizar y editar manualmente cualquier equipo después (incluida la promoción manual de un colaborador a líder).
+- **Líder**: exactamente 1 por equipo, sorteado del pool `INSTRUCTOR`, evitando repetir al líder del mes inmediatamente anterior cuando sea posible (si el pool no alcanza para excluir a todos, se relaja la restricción).
+- **Apoyo**: los `INSTRUCTOR` que no salieron sorteados como líder se reparten equitativamente entre los equipos.
+- **Ministros**: se reparten equitativamente; **no pueden ser líder** salvo que el administrador los promueva manualmente en un equipo puntual (excepción manual, no ocurre por sorteo automático).
+- El sistema elige líderes/apoyo/ministros aleatoriamente; el admin puede re-sortear antes de finalizar y editar manualmente cualquier equipo después (incluida la promoción manual de un ministro a líder).
 
 **Turnos fijos semanales**
 - Miércoles 5:00pm y 7:00pm, Domingo 8:00am y 10:30am — **un solo equipo por turno**.
