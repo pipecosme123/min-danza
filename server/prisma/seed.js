@@ -40,33 +40,23 @@ async function main() {
   });
   console.log(`AdminUser listo: ${admin.username}`);
 
-  // 2. Uniformes base.
-  const uniformA = await prisma.uniform.upsert({
+  // 2. Uniformes base. Ya no hay configuración automática por día de semana
+  // ni para el Servicio de jóvenes (ver
+  // docs/architecture/phase4b-schedule-refinements-contract.md §1): cada
+  // ServiceSlot lleva su propio uniformId, asignado a mano por fecha.
+  await prisma.uniform.upsert({
     where: { name: "Uniforme A" },
     update: {},
     create: { name: "Uniforme A" },
   });
-  const uniformB = await prisma.uniform.upsert({
+  await prisma.uniform.upsert({
     where: { name: "Uniforme B" },
     update: {},
     create: { name: "Uniforme B" },
   });
   console.log("Uniformes listos: Uniforme A, Uniforme B");
 
-  // 3. Config de uniforme por día de la semana.
-  await prisma.weekdayUniform.upsert({
-    where: { weekday: "WEDNESDAY" },
-    update: { uniformId: uniformA.id },
-    create: { weekday: "WEDNESDAY", uniformId: uniformA.id },
-  });
-  await prisma.weekdayUniform.upsert({
-    where: { weekday: "SUNDAY" },
-    update: { uniformId: uniformB.id },
-    create: { weekday: "SUNDAY", uniformId: uniformB.id },
-  });
-  console.log("WeekdayUniform listo: miércoles -> Uniforme A, domingo -> Uniforme B");
-
-  // 4. Turnos fijos semanales.
+  // 3. Turnos fijos semanales.
   const fixedSlots = [
     { weekday: "WEDNESDAY", startTime: "17:00" },
     { weekday: "WEDNESDAY", startTime: "19:00" },

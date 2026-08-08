@@ -1,11 +1,10 @@
-// CRUD de Uniform + configuración de WeekdayUniform / YouthServiceUniform.
-// Contrato completo en docs/architecture/phase4-schedule-contract.md §7.
-// Golpea la base Postgres real de desarrollo.
-//
-// WeekdayUniform/YouthServiceUniform son config GLOBAL (no por mes), así que
-// este archivo captura el estado original en beforeAll y lo restaura en
-// afterAll, mismo criterio que el aislamiento del pool de personas en
-// teamGeneration.test.js.
+// CRUD de Uniform. Contrato completo en
+// docs/architecture/phase4-schedule-contract.md §7, recortado por
+// docs/architecture/phase4b-schedule-refinements-contract.md §1.4: ya no hay
+// configuración automática por día de semana ni para el Servicio de
+// jóvenes (esos endpoints se eliminaron por completo, ver los tests de
+// "endpoints eliminados" al final de este archivo). Golpea la base Postgres
+// real de desarrollo.
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
@@ -22,37 +21,13 @@ const NAME_PREFIX = `QA UNIFORME ${RUN_ID}`;
 
 let token;
 const createdUniformIds = [];
-let originalWednesdayUniformId = null;
-let originalSundayUniformId = null;
-let originalYouthUniformId = null;
 
 beforeAll(async () => {
   const res = await request(app).post("/api/auth/login").send({ username: REAL_USERNAME, password: REAL_PASSWORD });
   token = res.body.token;
-
-  const wed = await prisma.weekdayUniform.findUnique({ where: { weekday: "WEDNESDAY" } });
-  const sun = await prisma.weekdayUniform.findUnique({ where: { weekday: "SUNDAY" } });
-  originalWednesdayUniformId = wed?.uniformId ?? null;
-  originalSundayUniformId = sun?.uniformId ?? null;
-
-  const youth = await prisma.youthServiceUniform.findFirst();
-  originalYouthUniformId = youth?.uniformId ?? null;
 });
 
 afterAll(async () => {
-  await prisma.weekdayUniform.deleteMany({ where: { weekday: { in: ["WEDNESDAY", "SUNDAY"] } } });
-  if (originalWednesdayUniformId) {
-    await prisma.weekdayUniform.create({ data: { weekday: "WEDNESDAY", uniformId: originalWednesdayUniformId } });
-  }
-  if (originalSundayUniformId) {
-    await prisma.weekdayUniform.create({ data: { weekday: "SUNDAY", uniformId: originalSundayUniformId } });
-  }
-
-  await prisma.youthServiceUniform.deleteMany({});
-  if (originalYouthUniformId) {
-    await prisma.youthServiceUniform.create({ data: { uniformId: originalYouthUniformId } });
-  }
-
   await prisma.uniform.deleteMany({ where: { id: { in: createdUniformIds } } });
   await prisma.uniform.deleteMany({ where: { name: { startsWith: NAME_PREFIX } } });
 
@@ -131,85 +106,22 @@ describe("CRUD de uniformes", () => {
   });
 });
 
-describe("Config de uniforme por día de semana", () => {
-  it("PATCH /uniforms/weekday-config/WEDNESDAY hace upsert de la fila", async () => {
-    const uniform = await authed(request(app).post("/api/uniforms")).send({ name: `${NAME_PREFIX} Miercoles` });
-    createdUniformIds.push(uniform.body.id);
-
-    const res = await authed(request(app).patch("/api/uniforms/weekday-config/WEDNESDAY")).send({
-      uniformId: uniform.body.id,
-    });
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ weekday: "WEDNESDAY", uniformId: uniform.body.id });
-
-    const list = await authed(request(app).get("/api/uniforms/weekday-config"));
-    expect(list.status).toBe(200);
-    const wed = list.body.data.find((d) => d.weekday === "WEDNESDAY");
-    expect(wed.uniformId).toBe(uniform.body.id);
+describe("Endpoints de configuración automática eliminados (Fase 4b §1.4)", () => {
+  it("GET/PATCH /api/uniforms/weekday-config ya no existen", async () => {
+    expect((await authed(request(app).get("/api/uniforms/weekday-config"))).status).toBe(404);
+    expect(
+      (await authed(request(app).patch("/api/uniforms/weekday-config/WEDNESDAY")).send({ uniformId: "x" })).status
+    ).toBe(404);
   });
 
-  it("PATCH /uniforms/weekday-config/SUNDAY hace upsert de la fila", async () => {
-    const uniform = await authed(request(app).post("/api/uniforms")).send({ name: `${NAME_PREFIX} Domingo` });
-    createdUniformIds.push(uniform.body.id);
-
-    const res = await authed(request(app).patch("/api/uniforms/weekday-config/SUNDAY")).send({
-      uniformId: uniform.body.id,
-    });
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ weekday: "SUNDAY", uniformId: uniform.body.id });
-  });
-
-  it("400 para cualquier día de semana distinto de WEDNESDAY/SUNDAY", async () => {
-    const uniform = await authed(request(app).post("/api/uniforms")).send({ name: `${NAME_PREFIX} Lunes` });
-    createdUniformIds.push(uniform.body.id);
-
-    const res = await authed(request(app).patch("/api/uniforms/weekday-config/MONDAY")).send({
-      uniformId: uniform.body.id,
-    });
+  it("GET/PATCH /api/uniforms/youth-service-config ya no existen", async () => {
+    expect((await authed(request(app).get("/api/uniforms/youth-service-config"))).status).toBe(404);
+    // PATCH de un solo segmento cae en la ruta genérica PATCH /:id (que trata
+    // "youth-service-config" como si fuera un id de Uniform) en vez de en
+    // ninguna ruta específica — sigue sin haber ningún rastro funcional del
+    // endpoint viejo: { uniformId } no es un campo válido de Uniform, así
+    // que zod lo descarta y el body queda vacío -> 400, nunca actualiza nada.
+    const res = await authed(request(app).patch("/api/uniforms/youth-service-config")).send({ uniformId: "x" });
     expect(res.status).toBe(400);
-  });
-
-  it("sin token devuelve 401", async () => {
-    expect((await request(app).get("/api/uniforms/weekday-config")).status).toBe(401);
-    expect((await request(app).patch("/api/uniforms/weekday-config/WEDNESDAY").send({ uniformId: "x" })).status).toBe(401);
-  });
-});
-
-describe("Config del Servicio de jóvenes (singleton)", () => {
-  it("GET devuelve uniformId: null si no está configurado", async () => {
-    await prisma.youthServiceUniform.deleteMany({});
-    const res = await authed(request(app).get("/api/uniforms/youth-service-config"));
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ uniformId: null });
-  });
-
-  it("PATCH hace upsert correcto en llamadas repetidas (sigue siendo una sola fila)", async () => {
-    const uniformA = await authed(request(app).post("/api/uniforms")).send({ name: `${NAME_PREFIX} JovenesA` });
-    const uniformB = await authed(request(app).post("/api/uniforms")).send({ name: `${NAME_PREFIX} JovenesB` });
-    createdUniformIds.push(uniformA.body.id, uniformB.body.id);
-
-    const first = await authed(request(app).patch("/api/uniforms/youth-service-config")).send({
-      uniformId: uniformA.body.id,
-    });
-    expect(first.status).toBe(200);
-    expect(first.body).toEqual({ uniformId: uniformA.body.id });
-
-    const second = await authed(request(app).patch("/api/uniforms/youth-service-config")).send({
-      uniformId: uniformB.body.id,
-    });
-    expect(second.status).toBe(200);
-    expect(second.body).toEqual({ uniformId: uniformB.body.id });
-
-    const rows = await prisma.youthServiceUniform.findMany();
-    expect(rows).toHaveLength(1);
-    expect(rows[0].uniformId).toBe(uniformB.body.id);
-
-    const get = await authed(request(app).get("/api/uniforms/youth-service-config"));
-    expect(get.body).toEqual({ uniformId: uniformB.body.id });
-  });
-
-  it("sin token devuelve 401", async () => {
-    expect((await request(app).get("/api/uniforms/youth-service-config")).status).toBe(401);
-    expect((await request(app).patch("/api/uniforms/youth-service-config").send({ uniformId: "x" })).status).toBe(401);
   });
 });

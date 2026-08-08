@@ -230,39 +230,9 @@ model Uniform {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  serviceSlots         ServiceSlot[]
-  weekdayUniforms      WeekdayUniform[]
-  youthServiceUniforms YouthServiceUniform[]
+  serviceSlots ServiceSlot[]
 
   @@map("uniform")
-}
-
-/// Configuración editable: qué uniforme corresponde a cada día de la semana.
-/// Se usa para poblar ServiceSlot.uniformId al generar los slots FIXED del mes.
-/// Cambiar esta tabla NO reescribe los slots ya generados (ver D9).
-model WeekdayUniform {
-  id        String   @id @default(cuid())
-  weekday   Weekday  @unique
-  uniformId String   @map("uniform_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  uniform Uniform @relation(fields: [uniformId], references: [id], onDelete: Restrict)
-
-  @@map("weekday_uniform")
-}
-
-/// Config del uniforme del "Servicio de jóvenes" (último sábado del mes).
-/// Es un singleton deliberado: como máximo una fila. El service la
-/// lee/escribe con findFirst/upsert sobre esa única fila, nunca por id
-/// conocido de antemano (no hay UI de "crear una nueva fila").
-model YouthServiceUniform {
-  id        String   @id @default(cuid())
-  uniformId String   @map("uniform_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  uniform Uniform @relation(fields: [uniformId], references: [id], onDelete: Restrict)
-
-  @@map("youth_service_uniform")
 }
 
 // ---------------------------- HORARIO / SLOTS ------------------------------

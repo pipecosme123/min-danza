@@ -1,6 +1,8 @@
 // Generación del horario mensual (turnos fijos + Servicio de jóvenes) y
 // lectura del horario ya generado con su balance. Contrato cerrado:
-// docs/architecture/phase4-schedule-contract.md §2, §3 y §8.
+// docs/architecture/phase4-schedule-contract.md §2, §3 y §8, ajustado por
+// docs/architecture/phase4b-schedule-refinements-contract.md §1.2 y §5.2
+// (sin defaults automáticos de uniforme; regenerar preserva EXTRAORDINARY).
 // Los routers (routes/months.routes.js, routes/events.routes.js) solo
 // parsean/validan/serializan; toda regla vive acá.
 
@@ -99,32 +101,15 @@ export async function generateSchedule(monthCycleId, { regenerate = false } = {}
     }
 
     if (existingSlotCount > 0 && regenerate) {
-      // Cascada borra sus SlotAssignment. Los EXTRAORDINARY que el admin
-      // haya creado a mano también se pierden a propósito (ver contrato §2).
-      await tx.serviceSlot.deleteMany({ where: { monthCycleId } });
+      // Solo se regeneran los turnos fijos y el Servicio de jóvenes. Los
+      // EXTRAORDINARY que el admin haya creado a mano (y sus SlotAssignment,
+      // incluidas las locked) quedan intactos — ver contrato Fase 4b §5.2.
+      await tx.serviceSlot.deleteMany({ where: { monthCycleId, slotType: { in: ["FIXED", "YOUTH_SERVICE"] } } });
     }
 
     const warnings = [];
 
-    const [weekdayWed, weekdaySun, youthTeam, youthUniformRow] = await Promise.all([
-      tx.weekdayUniform.findUnique({ where: { weekday: "WEDNESDAY" } }),
-      tx.weekdayUniform.findUnique({ where: { weekday: "SUNDAY" } }),
-      tx.team.findFirst({ where: { monthCycleId, teamType: "YOUTH" }, select: { id: true } }),
-      tx.youthServiceUniform.findFirst(),
-    ]);
-
-    if (!weekdayWed) {
-      warnings.push({
-        code: "UNIFORME_MIERCOLES_NO_CONFIGURADO",
-        message: "No hay un uniforme configurado para el miércoles; los turnos se generaron sin uniforme asignado.",
-      });
-    }
-    if (!weekdaySun) {
-      warnings.push({
-        code: "UNIFORME_DOMINGO_NO_CONFIGURADO",
-        message: "No hay un uniforme configurado para el domingo; los turnos se generaron sin uniforme asignado.",
-      });
-    }
+    const youthTeam = await tx.team.findFirst({ where: { monthCycleId, teamType: "YOUTH" }, select: { id: true } });
 
     const slotsData = [];
 
@@ -139,7 +124,7 @@ export async function generateSchedule(monthCycleId, { regenerate = false } = {}
           slotType: "FIXED",
           teamsNeeded: 1,
           countsTowardBalance: true,
-          uniformId: weekdayWed?.uniformId ?? null,
+          uniformId: null,
         });
       }
     }
@@ -156,7 +141,7 @@ export async function generateSchedule(monthCycleId, { regenerate = false } = {}
           slotType: "FIXED",
           teamsNeeded: 2,
           countsTowardBalance: true,
-          uniformId: weekdaySun?.uniformId ?? null,
+          uniformId: null,
         });
       } else {
         for (const startTime of ["08:00", "10:30"]) {
@@ -167,7 +152,7 @@ export async function generateSchedule(monthCycleId, { regenerate = false } = {}
             slotType: "FIXED",
             teamsNeeded: 1,
             countsTowardBalance: true,
-            uniformId: weekdaySun?.uniformId ?? null,
+            uniformId: null,
           });
         }
       }
@@ -175,12 +160,6 @@ export async function generateSchedule(monthCycleId, { regenerate = false } = {}
 
     // 3. Servicio de jóvenes, solo si el mes tiene equipo YOUTH.
     if (youthTeam) {
-      if (!youthUniformRow) {
-        warnings.push({
-          code: "UNIFORME_JOVENES_NO_CONFIGURADO",
-          message: "No hay un uniforme configurado para el Servicio de jóvenes; el slot se generó sin uniforme asignado.",
-        });
-      }
       slotsData.push({
         monthCycleId,
         date: toDbDate(lastSaturdayOf(month.year, month.month)),
@@ -189,7 +168,7 @@ export async function generateSchedule(monthCycleId, { regenerate = false } = {}
         title: "Servicio de jóvenes",
         teamsNeeded: 1,
         countsTowardBalance: true,
-        uniformId: youthUniformRow?.uniformId ?? null,
+        uniformId: null,
       });
     }
 

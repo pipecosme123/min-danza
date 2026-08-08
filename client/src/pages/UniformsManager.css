@@ -4,37 +4,21 @@
   margin-bottom: var(--space-4);
 }
 
-.uniforms-manager__config-section {
-  margin-top: var(--space-6);
+.uniforms-manager__filters {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2) var(--space-4);
+  align-items: end;
+  margin-bottom: var(--space-5);
   padding: var(--space-4);
   background-color: var(--color-bg-secondary);
   border-radius: var(--radius-md);
 }
 
-.uniforms-manager__config-title {
-  margin: 0 0 var(--space-2);
-  font-size: var(--font-size-lg);
-}
-
-.uniforms-manager__config-description {
-  margin: 0 0 var(--space-4);
-  color: var(--color-text-secondary);
-}
-
-.uniforms-manager__config-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0 var(--space-4);
-}
-
-@media (min-width: 480px) {
-  .uniforms-manager__config-grid {
-    grid-template-columns: 1fr 1fr;
+@media (min-width: 720px) {
+  .uniforms-manager__filters {
+    grid-template-columns: 2fr 1fr 1fr;
   }
-}
-
-.uniforms-manager__config-grid .field {
-  margin-bottom: 0;
 }
 
 .uniforms-manager__form-actions {

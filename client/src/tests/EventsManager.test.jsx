@@ -9,7 +9,8 @@ import { ToastViewport } from "../components/ui/Toast.jsx";
 // usan), `api/schedule.js` y `api/uniforms.js` completos, para poder
 // controlar cada escenario (sin equipos, sin horario, horario generado,
 // errores del servidor) de forma determinista. Contrato exacto:
-// docs/architecture/phase4-schedule-contract.md.
+// docs/architecture/phase4-schedule-contract.md, ampliado por
+// docs/architecture/phase4b-schedule-refinements-contract.md.
 vi.mock("../api/months.js", () => ({
   getMonths: vi.fn(),
   getMonthTeams: vi.fn(),
@@ -19,13 +20,14 @@ vi.mock("../api/schedule.js", () => ({
   generateSchedule: vi.fn(),
   getMonthSchedule: vi.fn(),
   createEvent: vi.fn(),
+  updateEvent: vi.fn(),
   deleteEvent: vi.fn(),
   updateAssignment: vi.fn(),
+  updateSlotUniform: vi.fn(),
 }));
 
 vi.mock("../api/uniforms.js", () => ({
   getUniforms: vi.fn(),
-  getWeekdayUniforms: vi.fn(),
 }));
 
 import { getMonths, getMonthTeams } from "../api/months.js";
@@ -33,10 +35,12 @@ import {
   generateSchedule,
   getMonthSchedule,
   createEvent,
+  updateEvent,
   deleteEvent,
   updateAssignment,
+  updateSlotUniform,
 } from "../api/schedule.js";
-import { getUniforms, getWeekdayUniforms } from "../api/uniforms.js";
+import { getUniforms } from "../api/uniforms.js";
 import { ApiError } from "../api/client.js";
 
 function sampleMonth(overrides = {}) {
@@ -82,6 +86,20 @@ function fixedSlot() {
   };
 }
 
+function fixedSlot2() {
+  return {
+    id: "slot-fixed-2",
+    date: "2026-08-05",
+    startTime: "19:00",
+    slotType: "FIXED",
+    title: null,
+    teamsNeeded: 1,
+    countsTowardBalance: true,
+    uniform: { id: "u-1", name: "Uniforme A", colorHex: "#1E40AF" },
+    teams: [{ id: "team-2", label: "Equipo 2", assignmentId: "sa-fixed-2", locked: false }],
+  };
+}
+
 function youthSlot() {
   return {
     id: "slot-youth",
@@ -112,7 +130,7 @@ function extraordinarySlot() {
 
 function fullSchedule() {
   return {
-    slots: [fixedSlot(), extraordinarySlot(), youthSlot()],
+    slots: [fixedSlot(), fixedSlot2(), extraordinarySlot(), youthSlot()],
     balance: [
       { teamId: "team-1", label: "Equipo 1", count: 5 },
       { teamId: "team-2", label: "Equipo 2", count: 4 },
@@ -136,13 +154,16 @@ describe("EventsManager", () => {
     generateSchedule.mockReset();
     getMonthSchedule.mockReset();
     createEvent.mockReset();
+    updateEvent.mockReset();
     deleteEvent.mockReset();
     updateAssignment.mockReset();
+    updateSlotUniform.mockReset();
     getUniforms.mockReset();
-    getWeekdayUniforms.mockReset();
 
-    getUniforms.mockResolvedValue([{ id: "u-1", name: "Uniforme A", colorHex: "#1E40AF", active: true }]);
-    getWeekdayUniforms.mockResolvedValue([{ weekday: "WEDNESDAY", uniformId: "u-1" }]);
+    getUniforms.mockResolvedValue([
+      { id: "u-1", name: "Uniforme A", colorHex: "#1E40AF", active: true },
+      { id: "u-2", name: "Uniforme B", colorHex: "#16A34A", active: true },
+    ]);
   });
 
   it("muestra el selector de mes con los meses disponibles", async () => {
@@ -194,7 +215,6 @@ describe("EventsManager", () => {
 
     await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
     expect(screen.getAllByText("Servicio de jóvenes").length).toBeGreaterThan(0);
-    expect(screen.getByText("Uniforme A")).toBeInTheDocument();
   });
 
   it("permite bloquear una asignación", async () => {
@@ -228,8 +248,8 @@ describe("EventsManager", () => {
     await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
 
     const reassignSelects = screen.getAllByLabelText("Equipo asignado a este turno");
-    // Dos slots reasignables (FIXED y EXTRAORDINARY), el YOUTH_SERVICE no ofrece select.
-    expect(reassignSelects).toHaveLength(2);
+    // Tres slots reasignables (2 FIXED y 1 EXTRAORDINARY), el YOUTH_SERVICE no ofrece select.
+    expect(reassignSelects).toHaveLength(3);
 
     await user.selectOptions(reassignSelects[0], "team-2");
 
@@ -248,6 +268,7 @@ describe("EventsManager", () => {
 
     await user.click(screen.getByRole("button", { name: "Agregar evento extraordinario" }));
     const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("heading", { name: "Nuevo evento extraordinario" })).toBeInTheDocument();
 
     await within(dialog).findByRole("option", { name: "Uniforme A" });
 
@@ -290,7 +311,67 @@ describe("EventsManager", () => {
     await waitFor(() => expect(deleteEvent).toHaveBeenCalledWith("slot-extra"));
   });
 
-  it("pide confirmación destructiva antes de regenerar el horario", async () => {
+  it("edita un evento extraordinario existente llamando a updateEvent (no crea uno nuevo)", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(fullSchedule());
+    updateEvent.mockResolvedValueOnce({ slot: { ...extraordinarySlot(), title: "Vigilia de oración" } });
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "Editar evento" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("heading", { name: "Editar evento" })).toBeInTheDocument();
+
+    // El formulario llega precargado con los datos actuales del evento.
+    expect(within(dialog).getByLabelText(/^Fecha/)).toHaveValue("2026-08-15");
+    expect(within(dialog).getByLabelText(/^Hora/)).toHaveValue("19:30");
+    expect(within(dialog).getByLabelText(/^Título/)).toHaveValue("Vigilia");
+
+    fireEvent.change(within(dialog).getByLabelText(/^Título/), { target: { value: "Vigilia de oración" } });
+    await user.click(within(dialog).getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() =>
+      expect(updateEvent).toHaveBeenCalledWith(
+        "slot-extra",
+        expect.objectContaining({ title: "Vigilia de oración", date: "2026-08-15", startTime: "19:30" }),
+      ),
+    );
+    expect(createEvent).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText("Se actualizó el evento.")).toBeInTheDocument());
+  });
+
+  it("muestra un mensaje claro cuando editar un evento choca con EQUIPOS_BLOQUEADOS_EXCEDEN_CUPO", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(fullSchedule());
+    updateEvent.mockRejectedValueOnce(
+      new ApiError("Conflicto.", {
+        status: 409,
+        details: { code: "EQUIPOS_BLOQUEADOS_EXCEDEN_CUPO", locked: 2, teamsNeeded: 1 },
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "Editar evento" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "No se puede bajar la cantidad de equipos: ya hay 2 equipos bloqueados en este turno. Desbloqueá alguno primero.",
+        ),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("pide confirmación antes de regenerar el horario y el texto aclara que los eventos extraordinarios se conservan", async () => {
     getMonths.mockResolvedValue({ data: [sampleMonth()] });
     getMonthTeams.mockResolvedValue(regularTeams());
     getMonthSchedule.mockResolvedValue(fullSchedule());
@@ -302,6 +383,8 @@ describe("EventsManager", () => {
 
     await user.click(screen.getByRole("button", { name: "Regenerar horario" }));
     expect(screen.getByRole("heading", { name: "Regenerar el horario del mes" })).toBeInTheDocument();
+    expect(screen.getByText(/NO se borran/)).toBeInTheDocument();
+    expect(screen.queryByText(/incluidos los eventos extraordinarios/)).not.toBeInTheDocument();
     expect(generateSchedule).not.toHaveBeenCalled();
 
     const dialog = screen.getByRole("dialog");
@@ -354,5 +437,66 @@ describe("EventsManager", () => {
     await waitFor(() =>
       expect(screen.getByText("El uniforme elegido no existe o está inactivo. Elige otro.")).toBeInTheDocument(),
     );
+  });
+
+  it("asigna un uniforme a un turno FIJO y sincroniza el otro turno del mismo día", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(fullSchedule());
+    updateSlotUniform.mockResolvedValue({ slot: fixedSlot() });
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+
+    const uniformSelects = screen.getAllByLabelText("Uniforme de este turno");
+    // slot-fixed y slot-fixed-2 comparten fecha (2026-08-05): son los dos primeros.
+    await user.selectOptions(uniformSelects[0], "u-2");
+
+    await waitFor(() => expect(updateSlotUniform).toHaveBeenCalledWith("slot-fixed", "u-2"));
+    await waitFor(() => expect(updateSlotUniform).toHaveBeenCalledWith("slot-fixed-2", "u-2"));
+    await waitFor(() =>
+      expect(screen.getByText("Se actualizó el uniforme de ambos turnos de este día.")).toBeInTheDocument(),
+    );
+  });
+
+  it("asigna un uniforme a un evento extraordinario con un único llamado (no tiene turno hermano)", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(fullSchedule());
+    updateSlotUniform.mockResolvedValue({ slot: extraordinarySlot() });
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+
+    const uniformSelects = screen.getAllByLabelText("Uniforme de este turno");
+    // slot-extra es el tercer select (después de los dos FIXED).
+    await user.selectOptions(uniformSelects[2], "u-1");
+
+    await waitFor(() => expect(updateSlotUniform).toHaveBeenCalledTimes(1));
+    expect(updateSlotUniform).toHaveBeenCalledWith("slot-extra", "u-1");
+  });
+
+  it("alterna entre vista de lista y vista de calendario sin volver a llamar a la API", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(fullSchedule());
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+    const callsBefore = getMonthSchedule.mock.calls.length;
+
+    await user.click(screen.getByRole("button", { name: "Vista de calendario" }));
+
+    // La vista de calendario es una grilla real con encabezados de día lunes a domingo.
+    expect(screen.getByRole("columnheader", { name: "Lunes" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Domingo" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Vista de lista" }));
+    expect(screen.getByText("Vigilia")).toBeInTheDocument();
+
+    expect(getMonthSchedule.mock.calls.length).toBe(callsBefore);
   });
 });

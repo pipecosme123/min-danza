@@ -9,6 +9,7 @@ import monthsRoutes from "./months.routes.js";
 import teamsRoutes from "./teams.routes.js";
 import eventsRoutes from "./events.routes.js";
 import assignmentsRoutes from "./assignments.routes.js";
+import slotsRoutes from "./slots.routes.js";
 import uniformsRoutes from "./uniforms.routes.js";
 import scheduleRoutes from "./schedule.routes.js";
 
@@ -20,6 +21,7 @@ router.use("/months", monthsRoutes);
 router.use("/", teamsRoutes); // expone /months/:id/generate-teams y /teams/:teamId
 router.use("/", eventsRoutes); // expone /months/:id/events y /events/:eventId
 router.use("/assignments", assignmentsRoutes);
+router.use("/slots", slotsRoutes);
 router.use("/uniforms", uniformsRoutes);
 router.use("/schedule", scheduleRoutes);
 

@@ -1,21 +1,21 @@
 // POST /api/months/:id/generate-schedule, GET /api/months/:id/schedule,
 // recomputeBalance (ejercitado a través de esos endpoints y de eventos), e
 // interacción con generate-teams (Fase 3). Contrato completo en
-// docs/architecture/phase4-schedule-contract.md. Golpea la base Postgres
-// real de desarrollo (mismo patrón que teamGeneration.test.js).
+// docs/architecture/phase4-schedule-contract.md, refinado por
+// docs/architecture/phase4b-schedule-refinements-contract.md §1.2, §2 y §5.2
+// (sin defaults automáticos de uniforme, preferencia de semana en el
+// balance, regenerar preserva EXTRAORDINARY). Golpea la base Postgres real
+// de desarrollo (mismo patrón que teamGeneration.test.js).
 //
 // Igual que teamGeneration.test.js: el pool de sorteo es GLOBAL a toda
 // persona activa de la base, así que este archivo aísla temporalmente a
-// cualquier INSTRUCTOR/MINISTRO activo preexistente. También aísla la
-// configuración GLOBAL de uniformes (WeekdayUniform WEDNESDAY/SUNDAY y el
-// singleton YouthServiceUniform) para que los warnings de "uniforme no
-// configurado" sean deterministas, y la restaura al final.
+// cualquier INSTRUCTOR/MINISTRO activo preexistente.
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { weekdaysIn, lastSundayOf, lastSaturdayOf, formatCivilDate } from "../src/utils/dates.js";
+import { weekdaysIn, lastSundayOf, lastSaturdayOf, formatCivilDate, mondayOfWeek } from "../src/utils/dates.js";
 
 const app = createApp();
 
@@ -30,11 +30,7 @@ let docCounter = 0;
 let token;
 const createdPersonIds = [];
 const createdMonthCycleIds = [];
-const createdUniformIds = [];
 let preExistingActiveIds = [];
-let originalWednesdayUniformId = null;
-let originalSundayUniformId = null;
-let originalYouthUniformId = null;
 
 beforeAll(async () => {
   const res = await request(app).post("/api/auth/login").send({ username: REAL_USERNAME, password: REAL_PASSWORD });
@@ -48,18 +44,6 @@ beforeAll(async () => {
   if (preExistingActiveIds.length > 0) {
     await prisma.person.updateMany({ where: { id: { in: preExistingActiveIds } }, data: { active: false } });
   }
-
-  // Aísla la config global de uniformes: la borra (deterministamente
-  // "sin configurar") y la restaura en afterAll.
-  const wed = await prisma.weekdayUniform.findUnique({ where: { weekday: "WEDNESDAY" } });
-  const sun = await prisma.weekdayUniform.findUnique({ where: { weekday: "SUNDAY" } });
-  originalWednesdayUniformId = wed?.uniformId ?? null;
-  originalSundayUniformId = sun?.uniformId ?? null;
-  await prisma.weekdayUniform.deleteMany({ where: { weekday: { in: ["WEDNESDAY", "SUNDAY"] } } });
-
-  const youth = await prisma.youthServiceUniform.findFirst();
-  originalYouthUniformId = youth?.uniformId ?? null;
-  await prisma.youthServiceUniform.deleteMany({});
 });
 
 afterAll(async () => {
@@ -77,26 +61,21 @@ afterAll(async () => {
     await prisma.person.updateMany({ where: { id: { in: preExistingActiveIds } }, data: { active: true } });
   }
 
-  // Restaura config de uniformes.
-  await prisma.weekdayUniform.deleteMany({ where: { weekday: { in: ["WEDNESDAY", "SUNDAY"] } } });
-  if (originalWednesdayUniformId) {
-    await prisma.weekdayUniform.create({ data: { weekday: "WEDNESDAY", uniformId: originalWednesdayUniformId } });
-  }
-  if (originalSundayUniformId) {
-    await prisma.weekdayUniform.create({ data: { weekday: "SUNDAY", uniformId: originalSundayUniformId } });
-  }
-  await prisma.youthServiceUniform.deleteMany({});
-  if (originalYouthUniformId) {
-    await prisma.youthServiceUniform.create({ data: { uniformId: originalYouthUniformId } });
-  }
-
-  await prisma.uniform.deleteMany({ where: { id: { in: createdUniformIds } } });
-
   await prisma.$disconnect();
 });
 
 function authed(req) {
   return req.set("Authorization", `Bearer ${token}`);
+}
+
+function parseCivilDate(str) {
+  const [year, month, day] = str.split("-").map(Number);
+  return { year, month, day };
+}
+
+function weekKeyOf(dateStr) {
+  const { year, month, day } = mondayOfWeek(parseCivilDate(dateStr));
+  return `${year}-${month}-${day}`;
 }
 
 async function makePerson(category, suffix, opts = {}) {
@@ -121,14 +100,6 @@ async function createMonth(year, month, teamCount) {
   return res.body;
 }
 
-async function makeUniform(suffix) {
-  const uniform = await prisma.uniform.create({
-    data: { name: `${NAME_PREFIX} Uniforme ${suffix} ${RUN_ID}`, colorHex: "#112233" },
-  });
-  createdUniformIds.push(uniform.id);
-  return uniform;
-}
-
 /** Crea instructores/ministros suficientes y sortea equipos (sin jóvenes por defecto). */
 async function setupMonthWithTeams({ year, month, teamCount, instructors = teamCount + 1, ministros = teamCount * 2, youthTeam }) {
   const instructorPeople = await Promise.all(
@@ -148,7 +119,7 @@ async function setupMonthWithTeams({ year, month, teamCount, instructors = teamC
 }
 
 describe("POST /api/months/:id/generate-schedule", () => {
-  it("genera los slots fijos correctos con la excepción del último domingo, sin YOUTH_SERVICE si no hay equipo de jóvenes", async () => {
+  it("genera los slots fijos correctos con la excepción del último domingo, sin YOUTH_SERVICE si no hay equipo de jóvenes, todos sin uniforme y sin warnings", async () => {
     const year = 2093;
     const month = 3;
     const { monthCycle } = await setupMonthWithTeams({ year, month, teamCount: 2 });
@@ -177,32 +148,15 @@ describe("POST /api/months/:id/generate-schedule", () => {
     // Sin equipo YOUTH -> no se genera YOUTH_SERVICE.
     expect(res.body.slots.some((s) => s.slotType === "YOUTH_SERVICE")).toBe(false);
 
-    // Warnings de uniforme no configurado (aislado en beforeAll).
-    const warningCodes = res.body.warnings.map((w) => w.code);
-    expect(warningCodes).toContain("UNIFORME_MIERCOLES_NO_CONFIGURADO");
-    expect(warningCodes).toContain("UNIFORME_DOMINGO_NO_CONFIGURADO");
-    expect(warningCodes).not.toContain("UNIFORME_JOVENES_NO_CONFIGURADO");
+    // Fase 4b §1.2: ya no hay defaults automáticos de uniforme; todo slot
+    // nace sin uniforme y no hay ningún warning de "no configurado".
+    expect(res.body.slots.every((s) => s.uniform === null)).toBe(true);
+    expect(res.body.warnings).toEqual([]);
   });
 
-  it("genera el slot YOUTH_SERVICE con el equipo YOUTH del mes y asigna uniformes configurados sin warnings", async () => {
+  it("genera el slot YOUTH_SERVICE con el equipo YOUTH del mes, sin uniforme (Fase 4b)", async () => {
     const year = 2093;
     const month = 4;
-
-    const wedUniform = await makeUniform("Miercoles");
-    const sunUniform = await makeUniform("Domingo");
-    const youthUniform = await makeUniform("Jovenes");
-    await prisma.weekdayUniform.upsert({
-      where: { weekday: "WEDNESDAY" },
-      create: { weekday: "WEDNESDAY", uniformId: wedUniform.id },
-      update: { uniformId: wedUniform.id },
-    });
-    await prisma.weekdayUniform.upsert({
-      where: { weekday: "SUNDAY" },
-      create: { weekday: "SUNDAY", uniformId: sunUniform.id },
-      update: { uniformId: sunUniform.id },
-    });
-    await prisma.youthServiceUniform.deleteMany({});
-    await prisma.youthServiceUniform.create({ data: { uniformId: youthUniform.id } });
 
     const leader = await makePerson("MINISTRO", "Youth Sched Leader", { isJoven: true });
     const collaborators = await Promise.all(
@@ -218,14 +172,7 @@ describe("POST /api/months/:id/generate-schedule", () => {
 
     const res = await authed(request(app).post(`/api/months/${monthCycle.id}/generate-schedule`));
     expect(res.status).toBe(200);
-
-    const warningCodes = res.body.warnings.map((w) => w.code);
-    expect(warningCodes).not.toContain("UNIFORME_MIERCOLES_NO_CONFIGURADO");
-    expect(warningCodes).not.toContain("UNIFORME_DOMINGO_NO_CONFIGURADO");
-    expect(warningCodes).not.toContain("UNIFORME_JOVENES_NO_CONFIGURADO");
-
-    const wedSlot = res.body.slots.find((s) => s.slotType === "FIXED" && s.startTime === "17:00");
-    expect(wedSlot.uniform).toMatchObject({ id: wedUniform.id });
+    expect(res.body.warnings).toEqual([]);
 
     const lastSaturday = lastSaturdayOf(year, month);
     const youthSlot = res.body.slots.find((s) => s.slotType === "YOUTH_SERVICE");
@@ -236,8 +183,8 @@ describe("POST /api/months/:id/generate-schedule", () => {
       title: "Servicio de jóvenes",
       teamsNeeded: 1,
       countsTowardBalance: true,
+      uniform: null,
     });
-    expect(youthSlot.uniform).toMatchObject({ id: youthUniform.id });
     expect(youthSlot.teams).toHaveLength(1);
 
     const teamsList = await authed(request(app).get(`/api/months/${monthCycle.id}/teams`));
@@ -283,7 +230,7 @@ describe("POST /api/months/:id/generate-schedule", () => {
     expect(second.body.warnings).toEqual([]);
   });
 
-  it("regenerate: true borra y reconstruye el horario", async () => {
+  it("regenerate: true borra y reconstruye los FIXED/YOUTH_SERVICE", async () => {
     const { monthCycle } = await setupMonthWithTeams({ year: 2093, month: 8, teamCount: 2 });
 
     const first = await authed(request(app).post(`/api/months/${monthCycle.id}/generate-schedule`));
@@ -300,6 +247,70 @@ describe("POST /api/months/:id/generate-schedule", () => {
     expect(second.body.slots).toHaveLength(first.body.slots.length);
   });
 
+  it("regenerate: true PRESERVA los ServiceSlot EXTRAORDINARY (con y sin locked) y su participación en el balance (Fase 4b §5.2)", async () => {
+    const { monthCycle } = await setupMonthWithTeams({ year: 2093, month: 9, teamCount: 2, instructors: 4, ministros: 4 });
+
+    const first = await authed(request(app).post(`/api/months/${monthCycle.id}/generate-schedule`));
+    expect(first.status).toBe(200);
+
+    // Evento SIN locked.
+    const eventA = await authed(request(app).post(`/api/months/${monthCycle.id}/events`)).send({
+      date: `${monthCycle.year}-${String(monthCycle.month).padStart(2, "0")}-10`,
+      startTime: "19:30",
+      title: "QA Preserva Sin Lock",
+      teamsNeeded: 1,
+    });
+    expect(eventA.status).toBe(201);
+
+    // Evento CON una asignación locked.
+    const eventB = await authed(request(app).post(`/api/months/${monthCycle.id}/events`)).send({
+      date: `${monthCycle.year}-${String(monthCycle.month).padStart(2, "0")}-12`,
+      startTime: "20:00",
+      title: "QA Preserva Con Lock",
+      teamsNeeded: 1,
+    });
+    expect(eventB.status).toBe(201);
+    const eventBAssignmentId = eventB.body.slot.teams[0].assignmentId;
+    const eventBTeamId = eventB.body.slot.teams[0].id;
+    const lockRes = await authed(request(app).patch(`/api/assignments/${eventBAssignmentId}`)).send({ locked: true });
+    expect(lockRes.status).toBe(200);
+
+    const beforeSchedule = await authed(request(app).get(`/api/months/${monthCycle.id}/schedule`));
+    const fixedIdsBefore = beforeSchedule.body.slots.filter((s) => s.slotType === "FIXED").map((s) => s.id).sort();
+
+    const regen = await authed(
+      request(app).post(`/api/months/${monthCycle.id}/generate-schedule`)
+    ).send({ regenerate: true });
+    expect(regen.status).toBe(200);
+
+    // Los FIXED cambiaron de id (se regeneraron).
+    const fixedIdsAfter = regen.body.slots.filter((s) => s.slotType === "FIXED").map((s) => s.id).sort();
+    expect(fixedIdsAfter).not.toEqual(fixedIdsBefore);
+
+    // Los EXTRAORDINARY sobreviven con el MISMO id y siguen en GET .../schedule.
+    const eventASlot = regen.body.slots.find((s) => s.id === eventA.body.slot.id);
+    expect(eventASlot).toBeDefined();
+    expect(eventASlot.slotType).toBe("EXTRAORDINARY");
+    expect(eventASlot.title).toBe("QA Preserva Sin Lock");
+
+    const eventBSlot = regen.body.slots.find((s) => s.id === eventB.body.slot.id);
+    expect(eventBSlot).toBeDefined();
+    expect(eventBSlot.title).toBe("QA Preserva Con Lock");
+    // La asignación locked del evento B sigue siendo el mismo equipo, y sigue locked.
+    const stillLocked = eventBSlot.teams.find((t) => t.assignmentId === eventBAssignmentId);
+    expect(stillLocked).toBeDefined();
+    expect(stillLocked.id).toBe(eventBTeamId);
+    expect(stillLocked.locked).toBe(true);
+
+    // El balance final considera la participación de ambos extraordinarios.
+    const afterSchedule = await authed(request(app).get(`/api/months/${monthCycle.id}/schedule`));
+    const totalCounts = afterSchedule.body.balance.reduce((sum, b) => sum + b.count, 0);
+    const totalTeamsNeeded = afterSchedule.body.slots
+      .filter((s) => s.countsTowardBalance && s.slotType !== "YOUTH_SERVICE")
+      .reduce((sum, s) => sum + s.teamsNeeded, 0);
+    expect(totalCounts).toBe(totalTeamsNeeded);
+  });
+
   it("sin token devuelve 401", async () => {
     const res = await request(app).post("/api/months/cualquier-id/generate-schedule");
     expect(res.status).toBe(401);
@@ -308,7 +319,7 @@ describe("POST /api/months/:id/generate-schedule", () => {
 
 describe("recomputeBalance", () => {
   it("reparte equipos REGULAR por menor conteo acumulado (balance parejo)", async () => {
-    const { monthCycle } = await setupMonthWithTeams({ year: 2093, month: 9, teamCount: 3 });
+    const { monthCycle } = await setupMonthWithTeams({ year: 2093, month: 10, teamCount: 3 });
 
     const gen = await authed(request(app).post(`/api/months/${monthCycle.id}/generate-schedule`));
     expect(gen.status).toBe(200);
@@ -329,7 +340,7 @@ describe("recomputeBalance", () => {
   });
 
   it("respeta las asignaciones locked: true, no las mueve al recalcular (vía creación de un evento)", async () => {
-    const { monthCycle } = await setupMonthWithTeams({ year: 2093, month: 10, teamCount: 2 });
+    const { monthCycle } = await setupMonthWithTeams({ year: 2093, month: 11, teamCount: 2 });
 
     const gen = await authed(request(app).post(`/api/months/${monthCycle.id}/generate-schedule`));
     expect(gen.status).toBe(200);
@@ -342,7 +353,7 @@ describe("recomputeBalance", () => {
     expect(lockRes.status).toBe(200);
     expect(lockRes.body.assignment.locked).toBe(true);
 
-    // Cualquier fecha del mes 10 (excluyendo el último sábado/domingo no es
+    // Cualquier fecha del mes (excluyendo el último sábado/domingo no es
     // relevante acá): usamos el día 10, que en cualquier mes cae dentro del rango 1-28.
     const eventRes = await authed(request(app).post(`/api/months/${monthCycle.id}/events`)).send({
       date: `${monthCycle.year}-${String(monthCycle.month).padStart(2, "0")}-10`,
@@ -370,7 +381,7 @@ describe("recomputeBalance", () => {
 
     const { monthCycle } = await setupMonthWithTeams({
       year: 2093,
-      month: 11,
+      month: 12,
       teamCount: 2,
       youthTeam: { enabled: true, size: 3, leaderPersonId: leader.id },
     });
@@ -391,11 +402,55 @@ describe("recomputeBalance", () => {
 
     await retirePeople([leader, ...collaborators]);
   });
+
+  it("con equipos suficientes (>= turnos-por-semana), preferir NO repetir equipo en la misma semana ISO (Fase 4b §2)", async () => {
+    // 10 equipos regulares >> el máximo de slots que puede haber en una sola
+    // semana (2 miércoles + 2 domingo = 4, o 2 miércoles + 1 último domingo
+    // con teamsNeeded 2 = 4) -> siempre es matemáticamente posible que
+    // ninguna semana repita equipo entre sus slots FIXED.
+    const { monthCycle } = await setupMonthWithTeams({ year: 2094, month: 3, teamCount: 10, instructors: 11, ministros: 20 });
+
+    const gen = await authed(request(app).post(`/api/months/${monthCycle.id}/generate-schedule`));
+    expect(gen.status).toBe(200);
+
+    const byWeek = new Map();
+    for (const slot of gen.body.slots) {
+      if (slot.slotType !== "FIXED") continue;
+      const week = weekKeyOf(slot.date);
+      if (!byWeek.has(week)) byWeek.set(week, []);
+      for (const t of slot.teams) byWeek.get(week).push(t.id);
+    }
+
+    for (const [, teamIds] of byWeek) {
+      const unique = new Set(teamIds);
+      expect(unique.size).toBe(teamIds.length);
+    }
+  });
+
+  it("con MENOS equipos que turnos-por-semana, igual asigna todos los slots (repetir es inevitable pero no se traba)", async () => {
+    const { monthCycle } = await setupMonthWithTeams({ year: 2094, month: 4, teamCount: 2 });
+
+    const gen = await authed(request(app).post(`/api/months/${monthCycle.id}/generate-schedule`));
+    expect(gen.status).toBe(200);
+
+    // Ningún slot que cuenta al balance se queda sin la cantidad de equipos
+    // que necesita, ni siquiera cuando repetir es matemáticamente inevitable.
+    const fixedSlots = gen.body.slots.filter((s) => s.slotType === "FIXED");
+    for (const slot of fixedSlots) {
+      expect(slot.teams).toHaveLength(slot.teamsNeeded);
+    }
+
+    const schedule = await authed(request(app).get(`/api/months/${monthCycle.id}/schedule`));
+    const counts = schedule.body.balance.map((b) => b.count);
+    const max = Math.max(...counts);
+    const min = Math.min(...counts);
+    expect(max - min).toBeLessThanOrEqual(1);
+  });
 });
 
 describe("GET /api/months/:id/schedule", () => {
   it("slots: [] y balance: [] si todavía no se generó el horario", async () => {
-    const { monthCycle } = await setupMonthWithTeams({ year: 2093, month: 12, teamCount: 1 });
+    const { monthCycle } = await setupMonthWithTeams({ year: 2094, month: 5, teamCount: 1 });
     const res = await authed(request(app).get(`/api/months/${monthCycle.id}/schedule`));
     expect(res.status).toBe(200);
     expect(res.body.slots).toEqual([]);

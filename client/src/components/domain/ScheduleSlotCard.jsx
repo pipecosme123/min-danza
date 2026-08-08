@@ -14,8 +14,9 @@ const SLOT_TYPE_LABELS = {
 /**
  * Variante administrativa de `SlotCard`: mismo lenguaje visual (reutiliza
  * sus clases CSS), pero cada equipo asignado trae controles para bloquear/
- * desbloquear la asignación y reasignar el equipo a mano, y el slot en su
- * conjunto puede ofrecer "Eliminar evento" cuando es `EXTRAORDINARY`.
+ * desbloquear la asignación y reasignar el equipo a mano, un selector para
+ * elegir el uniforme de este turno puntual, y el slot en su conjunto puede
+ * ofrecer "Editar evento"/"Eliminar evento" cuando es `EXTRAORDINARY`.
  *
  * No reemplaza a `SlotCard` (que sigue siendo la tarjeta de solo lectura de
  * la página pública): esta es la variante editable que consume
@@ -24,24 +25,33 @@ const SLOT_TYPE_LABELS = {
  * @param {{
  *   slot: Object,
  *   regularTeams: Array<{ id: string, label: string }>,
+ *   uniforms: Array<{ id: string, name: string }>,
  *   disabled?: boolean,
  *   busyAssignmentId?: string|null,
+ *   uniformBusy?: boolean,
  *   onToggleLock: (assignmentId: string, locked: boolean) => void,
  *   onReassign: (assignmentId: string, teamId: string) => void,
+ *   onUniformChange?: (slot: Object, uniformId: string|null) => void,
  *   onDeleteEvent?: (slot: Object) => void,
+ *   onEditEvent?: (slot: Object) => void,
  * }} props
  */
 export function ScheduleSlotCard({
   slot,
   regularTeams,
+  uniforms = [],
   disabled = false,
   busyAssignmentId = null,
+  uniformBusy = false,
   onToggleLock,
   onReassign,
+  onUniformChange,
   onDeleteEvent,
+  onEditEvent,
 }) {
   const canReassign = slot.slotType !== 'YOUTH_SERVICE';
   const canDelete = slot.slotType === 'EXTRAORDINARY' && Boolean(onDeleteEvent);
+  const canEdit = slot.slotType === 'EXTRAORDINARY' && Boolean(onEditEvent);
 
   return (
     <article className="slot-card schedule-slot-card">
@@ -99,13 +109,39 @@ export function ScheduleSlotCard({
         <p className="slot-card__no-team">Sin equipo asignado todavía.</p>
       )}
 
-      {slot.uniform ? <UniformBadge name={slot.uniform.name} colorHex={slot.uniform.colorHex} /> : null}
+      {onUniformChange ? (
+        <label className="schedule-slot-card__uniform-row">
+          <span className="field__label">Uniforme de este turno</span>
+          <select
+            className="field__control"
+            value={slot.uniform?.id ?? ''}
+            disabled={disabled || uniformBusy}
+            onChange={(event) => onUniformChange(slot, event.target.value || null)}
+          >
+            <option value="">Sin uniforme</option>
+            {uniforms.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : slot.uniform ? (
+        <UniformBadge name={slot.uniform.name} colorHex={slot.uniform.colorHex} />
+      ) : null}
 
-      {canDelete ? (
+      {canEdit || canDelete ? (
         <div className="schedule-slot-card__footer">
-          <Button type="button" variant="danger" size="sm" disabled={disabled} onClick={() => onDeleteEvent(slot)}>
-            Eliminar evento
-          </Button>
+          {canEdit ? (
+            <Button type="button" variant="secondary" size="sm" disabled={disabled} onClick={() => onEditEvent(slot)}>
+              Editar evento
+            </Button>
+          ) : null}
+          {canDelete ? (
+            <Button type="button" variant="danger" size="sm" disabled={disabled} onClick={() => onDeleteEvent(slot)}>
+              Eliminar evento
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </article>

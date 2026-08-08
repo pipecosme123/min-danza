@@ -1,0 +1,73 @@
+.color-palette-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.color-palette-picker__label {
+  margin: 0;
+}
+
+.color-palette-picker__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.color-palette-picker__swatch {
+  width: var(--tap-target-min);
+  height: var(--tap-target-min);
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--color-text);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  padding: 0;
+}
+
+.color-palette-picker__swatch:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.color-palette-picker__swatch--selected {
+  border-color: var(--color-primary);
+  border-width: 3px;
+}
+
+.color-palette-picker__swatch--custom {
+  background-color: var(--color-bg-secondary);
+  border-style: dashed;
+}
+
+.color-palette-picker__check {
+  /* La marca de selección se dibuja sobre un swatch de color arbitrario de
+     la paleta (no un token de tema): un check blanco con sombra oscura es
+     lo único que se distingue de forma consistente sobre TODOS los colores
+     de la paleta (del negro al blanco casi puro), en ambos temas. */
+  color: #ffffff;
+  text-shadow: 0 0 2px #000000, 0 0 1px #000000;
+}
+
+.color-palette-picker__custom-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.color-palette-picker__custom-input {
+  width: 64px;
+  min-height: var(--tap-target-min);
+  padding: var(--space-1);
+  cursor: pointer;
+}
+
+.color-palette-picker__custom-value {
+  font-family: monospace;
+  color: var(--color-text-secondary);
+}

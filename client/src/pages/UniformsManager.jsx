@@ -1,15 +1,8 @@
 import { useState } from 'react';
-import {
-  getUniforms,
-  createUniform,
-  updateUniform,
-  getWeekdayUniforms,
-  updateWeekdayUniform,
-  getYouthServiceUniform,
-  updateYouthServiceUniform,
-} from '../api/uniforms.js';
+import { getUniforms, createUniform, updateUniform } from '../api/uniforms.js';
 import { describeApiError } from '../utils/apiError.js';
 import { useApi } from '../hooks/useApi.js';
+import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
 import { useToast } from '../hooks/useToast.js';
 import { Table } from '../components/ui/Table.jsx';
 import { Spinner } from '../components/ui/Spinner.jsx';
@@ -20,18 +13,23 @@ import { Field } from '../components/ui/Field.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { Badge } from '../components/ui/Badge.jsx';
+import { ColorPalettePicker, UNIFORM_COLOR_PALETTE } from '../components/ui/ColorPalettePicker.jsx';
 import { UniformBadge } from '../components/domain/UniformBadge.jsx';
 import './UniformsManager.css';
 
 const EMPTY_UNIFORM_FORM = { name: '', colorHex: '', description: '' };
 
-const WEEKDAY_OPTIONS = [
-  { value: 'WEDNESDAY', label: 'Miércoles' },
-  { value: 'SUNDAY', label: 'Domingo' },
-];
+/**
+ * Nombre legible de un `colorHex` si coincide con la paleta fija; si no
+ * coincide (color personalizado), devuelve el hex tal cual para no perder
+ * la referencia visual en el filtro.
+ */
+function colorFilterLabel(hex) {
+  return UNIFORM_COLOR_PALETTE.find((c) => c.hex.toLowerCase() === hex.toLowerCase())?.name ?? hex;
+}
 
 export function UniformsManager() {
-  const { showSuccess, showError } = useToast();
+  const { showSuccess } = useToast();
 
   // ---- Listado de uniformes ----
   const { data: uniforms, loading: uniformsLoading, error: uniformsError, execute: fetchUniforms } = useApi(
@@ -39,7 +37,30 @@ export function UniformsManager() {
     { immediate: true },
   );
   const uniformList = uniforms ?? [];
-  const activeUniforms = uniformList.filter((u) => u.active);
+
+  // ---- Filtros (todos del lado del cliente, la lista ya está completa) ----
+  const [nameFilter, setNameFilter] = useState('');
+  const debouncedNameFilter = useDebouncedValue(nameFilter, 400);
+  const [colorFilter, setColorFilter] = useState('');
+  // 'active' (default) | 'inactive' | 'all' — mismo patrón que "Estado" en PeopleManager.
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  const colorOptions = Array.from(new Set(uniformList.map((u) => u.colorHex).filter(Boolean))).map((hex) => ({
+    hex,
+    label: colorFilterLabel(hex),
+  }));
+
+  const filteredUniforms = uniformList.filter((u) => {
+    if (debouncedNameFilter.trim() && !u.name.toLowerCase().includes(debouncedNameFilter.trim().toLowerCase())) {
+      return false;
+    }
+    if (colorFilter && (u.colorHex ?? '').toLowerCase() !== colorFilter.toLowerCase()) return false;
+    if (statusFilter === 'active' && !u.active) return false;
+    if (statusFilter === 'inactive' && u.active) return false;
+    return true;
+  });
+
+  const hasActiveFilters = Boolean(debouncedNameFilter.trim()) || Boolean(colorFilter) || statusFilter !== 'all';
 
   // ---- Alta / edición ----
   const [modalMode, setModalMode] = useState(null); // null | 'create' | 'edit'
@@ -102,6 +123,13 @@ export function UniformsManager() {
   }
 
   const columns = [
+    {
+      key: '__index',
+      header: '#',
+      // Numeración absoluta sobre la lista filtrada: hoy no hay paginación,
+      // así que coincide siempre con el orden visible.
+      render: (row, index) => index + 1,
+    },
     { key: 'name', header: 'Uniforme', render: (row) => <UniformBadge name={row.name} colorHex={row.colorHex} /> },
     { key: 'description', header: 'Descripción', render: (row) => row.description || '—' },
     {
@@ -120,69 +148,45 @@ export function UniformsManager() {
     },
   ];
 
-  // ---- Config por día de semana ----
-  const { data: weekdayData, loading: weekdayLoading, error: weekdayError, execute: fetchWeekday } = useApi(
-    getWeekdayUniforms,
-    { immediate: true },
-  );
-  const weekdayRows = weekdayData ?? [];
-  const [savingWeekday, setSavingWeekday] = useState(null);
-
-  function weekdayUniformId(weekday) {
-    return weekdayRows.find((row) => row.weekday === weekday)?.uniformId ?? '';
-  }
-
-  async function handleWeekdayChange(weekday, uniformId) {
-    if (!uniformId) return;
-    setSavingWeekday(weekday);
-    try {
-      await updateWeekdayUniform(weekday, uniformId);
-      const label = weekday === 'WEDNESDAY' ? 'miércoles' : 'domingo';
-      showSuccess(`Se actualizó el uniforme de ${label}.`);
-      fetchWeekday();
-    } catch (err) {
-      showError(describeApiError(err).message);
-    } finally {
-      setSavingWeekday(null);
-    }
-  }
-
-  // ---- Config del Servicio de jóvenes ----
-  const { data: youthData, loading: youthLoading, error: youthError, execute: fetchYouth } = useApi(
-    getYouthServiceUniform,
-    { immediate: true },
-  );
-  const youthUniformId = youthData?.uniformId ?? '';
-  const [savingYouth, setSavingYouth] = useState(false);
-
-  async function handleYouthChange(uniformId) {
-    if (!uniformId) return;
-    setSavingYouth(true);
-    try {
-      await updateYouthServiceUniform(uniformId);
-      showSuccess('Se actualizó el uniforme del Servicio de jóvenes.');
-      fetchYouth();
-    } catch (err) {
-      showError(describeApiError(err).message);
-    } finally {
-      setSavingYouth(false);
-    }
-  }
-
-  const noActiveUniforms = !uniformsLoading && !uniformsError && activeUniforms.length === 0;
-
   return (
     <div>
       <header className="page-header">
         <h1>Uniformes</h1>
         <p className="page-header__description">
-          Define los uniformes disponibles y cuál corresponde a cada día de la semana (por ejemplo, todos los
-          miércoles usan un uniforme y todos los domingos otro) y al Servicio de jóvenes.
+          Define los uniformes disponibles. El uniforme de cada turno se asigna por fecha desde «Horario y
+          eventos», no acá.
         </p>
       </header>
 
       <div className="uniforms-manager__toolbar">
         <Button onClick={openCreateModal}>Nuevo uniforme</Button>
+      </div>
+
+      <div className="uniforms-manager__filters">
+        <Field
+          label="Buscar por nombre"
+          value={nameFilter}
+          onChange={(event) => setNameFilter(event.target.value)}
+          placeholder="Ej. Uniforme A"
+        />
+        <Field label="Color" as="select" value={colorFilter} onChange={(event) => setColorFilter(event.target.value)}>
+          <option value="">Todos los colores</option>
+          {colorOptions.map((option) => (
+            <option key={option.hex} value={option.hex}>
+              {option.label}
+            </option>
+          ))}
+        </Field>
+        <Field
+          label="Estado"
+          as="select"
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+        >
+          <option value="all">Todas</option>
+          <option value="active">Activas</option>
+          <option value="inactive">Inactivas</option>
+        </Field>
       </div>
 
       {uniformsLoading ? <Spinner label="Cargando uniformes..." /> : null}
@@ -194,84 +198,20 @@ export function UniformsManager() {
       {!uniformsLoading && !uniformsError ? (
         <Table
           columns={columns}
-          data={uniformList}
+          data={filteredUniforms}
           caption="Uniformes configurados"
           emptyState={
             <EmptyState
-              title="Todavía no hay uniformes configurados"
-              description="Crea el primer uniforme con el botón «Nuevo uniforme»."
+              title={hasActiveFilters ? 'No hay uniformes que coincidan con los filtros' : 'Todavía no hay uniformes configurados'}
+              description={
+                hasActiveFilters
+                  ? 'Prueba con otro nombre o color, o quita los filtros aplicados.'
+                  : 'Crea el primer uniforme con el botón «Nuevo uniforme».'
+              }
             />
           }
         />
       ) : null}
-
-      <section className="uniforms-manager__config-section" aria-labelledby="weekday-config-heading">
-        <h2 id="weekday-config-heading" className="uniforms-manager__config-title">
-          Uniforme por día de semana
-        </h2>
-        <p className="uniforms-manager__config-description">
-          Todos los turnos fijos de ese día de la semana usan este uniforme, hasta que vuelvas a generar el
-          horario del mes.
-        </p>
-
-        {weekdayLoading ? <Spinner label="Cargando configuración..." /> : null}
-        {!weekdayLoading && weekdayError ? (
-          <ErrorMessage message={weekdayError.message} onRetry={fetchWeekday} />
-        ) : null}
-
-        {!weekdayLoading && !weekdayError ? (
-          <div className="uniforms-manager__config-grid">
-            {WEEKDAY_OPTIONS.map((option) => (
-              <Field
-                key={option.value}
-                as="select"
-                label={option.label}
-                value={weekdayUniformId(option.value)}
-                onChange={(event) => handleWeekdayChange(option.value, event.target.value)}
-                disabled={noActiveUniforms || savingWeekday === option.value}
-              >
-                <option value="">{noActiveUniforms ? 'No hay uniformes activos' : 'Sin configurar'}</option>
-                {activeUniforms.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </Field>
-            ))}
-          </div>
-        ) : null}
-      </section>
-
-      <section className="uniforms-manager__config-section" aria-labelledby="youth-config-heading">
-        <h2 id="youth-config-heading" className="uniforms-manager__config-title">
-          Uniforme del Servicio de jóvenes
-        </h2>
-        <p className="uniforms-manager__config-description">
-          Se usa en el turno del último sábado del mes, cuando el mes tiene equipo de jóvenes.
-        </p>
-
-        {youthLoading ? <Spinner label="Cargando configuración..." /> : null}
-        {!youthLoading && youthError ? <ErrorMessage message={youthError.message} onRetry={fetchYouth} /> : null}
-
-        {!youthLoading && !youthError ? (
-          <div className="uniforms-manager__config-grid">
-            <Field
-              as="select"
-              label="Servicio de jóvenes"
-              value={youthUniformId}
-              onChange={(event) => handleYouthChange(event.target.value)}
-              disabled={noActiveUniforms || savingYouth}
-            >
-              <option value="">{noActiveUniforms ? 'No hay uniformes activos' : 'Sin configurar'}</option>
-              {activeUniforms.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </Field>
-          </div>
-        ) : null}
-      </section>
 
       {/* Alta / edición de uniforme */}
       <Modal open={Boolean(modalMode)} onClose={closeModal} title={modalMode === 'edit' ? 'Editar uniforme' : 'Nuevo uniforme'}>
@@ -283,12 +223,11 @@ export function UniformsManager() {
             value={uniformForm.name}
             onChange={(event) => updateFormField('name', event.target.value)}
           />
-          <Field
+          <ColorPalettePicker
             label="Color"
-            type="color"
             hint="Opcional. Se usa como referencia visual del uniforme."
-            value={uniformForm.colorHex || '#1d4ed8'}
-            onChange={(event) => updateFormField('colorHex', event.target.value)}
+            value={uniformForm.colorHex}
+            onChange={(hex) => updateFormField('colorHex', hex)}
           />
           <Field
             as="textarea"

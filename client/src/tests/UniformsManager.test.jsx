@@ -5,34 +5,23 @@ import { UniformsManager } from "../pages/UniformsManager.jsx";
 import { ToastViewport } from "../components/ui/Toast.jsx";
 
 // Se mockea `api/uniforms.js` completo para controlar cada escenario (alta,
-// edición, configuración por día de semana, configuración del Servicio de
-// jóvenes, duplicado) sin depender de un servidor real. Contrato cerrado:
-// docs/architecture/phase4-schedule-contract.md §7.
+// edición, filtros, duplicado) sin depender de un servidor real. Contrato
+// cerrado: docs/architecture/phase4b-schedule-refinements-contract.md §3-4
+// (la vista vuelve a ser CRUD puro: ya no existen los endpoints de
+// configuración por día de semana / Servicio de jóvenes).
 vi.mock("../api/uniforms.js", () => ({
   getUniforms: vi.fn(),
   createUniform: vi.fn(),
   updateUniform: vi.fn(),
-  getWeekdayUniforms: vi.fn(),
-  updateWeekdayUniform: vi.fn(),
-  getYouthServiceUniform: vi.fn(),
-  updateYouthServiceUniform: vi.fn(),
 }));
 
-import {
-  getUniforms,
-  createUniform,
-  updateUniform,
-  getWeekdayUniforms,
-  updateWeekdayUniform,
-  getYouthServiceUniform,
-  updateYouthServiceUniform,
-} from "../api/uniforms.js";
+import { getUniforms, createUniform, updateUniform } from "../api/uniforms.js";
 import { ApiError } from "../api/client.js";
 
 function sampleUniforms() {
   return [
     { id: "u-1", name: "Uniforme A", colorHex: "#1E40AF", description: "Camisa azul", active: true },
-    { id: "u-2", name: "Uniforme B", colorHex: "#15803D", description: null, active: false },
+    { id: "u-2", name: "Uniforme B", colorHex: "#16A34A", description: null, active: false },
   ];
 }
 
@@ -50,23 +39,21 @@ describe("UniformsManager", () => {
     getUniforms.mockReset();
     createUniform.mockReset();
     updateUniform.mockReset();
-    getWeekdayUniforms.mockReset();
-    updateWeekdayUniform.mockReset();
-    getYouthServiceUniform.mockReset();
-    updateYouthServiceUniform.mockReset();
 
     getUniforms.mockResolvedValue(sampleUniforms());
-    getWeekdayUniforms.mockResolvedValue([{ weekday: "WEDNESDAY", uniformId: "u-1" }]);
-    getYouthServiceUniform.mockResolvedValue({ uniformId: null });
   });
 
-  it("lista los uniformes existentes, activos e inactivos", async () => {
+  it("lista los uniformes existentes, activos e inactivos, numerados", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByText("Camisa azul")).toBeInTheDocument());
     expect(screen.getAllByText("Uniforme A").length).toBeGreaterThan(0);
     expect(screen.getByText("Uniforme B")).toBeInTheDocument();
     expect(screen.getByText("Activo")).toBeInTheDocument();
     expect(screen.getByText("Inactivo")).toBeInTheDocument();
+
+    // Columna "#" con numeración absoluta sobre la lista cargada.
+    const row1 = screen.getByText("Camisa azul").closest("tr");
+    expect(within(row1).getByText("1")).toBeInTheDocument();
   });
 
   it("permite crear un uniforme nuevo", async () => {
@@ -138,39 +125,83 @@ describe("UniformsManager", () => {
     );
   });
 
-  it("permite configurar el uniforme de miércoles y domingo", async () => {
-    // Los selects de configuración solo ofrecen uniformes activos: se agrega
-    // un tercero activo para reasignar el domingo (Uniforme B está inactivo
-    // en `sampleUniforms` y no debe aparecer como opción).
-    getUniforms.mockResolvedValue([
-      ...sampleUniforms(),
-      { id: "u-3", name: "Uniforme C", colorHex: "#000000", description: null, active: true },
-    ]);
-    updateWeekdayUniform.mockResolvedValueOnce({ weekday: "SUNDAY", uniformId: "u-3" });
+  it("filtra por nombre (texto libre)", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await waitFor(() => expect(screen.getByLabelText("Domingo")).toBeInTheDocument());
-    expect(within(screen.getByLabelText("Domingo")).queryByRole("option", { name: "Uniforme B" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Camisa azul")).toBeInTheDocument());
 
-    await user.selectOptions(screen.getByLabelText("Domingo"), "u-3");
+    await user.type(screen.getByLabelText("Buscar por nombre"), "Uniforme B");
 
-    await waitFor(() => expect(updateWeekdayUniform).toHaveBeenCalledWith("SUNDAY", "u-3"));
-    await waitFor(() => expect(screen.getByText("Se actualizó el uniforme de domingo.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("Camisa azul")).not.toBeInTheDocument());
+    expect(screen.getByText("Uniforme B")).toBeInTheDocument();
   });
 
-  it("permite configurar el uniforme del Servicio de jóvenes", async () => {
-    updateYouthServiceUniform.mockResolvedValueOnce({ uniformId: "u-1" });
+  it("filtra por color, ofreciendo solo los colores en uso", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await waitFor(() => expect(screen.getByLabelText("Servicio de jóvenes")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Camisa azul")).toBeInTheDocument());
 
-    await user.selectOptions(screen.getByLabelText("Servicio de jóvenes"), "u-1");
+    const colorSelect = screen.getByLabelText("Color");
+    expect(within(colorSelect).getByRole("option", { name: "Azul" })).toBeInTheDocument();
+    expect(within(colorSelect).getByRole("option", { name: "Verde" })).toBeInTheDocument();
 
-    await waitFor(() => expect(updateYouthServiceUniform).toHaveBeenCalledWith("u-1"));
-    await waitFor(() =>
-      expect(screen.getByText("Se actualizó el uniforme del Servicio de jóvenes.")).toBeInTheDocument(),
-    );
+    await user.selectOptions(colorSelect, "#1E40AF");
+
+    expect(screen.getByText("Camisa azul")).toBeInTheDocument();
+    expect(screen.queryByText("Uniforme B")).not.toBeInTheDocument();
+  });
+
+  it("filtra por estado (activo/inactivo/todos)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Camisa azul")).toBeInTheDocument());
+    expect(screen.getByText("Uniforme B")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Estado"), "active");
+
+    expect(screen.getByText("Camisa azul")).toBeInTheDocument();
+    expect(screen.queryByText("Uniforme B")).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Estado"), "inactive");
+
+    expect(screen.queryByText("Camisa azul")).not.toBeInTheDocument();
+    expect(screen.getByText("Uniforme B")).toBeInTheDocument();
+  });
+
+  it("el picker de colores ofrece la paleta y un modo personalizado", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Camisa azul")).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "Nuevo uniforme" }));
+    const dialog = screen.getByRole("dialog");
+
+    expect(within(dialog).getByRole("button", { name: "Azul" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Café" })).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Rojo" }));
+    await user.click(within(dialog).getByRole("button", { name: "Personalizado" }));
+
+    expect(within(dialog).getByText("#DC2626")).toBeInTheDocument();
+  });
+
+  it("al editar un uniforme con un color fuera de la paleta, abre el picker en modo personalizado", async () => {
+    getUniforms.mockResolvedValue([
+      { id: "u-4", name: "Uniforme D", colorHex: "#123456", description: null, active: true },
+    ]);
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Uniforme D")).toBeInTheDocument());
+
+    const row = screen.getByText("Uniforme D").closest("tr");
+    await user.click(within(row).getByRole("button", { name: "Editar" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("#123456")).toBeInTheDocument();
   });
 });

@@ -1,7 +1,9 @@
-// POST /api/months/:id/events, DELETE /api/events/:eventId (eventos
-// extraordinarios). Contrato completo en
-// docs/architecture/phase4-schedule-contract.md §4-5. Golpea la base
-// Postgres real de desarrollo (mismo patrón que teamGeneration.test.js).
+// POST /api/months/:id/events, PATCH /api/events/:eventId,
+// DELETE /api/events/:eventId (eventos extraordinarios). Contrato completo
+// en docs/architecture/phase4-schedule-contract.md §4-5, ampliado por
+// docs/architecture/phase4b-schedule-refinements-contract.md §5.1 (editar en
+// vez de eliminar+recrear). Golpea la base Postgres real de desarrollo
+// (mismo patrón que teamGeneration.test.js).
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
@@ -21,6 +23,7 @@ let docCounter = 0;
 let token;
 const createdPersonIds = [];
 const createdMonthCycleIds = [];
+const createdUniformIds = [];
 let preExistingActiveIds = [];
 
 beforeAll(async () => {
@@ -52,6 +55,8 @@ afterAll(async () => {
     await prisma.person.updateMany({ where: { id: { in: preExistingActiveIds } }, data: { active: true } });
   }
 
+  await prisma.uniform.deleteMany({ where: { id: { in: createdUniformIds } } });
+
   await prisma.$disconnect();
 });
 
@@ -73,6 +78,14 @@ async function createMonth(year, month, teamCount) {
   expect(res.status).toBe(201);
   createdMonthCycleIds.push(res.body.id);
   return res.body;
+}
+
+async function makeUniform(suffix) {
+  const uniform = await prisma.uniform.create({
+    data: { name: `${NAME_PREFIX} Uniforme ${suffix} ${RUN_ID}`, colorHex: "#556677" },
+  });
+  createdUniformIds.push(uniform.id);
+  return uniform;
 }
 
 async function setupMonthWithSchedule({ year, month, teamCount }) {
@@ -201,6 +214,141 @@ describe("POST /api/months/:id/events", () => {
 
   it("sin token devuelve 401", async () => {
     const res = await request(app).post("/api/months/cualquier-id/events").send({});
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("PATCH /api/events/:eventId", () => {
+  it("edita fecha/hora/título/cantidad de equipos/uniforme de un evento existente sin borrarlo (mismo id)", async () => {
+    const { monthCycle } = await setupMonthWithSchedule({ year: 2095, month: 10, teamCount: 3 });
+
+    const created = await authed(request(app).post(`/api/months/${monthCycle.id}/events`)).send({
+      date: midMonthDate(monthCycle),
+      startTime: "19:00",
+      title: "QA Editar Original",
+      teamsNeeded: 1,
+    });
+    expect(created.status).toBe(201);
+    const eventId = created.body.slot.id;
+
+    const uniform = await makeUniform("Editar");
+    const newDate = `${monthCycle.year}-${String(monthCycle.month).padStart(2, "0")}-15`;
+
+    const patched = await authed(request(app).patch(`/api/events/${eventId}`)).send({
+      date: newDate,
+      startTime: "20:15",
+      title: "QA Editar Actualizado",
+      teamsNeeded: 2,
+      uniformId: uniform.id,
+    });
+    expect(patched.status).toBe(200);
+    expect(patched.body.slot).toMatchObject({
+      id: eventId,
+      date: newDate,
+      startTime: "20:15",
+      title: "QA Editar Actualizado",
+      teamsNeeded: 2,
+      slotType: "EXTRAORDINARY",
+    });
+    expect(patched.body.slot.uniform).toMatchObject({ id: uniform.id });
+    expect(patched.body.slot.teams).toHaveLength(2);
+
+    // Limpiar el uniforme con uniformId: null.
+    const cleared = await authed(request(app).patch(`/api/events/${eventId}`)).send({ uniformId: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.slot.uniform).toBeNull();
+    expect(cleared.body.slot.id).toBe(eventId);
+  });
+
+  it("404 EVENTO_NO_ENCONTRADO si no existe o no es EXTRAORDINARY", async () => {
+    const notFound = await authed(request(app).patch("/api/events/no-existe-este-evento")).send({ title: "X" });
+    expect(notFound.status).toBe(404);
+    expect(notFound.body.error.details.code).toBe("EVENTO_NO_ENCONTRADO");
+
+    const { slots } = await setupMonthWithSchedule({ year: 2095, month: 11, teamCount: 1 });
+    const fixedSlot = slots.find((s) => s.slotType === "FIXED");
+    const onFixed = await authed(request(app).patch(`/api/events/${fixedSlot.id}`)).send({ title: "X" });
+    expect(onFixed.status).toBe(404);
+    expect(onFixed.body.error.details.code).toBe("EVENTO_NO_ENCONTRADO");
+  });
+
+  it("409 MES_FINALIZADO si el mes no está DRAFT", async () => {
+    const { monthCycle } = await setupMonthWithSchedule({ year: 2095, month: 12, teamCount: 1 });
+
+    const created = await authed(request(app).post(`/api/months/${monthCycle.id}/events`)).send({
+      date: midMonthDate(monthCycle),
+      startTime: "19:00",
+      title: "QA Editar Finalizado",
+      teamsNeeded: 1,
+    });
+    expect(created.status).toBe(201);
+
+    await prisma.monthCycle.update({ where: { id: monthCycle.id }, data: { status: "FINALIZED" } });
+
+    const res = await authed(request(app).patch(`/api/events/${created.body.slot.id}`)).send({ title: "X" });
+    expect(res.status).toBe(409);
+    expect(res.body.error.details.code).toBe("MES_FINALIZADO");
+  });
+
+  it("400 FECHA_FUERA_DE_MES si la nueva fecha no cae en el año/mes del ciclo", async () => {
+    const { monthCycle } = await setupMonthWithSchedule({ year: 2097, month: 1, teamCount: 1 });
+
+    const created = await authed(request(app).post(`/api/months/${monthCycle.id}/events`)).send({
+      date: midMonthDate(monthCycle),
+      startTime: "19:00",
+      title: "QA Editar Fecha Fuera",
+      teamsNeeded: 1,
+    });
+    expect(created.status).toBe(201);
+
+    const res = await authed(request(app).patch(`/api/events/${created.body.slot.id}`)).send({ date: "2097-02-15" });
+    expect(res.status).toBe(400);
+    expect(res.body.error.details.code).toBe("FECHA_FUERA_DE_MES");
+  });
+
+  it("400 UNIFORME_NO_VALIDO si el uniformId indicado no existe o no está activo", async () => {
+    const { monthCycle } = await setupMonthWithSchedule({ year: 2097, month: 2, teamCount: 1 });
+
+    const created = await authed(request(app).post(`/api/months/${monthCycle.id}/events`)).send({
+      date: midMonthDate(monthCycle),
+      startTime: "19:00",
+      title: "QA Editar Uniforme Invalido",
+      teamsNeeded: 1,
+    });
+    expect(created.status).toBe(201);
+
+    const res = await authed(request(app).patch(`/api/events/${created.body.slot.id}`)).send({ uniformId: "no-existe" });
+    expect(res.status).toBe(400);
+    expect(res.body.error.details.code).toBe("UNIFORME_NO_VALIDO");
+  });
+
+  it("409 EQUIPOS_BLOQUEADOS_EXCEDEN_CUPO al intentar bajar teamsNeeded por debajo de asignaciones locked existentes", async () => {
+    const { monthCycle } = await setupMonthWithSchedule({ year: 2097, month: 3, teamCount: 3 });
+
+    const created = await authed(request(app).post(`/api/months/${monthCycle.id}/events`)).send({
+      date: midMonthDate(monthCycle),
+      startTime: "19:00",
+      title: "QA Editar Cupo Bloqueado",
+      teamsNeeded: 2,
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.slot.teams).toHaveLength(2);
+
+    // Bloquear las 2 asignaciones existentes.
+    for (const team of created.body.slot.teams) {
+      const lockRes = await authed(request(app).patch(`/api/assignments/${team.assignmentId}`)).send({ locked: true });
+      expect(lockRes.status).toBe(200);
+    }
+
+    const res = await authed(request(app).patch(`/api/events/${created.body.slot.id}`)).send({ teamsNeeded: 1 });
+    expect(res.status).toBe(409);
+    expect(res.body.error.details.code).toBe("EQUIPOS_BLOQUEADOS_EXCEDEN_CUPO");
+    expect(res.body.error.details.locked).toBe(2);
+    expect(res.body.error.details.teamsNeeded).toBe(1);
+  });
+
+  it("sin token devuelve 401", async () => {
+    const res = await request(app).patch("/api/events/cualquier-id").send({ title: "X" });
     expect(res.status).toBe(401);
   });
 });

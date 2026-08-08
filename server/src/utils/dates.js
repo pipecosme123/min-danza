@@ -67,6 +67,25 @@ export function weekdaysIn(year, month, weekday) {
   return result;
 }
 
+/**
+ * Fecha civil {year,month,day} del lunes de la semana ISO (lunes a domingo)
+ * que contiene `civilDate`. Mismo estilo aritmético que el resto de este
+ * archivo: Date.UTC como calculadora de calendario, sin conversión de zona
+ * horaria. Usado por balance.service.js para agrupar slots por semana (ver
+ * docs/architecture/phase4b-schedule-refinements-contract.md §2.1).
+ * @param {{ year: number, month: number, day: number }} civilDate
+ * @returns {{ year: number, month: number, day: number }}
+ */
+export function mondayOfWeek({ year, month, day }) {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  // getUTCDay(): 0=domingo…6=sábado. Distancia hacia atrás hasta el lunes:
+  // domingo (0) retrocede 6 días, lunes (1) retrocede 0, resto retrocede (day-1).
+  const weekday = date.getUTCDay();
+  const diffToMonday = weekday === 0 ? 6 : weekday - 1;
+  const monday = new Date(date.getTime() - diffToMonday * 24 * 60 * 60 * 1000);
+  return { year: monday.getUTCFullYear(), month: monday.getUTCMonth() + 1, day: monday.getUTCDate() };
+}
+
 /** Compara si dos fechas civiles {year,month,day} son el mismo día. */
 export function isSameCivilDate(a, b) {
   return a.year === b.year && a.month === b.month && a.day === b.day;
@@ -87,6 +106,15 @@ export function formatCivilDate({ year, month, day }) {
  */
 export function formatDbDate(date) {
   return formatCivilDate({ year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() });
+}
+
+/**
+ * Igual que `formatDbDate`, pero devuelve la fecha civil como objeto
+ * {year,month,day} en vez de string — útil cuando hay que seguir operando
+ * con ella (p. ej. `mondayOfWeek`) en vez de solo mostrarla.
+ */
+export function dbDateToCivilDate(date) {
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
 }
 
 /** Normaliza "H:mm" o "HH:mm" a "HH:mm" cero-padded (formato de ServiceSlot.startTime). */

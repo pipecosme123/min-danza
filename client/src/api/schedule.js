@@ -86,3 +86,30 @@ export function deleteEvent(eventId) {
 export function updateAssignment(assignmentId, data) {
   return apiClient.patch(`/assignments/${assignmentId}`, data);
 }
+
+/**
+ * Asigna o limpia el uniforme de UN turno puntual (`FIXED`, `YOUTH_SERVICE` o
+ * `EXTRAORDINARY`). No existe un endpoint de "asignar a una fecha completa":
+ * cuando el turno es `FIXED`, quien llama es responsable de invocar esta
+ * función para cada `ServiceSlot` `FIXED` que comparta la misma fecha (a lo
+ * sumo 2 por día), para que ambos servicios queden con el mismo uniforme.
+ * Ver `docs/architecture/phase4b-schedule-refinements-contract.md` §1.3/§1.5.
+ * @param {string} slotId
+ * @param {string|null} uniformId `null` limpia el uniforme del turno.
+ * @returns {Promise<{ slot: ServiceSlotDto }>}
+ */
+export function updateSlotUniform(slotId, uniformId) {
+  return apiClient.patch(`/slots/${slotId}`, { uniformId });
+}
+
+/**
+ * Edita un evento extraordinario existente sin borrarlo/recrearlo (mismo id
+ * antes y después). Body parcial: cualquier campo omitido no se toca;
+ * `uniformId: null` limpia el uniforme del evento.
+ * @param {string} eventId
+ * @param {{ date?: string, startTime?: string, title?: string, teamsNeeded?: 1|2, uniformId?: string|null }} data
+ * @returns {Promise<{ slot: ServiceSlotDto }>}
+ */
+export function updateEvent(eventId, data) {
+  return apiClient.patch(`/events/${eventId}`, data);
+}

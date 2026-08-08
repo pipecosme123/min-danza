@@ -1,5 +1,7 @@
 // Eventos extraordinarios (ServiceSlot slotType EXTRAORDINARY). Contrato
-// cerrado: docs/architecture/phase4-schedule-contract.md §4-5. El router
+// cerrado: docs/architecture/phase4-schedule-contract.md §4-5, ampliado por
+// docs/architecture/phase4b-schedule-refinements-contract.md §5.1
+// (PATCH para editar en vez de eliminar+recrear). El router
 // (routes/events.routes.js) solo parsea/valida/serializa; toda regla vive
 // acá.
 
@@ -63,6 +65,68 @@ export async function createEvent(monthCycleId, data) {
 
     const slot = await tx.serviceSlot.findUnique({ where: { id: created.id }, select: SLOT_SELECT });
     return { slot: serializeSlot(slot) };
+  });
+}
+
+/**
+ * Edita un evento extraordinario existente sin borrarlo/recrearlo (mismo id
+ * antes y después). Contrato: phase4b-schedule-refinements-contract.md §5.1.
+ * @param {string} eventId
+ * @param {{ date?: string, startTime?: string, title?: string, teamsNeeded?: number, uniformId?: string | null }} data
+ */
+export async function updateEvent(eventId, data) {
+  return prisma.$transaction(async (tx) => {
+    const slot = await tx.serviceSlot.findUnique({
+      where: { id: eventId },
+      include: { monthCycle: { select: { id: true, year: true, month: true, status: true } } },
+    });
+
+    if (!slot || slot.slotType !== "EXTRAORDINARY") {
+      throw new NotFoundError("Evento no encontrado.", { code: "EVENTO_NO_ENCONTRADO" });
+    }
+    if (slot.monthCycle.status !== "DRAFT") {
+      throw new ConflictError("El mes ya está finalizado y no admite cambios.", { code: "MES_FINALIZADO" });
+    }
+
+    if (data.date !== undefined) {
+      const [year, monthNum] = data.date.split("-").map(Number);
+      if (year !== slot.monthCycle.year || monthNum !== slot.monthCycle.month) {
+        throw new ValidationError("La fecha del evento debe caer dentro del mes/año de este ciclo.", {
+          code: "FECHA_FUERA_DE_MES",
+        });
+      }
+    }
+
+    if (data.uniformId !== undefined && data.uniformId !== null) {
+      const uniform = await tx.uniform.findUnique({ where: { id: data.uniformId }, select: { id: true, active: true } });
+      if (!uniform || !uniform.active) {
+        throw new ValidationError("El uniforme indicado no existe o no está activo.", { code: "UNIFORME_NO_VALIDO" });
+      }
+    }
+
+    if (data.teamsNeeded !== undefined) {
+      const lockedCount = await tx.slotAssignment.count({ where: { serviceSlotId: eventId, locked: true } });
+      if (data.teamsNeeded < lockedCount) {
+        throw new ConflictError(
+          "No se puede reducir la cantidad de equipos por debajo de las asignaciones ya bloqueadas. Desbloqueá primero.",
+          { code: "EQUIPOS_BLOQUEADOS_EXCEDEN_CUPO", locked: lockedCount, teamsNeeded: data.teamsNeeded }
+        );
+      }
+    }
+
+    const updateData = {};
+    if (data.date !== undefined) updateData.date = new Date(data.date);
+    if (data.startTime !== undefined) updateData.startTime = data.startTime;
+    if (data.title !== undefined) updateData.title = data.title;
+    if (data.teamsNeeded !== undefined) updateData.teamsNeeded = data.teamsNeeded;
+    if (data.uniformId !== undefined) updateData.uniformId = data.uniformId;
+
+    await tx.serviceSlot.update({ where: { id: eventId }, data: updateData });
+
+    await recomputeBalance(tx, slot.monthCycleId);
+
+    const updated = await tx.serviceSlot.findUnique({ where: { id: eventId }, select: SLOT_SELECT });
+    return { slot: serializeSlot(updated) };
   });
 }
 

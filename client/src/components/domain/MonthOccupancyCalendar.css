@@ -1,0 +1,58 @@
+.month-occupancy-calendar__scroll {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+}
+
+.month-occupancy-calendar__table {
+  width: 100%;
+  min-width: 700px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.month-occupancy-calendar__table th {
+  padding: var(--space-2) var(--space-2);
+  text-align: left;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  background-color: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.month-occupancy-calendar__cell {
+  width: 14.28%;
+  height: 96px;
+  padding: var(--space-1) var(--space-2);
+  vertical-align: top;
+  border: 1px solid var(--color-border);
+}
+
+.month-occupancy-calendar__cell--empty {
+  background-color: var(--color-bg-secondary);
+}
+
+.month-occupancy-calendar__day-number {
+  display: block;
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--space-1);
+}
+
+.month-occupancy-calendar__indicators {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.month-occupancy-calendar__indicator {
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-left: 3px solid var(--color-border-input);
+  padding-left: var(--space-1);
+}

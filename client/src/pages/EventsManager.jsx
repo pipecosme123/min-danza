@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getMonthTeams } from '../api/months.js';
-import { generateSchedule, getMonthSchedule, createEvent, deleteEvent, updateAssignment } from '../api/schedule.js';
-import { getUniforms, getWeekdayUniforms } from '../api/uniforms.js';
+import {
+  generateSchedule,
+  getMonthSchedule,
+  createEvent,
+  updateEvent,
+  deleteEvent,
+  updateAssignment,
+  updateSlotUniform,
+} from '../api/schedule.js';
+import { getUniforms } from '../api/uniforms.js';
 import { describeApiError } from '../utils/apiError.js';
-import { formatMonthYear, formatCivilDate } from '../utils/dates.js';
+import { formatMonthYear, formatCivilDate, formatTimeLabel } from '../utils/dates.js';
 import { useApi } from '../hooks/useApi.js';
 import { useToast } from '../hooks/useToast.js';
 import { useMonthSelector } from '../hooks/useMonthSelector.js';
@@ -17,6 +25,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog.jsx';
 import { Field } from '../components/ui/Field.jsx';
 import { CalendarGrid } from '../components/domain/CalendarGrid.jsx';
 import { ScheduleSlotCard } from '../components/domain/ScheduleSlotCard.jsx';
+import { MonthOccupancyCalendar } from '../components/domain/MonthOccupancyCalendar.jsx';
 import { BalanceSummary } from '../components/domain/BalanceSummary.jsx';
 import './EventsManager.css';
 
@@ -50,24 +59,85 @@ function describeEventError(info) {
   if (info.code === 'MES_FINALIZADO') {
     return 'Este mes ya está finalizado y no admite cambios.';
   }
+  if (info.code === 'EVENTO_NO_ENCONTRADO') {
+    return 'Este evento ya no existe. Es posible que se haya eliminado o que el horario se haya regenerado.';
+  }
+  if (info.code === 'EQUIPOS_BLOQUEADOS_EXCEDEN_CUPO') {
+    const locked = info.details?.locked ?? 0;
+    return `No se puede bajar la cantidad de equipos: ya hay ${locked} equipo${locked === 1 ? '' : 's'} bloqueado${
+      locked === 1 ? '' : 's'
+    } en este turno. Desbloqueá alguno primero.`;
+  }
   return info.message;
 }
 
-/** Sugiere el uniforme configurado para el día de semana de `dateStr` (miércoles/domingo), sin forzar la elección. */
-function suggestUniformForDate(dateStr, weekdayUniforms) {
-  if (!dateStr) return '';
-  const weekday = new Date(`${dateStr}T00:00:00`).getDay();
-  const weekdayName = weekday === 3 ? 'WEDNESDAY' : weekday === 0 ? 'SUNDAY' : null;
-  if (!weekdayName) return '';
-  return weekdayUniforms.find((w) => w.weekday === weekdayName)?.uniformId ?? '';
+/**
+ * Campos del formulario de evento extraordinario (fecha, hora, título,
+ * cantidad de equipos, uniforme), compartidos entre "Nuevo evento" y
+ * "Editar evento" para no duplicar el JSX. Contrato:
+ * `docs/architecture/phase4b-schedule-refinements-contract.md` §5.1.
+ *
+ * @param {{ form: Object, onFieldChange: (key: string, value: string) => void, uniforms: Array }} props
+ */
+function EventFormFields({ form, onFieldChange, uniforms }) {
+  return (
+    <>
+      <Field
+        label="Fecha"
+        type="date"
+        required
+        value={form.date}
+        onChange={(event) => onFieldChange('date', event.target.value)}
+      />
+      <Field
+        label="Hora"
+        type="time"
+        required
+        value={form.startTime}
+        onChange={(event) => onFieldChange('startTime', event.target.value)}
+      />
+      <Field
+        label="Título"
+        required
+        maxLength={100}
+        value={form.title}
+        onChange={(event) => onFieldChange('title', event.target.value)}
+      />
+      <Field
+        as="select"
+        label="Cantidad de equipos"
+        value={form.teamsNeeded}
+        onChange={(event) => onFieldChange('teamsNeeded', event.target.value)}
+      >
+        <option value="1">1 equipo</option>
+        <option value="2">2 equipos</option>
+      </Field>
+      <Field
+        as="select"
+        label="Uniforme"
+        hint="Opcional."
+        value={form.uniformId}
+        onChange={(event) => onFieldChange('uniformId', event.target.value)}
+      >
+        <option value="">Sin uniforme específico</option>
+        {uniforms.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.name}
+          </option>
+        ))}
+      </Field>
+    </>
+  );
 }
 
 /**
- * Pantalla de la Fase 4: elegir el mes en curso, generar (o regenerar) su
- * horario de turnos fijos + Servicio de jóvenes, ajustar manualmente las
- * asignaciones (bloquear/reasignar equipo) y administrar eventos
- * extraordinarios. Ver `docs/architecture/phase4-schedule-contract.md` para
- * el contrato exacto de la API que consume.
+ * Pantalla de la Fase 4 (ampliada por Fase 4b): elegir el mes en curso,
+ * generar (o regenerar) su horario de turnos fijos + Servicio de jóvenes,
+ * ajustar manualmente las asignaciones (bloquear/reasignar equipo, elegir
+ * uniforme por turno) y administrar eventos extraordinarios (crear, editar,
+ * eliminar). Ver `docs/architecture/phase4-schedule-contract.md` y
+ * `docs/architecture/phase4b-schedule-refinements-contract.md` para el
+ * contrato exacto de la API que consume.
  */
 export function EventsManager() {
   const { showSuccess, showError, showWarning } = useToast();
@@ -115,6 +185,15 @@ export function EventsManager() {
     setSelectedMonthId(id);
   }
 
+  // ---- Uniformes activos (para el selector de uniforme de cada turno y del evento) ----
+  const { data: uniformsData, error: uniformsError, execute: fetchUniforms } = useApi(getUniforms, {
+    immediate: true,
+  });
+  const activeUniforms = (uniformsData ?? []).filter((u) => u.active);
+
+  // ---- Vista: lista agrupada (por defecto) o calendario mensual ----
+  const [scheduleView, setScheduleView] = useState('list'); // 'list' | 'calendar'
+
   // ---- Generar horario (primera vez, no destructivo) ----
   const [generateLoading, setGenerateLoading] = useState(false);
 
@@ -133,7 +212,7 @@ export function EventsManager() {
     }
   }
 
-  // ---- Regenerar horario (destructivo, con confirmación) ----
+  // ---- Regenerar horario (destructivo solo para turnos fijos/jóvenes, con confirmación) ----
   const [regenerateOpen, setRegenerateOpen] = useState(false);
   const [regenerateLoading, setRegenerateLoading] = useState(false);
 
@@ -182,6 +261,36 @@ export function EventsManager() {
     }
   }
 
+  // ---- Asignar/cambiar el uniforme de un turno puntual ----
+  // No hay endpoint de "asignar a una fecha completa" en el backend: si el
+  // turno es FIXED, se sincroniza a mano llamando updateSlotUniform para
+  // cada ServiceSlot FIXED que comparta la misma fecha (a lo sumo 2, ej.
+  // miércoles 17:00/19:00), en paralelo con Promise.allSettled (mismo
+  // patrón de acciones en lote que ya usa PeopleManager).
+  const [uniformBusySlotIds, setUniformBusySlotIds] = useState(() => new Set());
+
+  async function handleSlotUniformChange(slot, uniformId) {
+    const targets = slot.slotType === 'FIXED' ? slots.filter((s) => s.slotType === 'FIXED' && s.date === slot.date) : [slot];
+
+    setUniformBusySlotIds(new Set(targets.map((t) => t.id)));
+    const results = await Promise.allSettled(targets.map((t) => updateSlotUniform(t.id, uniformId)));
+    setUniformBusySlotIds(new Set());
+
+    const failures = results
+      .map((result, index) => ({ result, target: targets[index] }))
+      .filter(({ result }) => result.status === 'rejected');
+
+    if (failures.length === 0) {
+      showSuccess(targets.length > 1 ? 'Se actualizó el uniforme de ambos turnos de este día.' : 'Se actualizó el uniforme del turno.');
+    } else if (failures.length === targets.length) {
+      showError(`No se pudo actualizar el uniforme (${describeApiError(failures[0].result.reason).message}).`);
+    } else {
+      const failedLabels = failures.map(({ target }) => formatTimeLabel(target.startTime)).join(', ');
+      showWarning(`Se actualizó el uniforme, pero el turno de las ${failedLabels} no se pudo actualizar. Intentá de nuevo.`);
+    }
+    refetchSchedule();
+  }
+
   // ---- Eliminar evento extraordinario ----
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -201,47 +310,43 @@ export function EventsManager() {
     }
   }
 
-  // ---- Crear evento extraordinario ----
-  const [eventModalOpen, setEventModalOpen] = useState(false);
+  // ---- Crear / editar evento extraordinario (mismo modal y formulario) ----
+  const [eventModalMode, setEventModalMode] = useState(null); // null | 'create' | 'edit'
+  const [eventTarget, setEventTarget] = useState(null); // slot en edición, solo cuando mode === 'edit'
   const [eventForm, setEventForm] = useState(EMPTY_EVENT_FORM);
   const [eventSubmitting, setEventSubmitting] = useState(false);
   const [eventError, setEventError] = useState(null);
-  const [uniformTouched, setUniformTouched] = useState(false);
 
-  const { data: uniformsData, execute: fetchUniforms } = useApi(getUniforms);
-  const activeUniforms = (uniformsData ?? []).filter((u) => u.active);
-
-  const { data: weekdayUniformsData, execute: fetchWeekdayUniforms } = useApi(getWeekdayUniforms);
-  const weekdayUniforms = weekdayUniformsData ?? [];
-
-  function openEventModal() {
+  function openCreateEventModal() {
     setEventForm(EMPTY_EVENT_FORM);
+    setEventTarget(null);
     setEventError(null);
-    setUniformTouched(false);
-    setEventModalOpen(true);
-    fetchUniforms().catch(() => {});
-    fetchWeekdayUniforms().catch(() => {});
+    setEventModalMode('create');
+  }
+
+  function openEditEventModal(slot) {
+    setEventForm({
+      date: slot.date,
+      startTime: slot.startTime,
+      title: slot.title || '',
+      teamsNeeded: String(slot.teamsNeeded),
+      uniformId: slot.uniform?.id || '',
+    });
+    setEventTarget(slot);
+    setEventError(null);
+    setEventModalMode('edit');
   }
 
   function closeEventModal() {
-    setEventModalOpen(false);
-  }
-
-  function updateEventDate(value) {
-    setEventForm((form) => ({
-      ...form,
-      date: value,
-      uniformId: uniformTouched ? form.uniformId : suggestUniformForDate(value, weekdayUniforms),
-    }));
+    setEventModalMode(null);
   }
 
   function updateEventField(key, value) {
     setEventForm((form) => ({ ...form, [key]: value }));
-    if (key === 'uniformId') setUniformTouched(true);
     setEventError(null);
   }
 
-  async function submitEvent(event) {
+  async function submitEventForm(event) {
     event.preventDefault();
     if (!selectedMonthId || !selectedMonth) return;
 
@@ -254,14 +359,25 @@ export function EventsManager() {
     setEventSubmitting(true);
     setEventError(null);
     try {
-      await createEvent(selectedMonthId, {
-        date: eventForm.date,
-        startTime: eventForm.startTime,
-        title: eventForm.title.trim(),
-        teamsNeeded: Number(eventForm.teamsNeeded),
-        ...(eventForm.uniformId ? { uniformId: eventForm.uniformId } : {}),
-      });
-      showSuccess('Se creó el evento extraordinario.');
+      if (eventModalMode === 'edit') {
+        await updateEvent(eventTarget.id, {
+          date: eventForm.date,
+          startTime: eventForm.startTime,
+          title: eventForm.title.trim(),
+          teamsNeeded: Number(eventForm.teamsNeeded),
+          uniformId: eventForm.uniformId || null,
+        });
+        showSuccess('Se actualizó el evento.');
+      } else {
+        await createEvent(selectedMonthId, {
+          date: eventForm.date,
+          startTime: eventForm.startTime,
+          title: eventForm.title.trim(),
+          teamsNeeded: Number(eventForm.teamsNeeded),
+          ...(eventForm.uniformId ? { uniformId: eventForm.uniformId } : {}),
+        });
+        showSuccess('Se creó el evento extraordinario.');
+      }
       closeEventModal();
       refetchSchedule();
     } catch (err) {
@@ -279,7 +395,8 @@ export function EventsManager() {
         <h1>Horario y eventos</h1>
         <p className="page-header__description">
           Genera el horario del mes (turnos fijos de miércoles y domingo, y el Servicio de jóvenes si corresponde),
-          ajusta a mano las asignaciones y agrega eventos extraordinarios fuera de los turnos fijos.
+          ajusta a mano las asignaciones y el uniforme de cada turno, y agrega eventos extraordinarios fuera de los
+          turnos fijos.
         </p>
       </header>
 
@@ -323,6 +440,13 @@ export function EventsManager() {
             <p className="events-manager__finalized-notice" role="status">
               Este mes está finalizado: ya no admite cambios de horario.
             </p>
+          ) : null}
+
+          {uniformsError ? (
+            <ErrorMessage
+              message="No se pudieron cargar los uniformes disponibles. Podés seguir sin asignar uniforme por ahora."
+              onRetry={fetchUniforms}
+            />
           ) : null}
 
           {teamsLoading ? <Spinner label="Cargando equipos del mes..." /> : null}
@@ -370,7 +494,7 @@ export function EventsManager() {
                       {slots.length} {slots.length === 1 ? 'turno generado' : 'turnos generados'} para este mes.
                     </p>
                     <div className="events-manager__action-bar-buttons">
-                      <Button onClick={openEventModal} variant="secondary" disabled={monthFinalized}>
+                      <Button onClick={openCreateEventModal} variant="secondary" disabled={monthFinalized}>
                         Agregar evento extraordinario
                       </Button>
                       <Button
@@ -385,22 +509,51 @@ export function EventsManager() {
 
                   <BalanceSummary teams={balanceForSummary} />
 
-                  <div className="events-manager__calendar">
-                    <CalendarGrid
-                      groups={groupSlotsByDate(slots)}
-                      renderSlot={(slot) => (
-                        <ScheduleSlotCard
-                          slot={slot}
-                          regularTeams={regularTeamOptions}
-                          disabled={monthFinalized}
-                          busyAssignmentId={busyAssignmentId}
-                          onToggleLock={handleToggleLock}
-                          onReassign={handleReassign}
-                          onDeleteEvent={(s) => setDeleteTarget(s)}
-                        />
-                      )}
-                    />
+                  <div className="events-manager__view-toggle" role="group" aria-label="Vista del horario">
+                    <Button
+                      type="button"
+                      variant={scheduleView === 'list' ? 'primary' : 'secondary'}
+                      aria-pressed={scheduleView === 'list'}
+                      onClick={() => setScheduleView('list')}
+                    >
+                      Vista de lista
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={scheduleView === 'calendar' ? 'primary' : 'secondary'}
+                      aria-pressed={scheduleView === 'calendar'}
+                      onClick={() => setScheduleView('calendar')}
+                    >
+                      Vista de calendario
+                    </Button>
                   </div>
+
+                  {scheduleView === 'list' ? (
+                    <div className="events-manager__calendar">
+                      <CalendarGrid
+                        groups={groupSlotsByDate(slots)}
+                        renderSlot={(slot) => (
+                          <ScheduleSlotCard
+                            slot={slot}
+                            regularTeams={regularTeamOptions}
+                            uniforms={activeUniforms}
+                            disabled={monthFinalized}
+                            busyAssignmentId={busyAssignmentId}
+                            uniformBusy={uniformBusySlotIds.has(slot.id)}
+                            onToggleLock={handleToggleLock}
+                            onReassign={handleReassign}
+                            onUniformChange={handleSlotUniformChange}
+                            onDeleteEvent={(s) => setDeleteTarget(s)}
+                            onEditEvent={openEditEventModal}
+                          />
+                        )}
+                      />
+                    </div>
+                  ) : (
+                    <div className="events-manager__calendar">
+                      <MonthOccupancyCalendar year={selectedMonth.year} month={selectedMonth.month} slots={slots} />
+                    </div>
+                  )}
                 </>
               ) : null}
             </>
@@ -408,13 +561,13 @@ export function EventsManager() {
         </>
       ) : null}
 
-      {/* Regenerar horario (destructivo) */}
+      {/* Regenerar horario: solo turnos fijos y Servicio de jóvenes, los eventos extraordinarios se conservan */}
       <ConfirmDialog
         open={regenerateOpen}
         onClose={() => setRegenerateOpen(false)}
         onConfirm={handleRegenerateConfirm}
         title="Regenerar el horario del mes"
-        description="Esto borra TODO el horario actual de este mes, incluidos los eventos extraordinarios que hayas agregado a mano, y lo vuelve a generar desde cero. Esta acción no se puede deshacer."
+        description="Esto vuelve a generar los turnos fijos de miércoles y domingo y el Servicio de jóvenes de este mes desde cero. Los eventos extraordinarios que ya creaste NO se borran: se conservan tal cual, y el balance de participaciones se recalcula considerando también esos eventos. Esta acción no se puede deshacer."
         confirmLabel="Sí, regenerar"
         variant="danger"
         loading={regenerateLoading}
@@ -436,59 +589,20 @@ export function EventsManager() {
         loading={deleteLoading}
       />
 
-      {/* Nuevo evento extraordinario */}
-      <Modal open={eventModalOpen} onClose={closeEventModal} title="Nuevo evento extraordinario">
-        <form onSubmit={submitEvent} noValidate>
+      {/* Nuevo evento / Editar evento extraordinario (mismo formulario compartido) */}
+      <Modal
+        open={Boolean(eventModalMode)}
+        onClose={closeEventModal}
+        title={eventModalMode === 'edit' ? 'Editar evento' : 'Nuevo evento extraordinario'}
+      >
+        <form onSubmit={submitEventForm} noValidate>
           <p className="events-manager__form-hint">
             {selectedMonth
               ? `La fecha debe caer dentro de ${formatMonthYear(selectedMonth.year, selectedMonth.month)}.`
               : ''}
           </p>
 
-          <Field
-            label="Fecha"
-            type="date"
-            required
-            value={eventForm.date}
-            onChange={(event) => updateEventDate(event.target.value)}
-          />
-          <Field
-            label="Hora"
-            type="time"
-            required
-            value={eventForm.startTime}
-            onChange={(event) => updateEventField('startTime', event.target.value)}
-          />
-          <Field
-            label="Título"
-            required
-            maxLength={100}
-            value={eventForm.title}
-            onChange={(event) => updateEventField('title', event.target.value)}
-          />
-          <Field
-            as="select"
-            label="Cantidad de equipos"
-            value={eventForm.teamsNeeded}
-            onChange={(event) => updateEventField('teamsNeeded', event.target.value)}
-          >
-            <option value="1">1 equipo</option>
-            <option value="2">2 equipos</option>
-          </Field>
-          <Field
-            as="select"
-            label="Uniforme"
-            hint="Opcional. Si el día coincide con miércoles o domingo, se sugiere el uniforme configurado para ese día."
-            value={eventForm.uniformId}
-            onChange={(event) => updateEventField('uniformId', event.target.value)}
-          >
-            <option value="">Sin uniforme específico</option>
-            {activeUniforms.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </Field>
+          <EventFormFields form={eventForm} onFieldChange={updateEventField} uniforms={activeUniforms} />
 
           {eventError ? <ErrorMessage message={eventError} /> : null}
 
@@ -497,7 +611,7 @@ export function EventsManager() {
               Cancelar
             </Button>
             <Button type="submit" loading={eventSubmitting} disabled={eventFormInvalid}>
-              Crear evento
+              {eventModalMode === 'edit' ? 'Guardar cambios' : 'Crear evento'}
             </Button>
           </div>
         </form>

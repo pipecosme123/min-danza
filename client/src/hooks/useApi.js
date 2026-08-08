@@ -18,19 +18,30 @@ export function useApi(apiFunction, { immediate = false, args = [] } = {}) {
   const [loading, setLoading] = useState(immediate);
   const fnRef = useRef(apiFunction);
   fnRef.current = apiFunction;
+  // Una vez que ya hubo datos, un refetch (ej. después de una acción como
+  // bloquear/reasignar/cambiar uniforme) NO vuelve a poner `loading` en
+  // true: si lo hiciera, cada pantalla que condiciona su contenido a
+  // `!loading` (la inmensa mayoría) desmontaría toda la vista y mostraría
+  // el spinner de carga inicial, lo que se siente como que "la página se
+  // refresca y salta al principio" en cada modificación. `loading` queda
+  // reservado para la primera carga; refetches posteriores actualizan
+  // `data`/`error` sin ocultar el contenido ya mostrado.
+  const hasLoadedRef = useRef(false);
 
   const execute = useCallback(async (...callArgs) => {
-    setLoading(true);
+    const isFirstLoad = !hasLoadedRef.current;
+    if (isFirstLoad) setLoading(true);
     setError(null);
     try {
       const result = await fnRef.current(...callArgs);
+      hasLoadedRef.current = true;
       setData(result);
       return result;
     } catch (err) {
       setError(err);
       throw err;
     } finally {
-      setLoading(false);
+      if (isFirstLoad) setLoading(false);
     }
   }, []);
 

@@ -13,7 +13,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { validate } from "../middleware/validate.js";
 import { requireAuth } from "../middleware/auth.js";
-import { createEvent, deleteEvent } from "../services/events.service.js";
+import { createEvent, deleteEvent, updateEvent } from "../services/events.service.js";
 
 const router = Router();
 
@@ -31,6 +31,23 @@ const createEventBodySchema = z.object({
   uniformId: z.string().min(1).max(40).optional(),
 });
 
+// Body parcial: cada campo es opcional, pero al menos uno debe venir.
+// uniformId puede venir explícitamente `null` para limpiarlo (por eso
+// .nullable() y no solo .optional()).
+const updateEventBodySchema = z
+  .object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date debe tener formato YYYY-MM-DD").optional(),
+    startTime: z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/, "startTime debe tener formato HH:mm 24h").optional(),
+    title: z.string().min(1, "title es obligatorio").max(100, "title debe tener máximo 100 caracteres").optional(),
+    teamsNeeded: z.coerce
+      .number()
+      .int("teamsNeeded debe ser un entero")
+      .refine((v) => v === 1 || v === 2, "teamsNeeded debe ser 1 o 2")
+      .optional(),
+    uniformId: z.string().min(1).max(40).nullable().optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, { message: "El body no puede estar vacío." });
+
 router.post(
   "/months/:id/events",
   requireAuth,
@@ -39,6 +56,20 @@ router.post(
     try {
       const result = await createEvent(req.params.id, req.body);
       res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.patch(
+  "/events/:eventId",
+  requireAuth,
+  validate({ params: eventIdParamSchema, body: updateEventBodySchema }),
+  async (req, res, next) => {
+    try {
+      const result = await updateEvent(req.params.eventId, req.body);
+      res.json(result);
     } catch (err) {
       next(err);
     }
