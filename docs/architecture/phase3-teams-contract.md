@@ -71,6 +71,7 @@ Body (todo opcional):
 - **404** si el mes no existe.
 - **409** `MES_FINALIZADO` si `status !== "DRAFT"`.
 - **409** `POOL_INSTRUCTOR_INSUFICIENTE` si `count(Person activo, category=INSTRUCTOR) < teamCount` → `details: { available, needed }`. Sin instructores suficientes no hay forma de poner un líder por equipo; esto es un error duro, no un warning.
+- **409** `SORTEO_EN_CURSO` (ajustado 2026-08-08, hallazgo de auditoría QA Fase 7) — carrera: dos `POST .../generate-teams` concurrentes sobre el MISMO mes pueden pasar ambos el chequeo `status === "DRAFT"` antes de que el primero confirme; el segundo choca al escribir contra los índices únicos de `Team` (`@@unique([monthCycleId, orderIndex])` / `@@unique([monthCycleId, label])`) y se traduce a este 409 en vez de dejar pasar un P2002 crudo. Sin `details` adicionales — "esperá a que termine y volvé a intentar".
 - **400** validación zod de `youthTeam` (`enabled` obligatorio boolean si el objeto está presente; `leaderPersonId` obligatorio cuando `enabled: true`; `size` entero `>= 1`, default `10`).
 - Errores propios del equipo `YOUTH`: ver §9.
 

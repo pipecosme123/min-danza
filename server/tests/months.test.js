@@ -51,6 +51,26 @@ describe("POST /api/months", () => {
     expect(res.body.error.details.monthCycleId).toBeTruthy();
   });
 
+  it("carrera: dos POST concurrentes con el mismo (year, month) no deben producir un 409 genérico sin `details.code` (el check previo no está serializado)", async () => {
+    const year = YEAR_A;
+    const month = 11;
+    const [resA, resB] = await Promise.all([
+      authed(request(app).post("/api/months")).send({ year, month, teamCount: 2 }),
+      authed(request(app).post("/api/months")).send({ year, month, teamCount: 3 }),
+    ]);
+
+    const results = [resA, resB];
+    const created = results.filter((r) => r.status === 201);
+    const conflicted = results.filter((r) => r.status === 409);
+
+    expect(created.length).toBe(1);
+    expect(conflicted.length).toBe(1);
+    expect(conflicted[0].body.error.details?.code).toBe("MES_YA_EXISTE");
+    expect(conflicted[0].body.error.details?.monthCycleId).toBe(created[0].body.id);
+
+    createdMonthCycleIds.push(created[0].body.id);
+  });
+
   it("400 con year fuera de rango", async () => {
     const res = await authed(request(app).post("/api/months")).send({ year: 1999, month: 1, teamCount: 2 });
     expect(res.status).toBe(400);

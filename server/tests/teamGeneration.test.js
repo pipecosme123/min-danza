@@ -257,6 +257,34 @@ describe("POST /api/months/:id/generate-teams", () => {
     const res = await request(app).post("/api/months/cualquier-id/generate-teams");
     expect(res.status).toBe(401);
   });
+
+  it("carrera: dos sorteos concurrentes sobre el MISMO mes no deben producir un 409 genérico sin `details.code` (choque en los índices únicos de Team)", async () => {
+    const instructors = await Promise.all(
+      Array.from({ length: 1 }, (_, i) => makePerson("INSTRUCTOR", `Carrera Sorteo Instr ${i + 1}`))
+    );
+    const month = await createMonth(2078, 2, 1);
+
+    const [resA, resB] = await Promise.all([
+      authed(request(app).post(`/api/months/${month.id}/generate-teams`)),
+      authed(request(app).post(`/api/months/${month.id}/generate-teams`)),
+    ]);
+
+    const results = [resA, resB];
+    const succeeded = results.filter((r) => r.status === 200);
+    const conflicted = results.filter((r) => r.status === 409);
+
+    expect(succeeded.length).toBe(1);
+    expect(conflicted.length).toBe(1);
+    expect(conflicted[0].body.error.details?.code).toBe("SORTEO_EN_CURSO");
+
+    // El sorteo perdedor no debe haber dejado nada a medio camino: el mes
+    // termina con exactamente los equipos del sorteo ganador.
+    const listed = await authed(request(app).get(`/api/months/${month.id}/teams`));
+    expect(listed.status).toBe(200);
+    expect(listed.body.teams).toHaveLength(1);
+
+    await retire(instructors);
+  });
 });
 
 describe("POST /api/months/:id/generate-teams — equipo de jóvenes (youthTeam)", () => {

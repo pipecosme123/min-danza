@@ -378,6 +378,33 @@ describe("TeamGenerator", () => {
     );
   });
 
+  it("muestra SORTEO_EN_CURSO con un mensaje entendible", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValueOnce({ teams: [] });
+    mockGetPeopleByFilter();
+    generateTeams.mockRejectedValueOnce(
+      new ApiError("Ya se está generando el sorteo de este mes en otra pestaña o solicitud; esperá a que termine y volvé a intentar.", {
+        status: 409,
+        details: { code: "SORTEO_EN_CURSO" },
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText("Este mes todavía no tiene equipos sorteados")).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Sortear equipos" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("checkbox", { name: "Habilitar equipo de jóvenes" }));
+    await user.click(within(dialog).getByRole("button", { name: "Confirmar sorteo" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Ya se está generando el sorteo de este mes/)).toBeInTheDocument(),
+    );
+  });
+
   it("permite editar manualmente un equipo regular: quitar a alguien y agregar a otra persona", async () => {
     getMonths.mockResolvedValue({ data: [sampleMonth()] });
     getMonthTeams.mockResolvedValueOnce(sampleTeams());

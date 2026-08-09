@@ -165,11 +165,44 @@ function buildTableFromRows(rows) {
   return { headerRow, dataRows, blankRowsIgnored };
 }
 
+// U+FFFD (carácter de reemplazo Unicode): aparece cuando se decodifica un
+// buffer como UTF-8 y algún byte/secuencia no es UTF-8 válido. Un CSV
+// guardado como ANSI/Windows-1252 (default de "Guardar como CSV" de Excel en
+// español) produce esto en cada tilde/ñ.
+const REPLACEMENT_CHAR = "�";
+
+function hasReplacementChar(text) {
+  return text.includes(REPLACEMENT_CHAR);
+}
+
 function parseCsvBuffer(buffer) {
   let text = buffer.toString("utf8");
+  // Bandera de fila: si sigue habiendo U+FFFD después de intentar los dos
+  // decodificados posibles, se usa más abajo (validateFullNameCell, etc.)
+  // para dar un mensaje de error específico en vez del genérico
+  // NOMBRE_CARACTERES_INVALIDOS/... que no explica la causa real.
+  let encodingIssue = false;
+
   // BOM UTF-8: papaparse no lo retira solo cuando se le pasa un string.
   if (text.charCodeAt(0) === 0xfeff) {
     text = text.slice(1);
+  } else if (hasReplacementChar(text)) {
+    // Heurística simple (sin librería de detección de encoding): si decodificar
+    // como UTF-8 produjo el carácter de reemplazo, el archivo probablemente NO
+    // está en UTF-8. Reintentamos con latin1 (superset byte-a-carácter de
+    // Windows-1252 para tildes/ñ, suficiente para este caso de uso) y, si el
+    // reintento ya no tiene el carácter de reemplazo, lo adoptamos.
+    const retried = buffer.toString("latin1");
+    if (!hasReplacementChar(retried)) {
+      text = retried;
+    } else {
+      // Ni siquiera latin1 lo resuelve: archivo genuinamente corrupto o en
+      // otra codificación rara. Se deja el texto UTF-8 original (con los
+      // caracteres de reemplazo) para que el resto del pipeline siga su
+      // curso normal, pero se marca encodingIssue para dar una pista mejor
+      // que el error genérico a nivel de fila.
+      encodingIssue = true;
+    }
   }
 
   // delimiter: "" => autodetección entre , ; \t | (P3: Excel en español
@@ -181,7 +214,7 @@ function parseCsvBuffer(buffer) {
     cells: Array.isArray(cells) ? cells.map((c) => (c == null ? "" : String(c))) : [String(cells ?? "")],
   }));
 
-  return buildTableFromRows(rows);
+  return { ...buildTableFromRows(rows), encodingIssue };
 }
 
 function cellToString(cell) {
@@ -339,6 +372,23 @@ function validateNotesCell(raw) {
   return { ok: true, value };
 }
 
+// Reemplaza un resultado de validación fallido por un mensaje más útil
+// cuando la celda todavía contiene el carácter de reemplazo Unicode después
+// de que parseCsvBuffer ya agotó sus reintentos de encoding (encodingIssue):
+// en ese caso la causa real casi siempre es el archivo (mal guardado), no el
+// dato en sí, así que NOMBRE_CARACTERES_INVALIDOS/CATEGORIA_INVALIDA/etc. sin
+// esta pista confunde al admin. No aplica a .xlsx (encodingIssue siempre
+// false ahí, ver importPeopleFromFile).
+function withEncodingHint(result, raw, encodingIssue) {
+  if (result.ok || !encodingIssue || !hasReplacementChar(raw)) return result;
+  return {
+    ok: false,
+    code: "POSIBLE_PROBLEMA_DE_CODIFICACION",
+    message:
+      'El archivo no parece estar en UTF-8; volvé a guardarlo como "CSV UTF-8" desde Excel, o usá .xlsx.',
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Orquestación principal.
 // ---------------------------------------------------------------------------
@@ -363,7 +413,7 @@ export async function importPeopleFromFile({ buffer, originalName }) {
     });
   }
 
-  const { headerRow, dataRows, blankRowsIgnored } = table;
+  const { headerRow, dataRows, blankRowsIgnored, encodingIssue = false } = table;
   const { assigned, headerTextByCanonical, ignoredColumns } = resolveColumns(headerRow);
 
   const getCell = (row, canonical) => {
@@ -383,7 +433,7 @@ export async function importPeopleFromFile({ buffer, originalName }) {
     const rowNumber = row.rowNumber;
 
     const rawFullName = getCell(row, "fullName") ?? "";
-    const nameResult = validateFullNameCell(rawFullName);
+    const nameResult = withEncodingHint(validateFullNameCell(rawFullName), rawFullName, encodingIssue);
     if (!nameResult.ok) {
       errors.push({
         row: rowNumber,
@@ -396,7 +446,7 @@ export async function importPeopleFromFile({ buffer, originalName }) {
     }
 
     const rawCategory = getCell(row, "category") ?? "";
-    const categoryResult = validateCategoryCell(rawCategory);
+    const categoryResult = withEncodingHint(validateCategoryCell(rawCategory), rawCategory, encodingIssue);
     if (!categoryResult.ok) {
       errors.push({
         row: rowNumber,
@@ -412,7 +462,7 @@ export async function importPeopleFromFile({ buffer, originalName }) {
     if (assigned.documentId !== undefined) {
       const rawDoc = getCell(row, "documentId") ?? "";
       if (rawDoc.trim() !== "") {
-        const docResult = validateDocumentCell(rawDoc);
+        const docResult = withEncodingHint(validateDocumentCell(rawDoc), rawDoc, encodingIssue);
         if (!docResult.ok) {
           errors.push({
             row: rowNumber,
@@ -432,7 +482,7 @@ export async function importPeopleFromFile({ buffer, originalName }) {
     if (assigned.notes !== undefined) {
       const rawNotes = getCell(row, "notes") ?? "";
       if (rawNotes.trim() !== "") {
-        const notesResult = validateNotesCell(rawNotes);
+        const notesResult = withEncodingHint(validateNotesCell(rawNotes), rawNotes, encodingIssue);
         if (!notesResult.ok) {
           errors.push({
             row: rowNumber,

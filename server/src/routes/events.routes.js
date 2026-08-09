@@ -8,11 +8,14 @@
 // y /events/:id), así que requireAuth se aplica POR RUTA, no con
 // `router.use(requireAuth)` a nivel de router (ver teams.routes.js para el
 // detalle de por qué eso filtraría hacia endpoints públicos como /schedule).
+// Por la misma razón, `adminLimiter` (ver rateLimit.js y el comentario en
+// routes/index.js) también se aplica POR RUTA acá.
 
 import { Router } from "express";
 import { z } from "zod";
 import { validate } from "../middleware/validate.js";
 import { requireAuth } from "../middleware/auth.js";
+import { adminLimiter } from "../middleware/rateLimit.js";
 import { createEvent, deleteEvent, updateEvent, cancelEvent } from "../services/events.service.js";
 
 const router = Router();
@@ -50,6 +53,7 @@ const updateEventBodySchema = z
 
 router.post(
   "/months/:id/events",
+  adminLimiter,
   requireAuth,
   validate({ params: monthIdParamSchema, body: createEventBodySchema }),
   async (req, res, next) => {
@@ -64,6 +68,7 @@ router.post(
 
 router.patch(
   "/events/:eventId",
+  adminLimiter,
   requireAuth,
   validate({ params: eventIdParamSchema, body: updateEventBodySchema }),
   async (req, res, next) => {
@@ -78,6 +83,7 @@ router.patch(
 
 router.delete(
   "/events/:eventId",
+  adminLimiter,
   requireAuth,
   validate({ params: eventIdParamSchema }),
   async (req, res, next) => {
@@ -92,6 +98,7 @@ router.delete(
 
 router.post(
   "/events/:eventId/cancel",
+  adminLimiter,
   requireAuth,
   validate({ params: eventIdParamSchema }),
   async (req, res, next) => {

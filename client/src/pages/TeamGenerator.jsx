@@ -48,6 +48,9 @@ function describeGenerateError(info) {
   if (info.code === 'LIDER_JOVENES_INVALIDO') {
     return 'La persona elegida como líder del equipo de jóvenes no es válida: debe estar activa y marcada como «Joven». Elige otra persona.';
   }
+  if (info.code === 'SORTEO_EN_CURSO') {
+    return 'Ya se está generando el sorteo de este mes desde otra pestaña o solicitud. Esperá a que termine y volvé a intentar.';
+  }
   return info.message;
 }
 

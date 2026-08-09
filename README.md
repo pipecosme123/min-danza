@@ -1,47 +1,106 @@
 # Equipos y Turnos de Servicio
 
 Aplicación web para organizar personas en equipos mensuales balanceados (líder + apoyo +
-colaboradores) y rotarlos entre turnos fijos de servicio y eventos extraordinarios,
-manteniendo el balance de participaciones entre equipos. Incluye una página pública sin
-login para consultar la organización del mes.
+colaboradores, más un equipo opcional de "Servicio de jóvenes") y rotarlos entre turnos fijos
+de servicio y eventos extraordinarios, manteniendo el balance de participaciones entre
+equipos. Incluye una página pública sin login para consultar la organización del mes.
 
 Las reglas de negocio completas (cómo se sortean líderes, la excepción del último domingo,
-el evento del último sábado, uniformes, etc.) están documentadas en [`CLAUDE.md`](./CLAUDE.md).
-El diseño del esquema de datos de esta fase está en
-[`docs/architecture/phase1-schema-design.md`](./docs/architecture/phase1-schema-design.md).
-La referencia completa de la API de personas (endpoints, formato de import, catálogo de
-errores) está en [`docs/api/people.md`](./docs/api/people.md).
+el Servicio de jóvenes, uniformes, el ciclo de vida de un mes, etc.) están documentadas en
+[`CLAUDE.md`](./CLAUDE.md) — es la fuente de verdad del dominio, léelo antes de tocar lógica
+de negocio. El diseño técnico de cada fase (esquema de datos, contratos de API, catálogo de
+errores) está en `docs/architecture/`:
+
+- [`docs/architecture/phase1-schema-design.md`](./docs/architecture/phase1-schema-design.md) — esquema de datos base.
+- [`docs/architecture/phase2-people-contract.md`](./docs/architecture/phase2-people-contract.md) y [`docs/api/people.md`](./docs/api/people.md) — CRUD + import masivo de personas (referencia de API completa).
+- [`docs/architecture/phase3-teams-contract.md`](./docs/architecture/phase3-teams-contract.md) — ciclo mensual y sorteo de equipos.
+- [`docs/architecture/phase4-schedule-contract.md`](./docs/architecture/phase4-schedule-contract.md) — horario y balance de participaciones.
+- [`docs/architecture/phase4b-schedule-refinements-contract.md`](./docs/architecture/phase4b-schedule-refinements-contract.md) — uniformes por fecha, balance por semana, eventos editables, vista de calendario.
+- [`docs/architecture/phase4c-post-publish-edits-contract.md`](./docs/architecture/phase4c-post-publish-edits-contract.md) — qué se puede seguir editando después de publicar un mes.
+- [`docs/architecture/phase5-public-page-contract.md`](./docs/architecture/phase5-public-page-contract.md) — finalizar un mes y la página pública.
+- [`docs/architecture/css-framework-comparison.md`](./docs/architecture/css-framework-comparison.md) — por qué el frontend usa CSS propio en vez de un framework.
 
 Stack: Node.js + Express + Prisma + PostgreSQL en `/server`; Vite + React (SPA) en `/client`.
 
 ## Estado actual del proyecto (importante, léelo antes de asumir nada)
 
-Esto es **Fase 2** (personas: import masivo + CRUD) del plan, ya cerrada. Lo que existe hoy:
+Las **Fases 1 a 5 del plan están completas y funcionando** (base del proyecto, personas,
+ciclo mensual y generación de equipos, horario y balance, página pública), más dos ajustes
+posteriores hechos tras probar la app en el navegador:
 
-- Esquema de Prisma completo (`server/prisma/schema.prisma`) con su migración inicial ya
-  aplicada (`server/prisma/migrations/20260807223909_init/`).
-- Seed idempotente del `AdminUser`, uniformes base y turnos fijos (`server/prisma/seed.js`).
-- `POST /api/auth/login` **funcional de verdad**: valida contra la base, devuelve JWT (expira
-  a las 8 horas), aplica rate limiting.
-- `GET /health` **funcional**: confirma conexión real a la base de datos.
-- `GET /api/people`, `POST /api/people`, `PATCH /api/people/:id`, `DELETE /api/people/:id`
-  (con `?purge=true`) y `POST /api/people/import` (`.csv`/`.xlsx`) **funcionales de verdad**,
-  contra la base real. Ver [`docs/api/people.md`](./docs/api/people.md) para el contrato
-  completo.
-- Middlewares reales: `requireAuth` (JWT), `rateLimit` (login y endpoint público),
-  `errorHandler` (nunca filtra stack traces ni detalles de Prisma al cliente),
-  `validate` (zod, sobre body/query/params).
-- Frontend: routing completo (`/`, `/admin/login`, `/admin/*`), login funcional contra el
-  backend, sesión persistida en `localStorage`. `PeopleManager` es una pantalla completa y
-  funcional (listado paginado, búsqueda, filtros, alta, edición, baja/reactivación, import
-  masivo con reporte). El resto de pantallas administrativas (`TeamGenerator`,
-  `EventsManager`, `SpecialSaturdayManager`, `UniformsManager`) existen como UI navegable
-  pero **muestran estados vacíos/placeholder** porque el backend detrás todavía no hace nada.
+- **Fase 4b** (uniformes por fecha concreta en vez de por día de semana, preferencia de
+  balance para no repetir equipo en la misma semana ISO, eventos extraordinarios editables
+  sin borrar y recrear, paleta de colores para uniformes, vista de calendario mensual).
+- **Fase 4c** (después de publicar/finalizar un mes que sea el actual o uno futuro, sigue
+  permitido agregar, cancelar y eliminar eventos extraordinarios, y cambiar el uniforme de un
+  turno puntual — todo lo demás queda bloqueado).
 
-Todo lo demás — generar equipos, generar el calendario del mes, eventos extraordinarios,
-evento del último sábado, uniformes, página pública real — **todavía no está implementado**.
-Ver la sección [Qué NO funciona todavía](#qué-no-funciona-todavía-fase-2) antes de reportar
-algo como "bug": puede ser simplemente que esa fase no se ha construido.
+El **Servicio de jóvenes** reemplazó por completo al viejo "evento especial del último
+sábado": ya no es un roster manual aparte (no queda ningún `SpecialSaturdayManager` ni
+pantalla de "Sábado especial"). Hoy es un equipo más (`Team.teamType = YOUTH`) que se sortea
+junto con los equipos regulares del mes, con líder elegido a mano por el admin y colaboradores
+sorteados del pool de personas marcadas `isJoven`, y **sí cuenta** en el balance de
+participaciones (antes no contaba).
+
+Lo que existe hoy, verificado contra el código real (`server/src/routes/`) y no solo contra la
+documentación:
+
+- **Backend**, todo funcional contra la base de datos real, ningún endpoint responde ya `501`:
+  - `GET /health` — confirma conexión real a la base de datos.
+  - `POST /api/auth/login` — JWT (expira a las 8 horas) + rate limiting.
+  - `/api/people` completo: `GET`, `POST`, `PATCH /:id`, `DELETE /:id` (`?purge=true`),
+    `POST /import` (`.csv`/`.xlsx`, incluida la columna opcional "Joven"). Ver
+    [`docs/api/people.md`](./docs/api/people.md).
+  - Ciclo mensual: `GET`/`POST /api/months`, `GET /api/months/:id`,
+    `POST /api/months/:id/generate-teams` (sortea líder/apoyo/ministros y, si se pide, el
+    equipo `YOUTH`), `GET /api/months/:id/teams`, `PATCH /api/teams/:teamId`,
+    `POST /api/months/:id/finalize`.
+  - Horario y balance: `POST /api/months/:id/generate-schedule` (turnos fijos de
+    miércoles/domingo con la excepción del último domingo, y el turno `YOUTH_SERVICE` del
+    último sábado si aplica; regenerar preserva los eventos extraordinarios ya creados),
+    `GET /api/months/:id/schedule`.
+  - Eventos extraordinarios: `POST /api/months/:id/events`, `PATCH /api/events/:eventId`
+    (edición completa, solo con el mes en `DRAFT`), `DELETE /api/events/:eventId`,
+    `POST /api/events/:eventId/cancel` (cancelar es distinto de eliminar: el evento queda
+    visible, marcado como cancelado).
+  - `PATCH /api/assignments/:id` — bloquear/desbloquear o reasignar a mano una asignación.
+  - `PATCH /api/slots/:id` — asignar o limpiar el uniforme de un turno puntual (cualquier
+    tipo de turno).
+  - `/api/uniforms` — CRUD puro: `GET`, `POST`, `PATCH /:id`. Ya no expone ninguna
+    "configuración automática" por día de semana ni para el Servicio de jóvenes (se eliminó
+    en la Fase 4b).
+  - `GET /api/schedule/latest` y `GET /api/schedule/:year/:month` — **públicos, sin
+    autenticación**, devuelven la organización del mes `FINALIZED` más reciente (equipos +
+    horario, sin el balance de participaciones, que es solo herramienta de administración).
+- **Frontend**: routing completo (`/`, `/admin/login`, `/admin/personas`, `/admin/equipos`,
+  `/admin/eventos`, `/admin/uniformes`), login funcional contra el backend, sesión persistida
+  en `localStorage`, tema claro/oscuro real. Todas las pantallas administrativas son
+  funcionales de punta a punta contra el backend real (`PeopleManager`, `TeamGenerator`,
+  `EventsManager` con vista de lista y de calendario mensual, `UniformsManager`). La página
+  pública (`PublicSchedule.jsx`, en `/`) es real y funcional: muestra el mes finalizado más
+  reciente, con un filtro por persona.
+
+En resumen: **no queda ningún endpoint ni pantalla en estado "placeholder"**. Lo que sigue
+pendiente es explícitamente de alcance (ver la siguiente sección), no un bug ni una fase
+a medio construir.
+
+## Qué NO funciona todavía (o está fuera de alcance a propósito)
+
+Confirmado contra `server/src/routes/` (ningún router responde `501`) y contra la sección
+"Explícitamente fuera de alcance" de [`CLAUDE.md`](./CLAUDE.md):
+
+| Falta | Detalle |
+|---|---|
+| **Des-finalizar un mes** | No existe ninguna forma de volver un `MonthCycle` de `FINALIZED` a `DRAFT`. Si algo se publicó mal, hoy no hay manera de corregirlo salvo el margen limitado de edición post-publicación de la Fase 4c (agregar/cancelar/eliminar eventos y cambiar el uniforme de un turno, solo si el mes es el actual o uno futuro). Pendiente sin fase asignada todavía. |
+| **Historial de meses en la página pública** | La página pública muestra únicamente el mes `FINALIZED` más reciente; no hay selector ni listado de meses anteriores. Decisión confirmada con el usuario, no es un bug. |
+| **Formulario de auto-inscripción de personas** | Las personas solo se cargan por el admin (CRUD o import masivo). Fuera de alcance por ahora. |
+| **Login de usuarios finales** | No hay cuentas para líderes/colaboradores; solo existe la página pública sin login y el login único de administrador. Fuera de alcance por ahora. |
+| **Múltiples administradores** | Un único `AdminUser`, sembrado por `prisma/seed.js`. Fuera de alcance por ahora. |
+| **Reporte de asistencia/excusas por parte de los líderes** | El modelo de datos está preparado para no bloquear esto a futuro (`Team`/`TeamMember`/`ServiceSlot` son entidades independientes), pero no hay ninguna funcionalidad construida todavía. |
+
+El próximo paso planeado es la **Fase 7 (pulido)**: validaciones de borde adicionales,
+reintentos y estilos finales — sin un alcance cerrado todavía, ver el plan en
+`.claude/plans/resilient-humming-lampson.md` y la sección "Estado" de `CLAUDE.md`.
 
 ## Requisitos previos
 
@@ -99,12 +158,9 @@ Verifica que quedó arriba y escuchando en el puerto 5433:
 docker ps --filter "name=api-ejercicio-pg"
 ```
 
-> **Nota / discrepancia con `.env.example`:** `server/.env.example` trae por defecto
-> `DATABASE_URL="postgresql://user:password@localhost:5432/api_ejercicio?schema=public"`
-> (puerto **5432**), asumiendo una instalación nativa genérica de Postgres. Si sigues esta
-> guía y usas el contenedor Docker dedicado descrito arriba, tu `DATABASE_URL` real debe usar
-> el puerto **5433** y las credenciales que elegiste en el `docker run`, no las del ejemplo.
-> Ajusta esto al copiar el `.env` en el paso 4.
+`server/.env.example` ya trae `DATABASE_URL` apuntando al puerto **5433** (el del contenedor
+dedicado de arriba, no el 5432 por defecto de una instalación nativa de Postgres) — solo
+tienes que reemplazar el usuario/password por los que elegiste en el `docker run`.
 
 ### 3. Instalar dependencias
 
@@ -118,17 +174,17 @@ cd ..
 
 **`server/.env`** — copia `server/.env.example` a `server/.env` y ajusta estos valores
 (variables verificadas contra `server/src/config/env.js`, que valida el `.env` con `zod` y
-**no arranca** si falta alguna o tiene formato inválido):
+**no arranca** si falta alguna obligatoria o tiene formato inválido):
 
 | Variable | Propósito | Qué poner |
 |---|---|---|
 | `DATABASE_URL` | Cadena de conexión de Prisma a Postgres | `postgresql://api_ejercicio:<tu-password>@localhost:5433/api_ejercicio?schema=public` (puerto **5433** si usaste el Docker del paso 2) |
-| `JWT_SECRET` | Firma los JWT del login admin | Genera uno propio, largo y aleatorio. Ejemplo: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `JWT_SECRET` | Firma los JWT del login admin (mínimo 16 caracteres) | Genera uno propio, largo y aleatorio. Ejemplo: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `ADMIN_USERNAME` | Usuario del único `AdminUser` que crea el seed | El que quieras, ej. `admin` |
 | `ADMIN_PASSWORD` | Password del `AdminUser` que crea el seed | Elige una password propia. **Obligatoria**: el seed (`prisma/seed.js`) y el arranque del servidor (`config/env.js`) fallan si no está definida — nunca hay una password por defecto hardcodeada |
 | `PORT` | Puerto donde escucha la API Express | `4000` (valor por defecto si lo omites) |
-| `CLIENT_ORIGIN` | Origen exacto permitido por CORS | `http://localhost:5173` (el puerto default de Vite en dev) |
-| `APP_TIMEZONE` | Zona horaria para todo cálculo de calendario (último domingo/sábado del mes) | `America/Bogota` (default si lo omites; confirmado con el usuario en la Fase 1) |
+| `CLIENT_ORIGIN` | Origen exacto permitido por CORS. Es **obligatoria** (el servidor no arranca sin ella) | `http://localhost:5173` (el puerto default de Vite en dev) |
+| `APP_TIMEZONE` | Zona horaria para todo cálculo de calendario (último domingo/sábado del mes, y qué mes es "hoy" para decidir si un mes finalizado ya pasó) | `America/Bogota` (default si lo omites; confirmado con el usuario en la Fase 1) |
 
 ```bash
 cd server
@@ -155,13 +211,16 @@ cd ../server
 npm run prisma:migrate
 ```
 
-Esto aplica la migración inicial ya versionada en `server/prisma/migrations/` y, por la config
+Esto aplica las migraciones ya versionadas en `server/prisma/migrations/` (a esta fecha, 6:
+esquema inicial, renombrado de categoría de persona a `INSTRUCTOR`/`MINISTRO`, equipo de
+jóvenes, horario/Servicio de jóvenes, eliminación de la configuración automática de
+uniformes, y cancelación de eventos/guardas de mes pasado) y, por la config
 `"prisma": { "seed": "node prisma/seed.js" }` en `server/package.json`, corre automáticamente
 el seed después de migrar. El seed crea:
 
 - El `AdminUser` único con las credenciales de tu `.env`.
-- Dos uniformes base (`Uniforme A`, `Uniforme B`).
-- La configuración de uniforme por día (miércoles → Uniforme A, domingo → Uniforme B).
+- Dos uniformes base (`Uniforme A`, `Uniforme B`) — sin asignarlos a ningún día ni turno: la
+  asignación de uniformes se hace a mano, por fecha concreta, desde la pantalla de Eventos.
 - Los 4 turnos fijos semanales (miércoles 17:00/19:00, domingo 08:00/10:30).
 
 Si necesitas volver a sembrar sin migrar (por ejemplo, tras editar `.env`):
@@ -211,9 +270,12 @@ Vite imprime la URL local, normalmente `http://localhost:5173`.
    Respuesta esperada: `{"token":"<jwt>","admin":{"id":"...","username":"...","displayName":"Administrador"}}`.
 
 3. **Frontend:** abre `http://localhost:5173` en el navegador. Debe verse la página pública
-   ("Horario del mes") con un estado vacío ("Todavía no hay un mes publicado" — esperado en
-   esta fase). Ve a `/admin/login`, entra con las credenciales de tu `.env`, y confirma que te
-   redirige a `/admin/personas` ya autenticado.
+   ("Ministerio de danza" / "Lluvias de Bendiciones") con un estado vacío ("Todavía no hay un
+   mes publicado" — esperado hasta que finalices un mes desde el admin). Ve a
+   `/admin/login`, entra con las credenciales de tu `.env`, y confirma que te redirige a
+   `/admin/personas` ya autenticado. Desde ahí puedes cargar personas, ir a
+   `/admin/equipos` para crear un mes y sortear equipos, `/admin/eventos` para generar el
+   horario y finalizar el mes, y volver a `/` para verlo publicado en la página pública.
 
 ## Pruebas de humo (smoke tests)
 
@@ -221,45 +283,21 @@ Existen y pasan, verificado corriendo ambas suites contra la base de datos real 
 levantado como en el paso 2):
 
 ```bash
-cd server && npm test   # vitest run — 61 pruebas, 7 archivos (incluye people.crud.test.js
-                         # y people.import.test.js, contra el servidor y la base reales)
-cd ../client && npm test  # vitest run — 15 pruebas, 4 archivos
+cd server && npm test   # vitest run — 205 pruebas, 17 archivos (contra el servidor y la
+                         # base reales: personas, ciclo mensual, sorteo de equipos, horario,
+                         # balance, eventos, asignaciones, uniformes, finalizar mes y página
+                         # pública)
+cd ../client && npm test  # vitest run — 107 pruebas, 11 archivos
 ```
 
-Backend: incluye pruebas de regresión de bugs ya corregidos (un bug de auth, un *focus trap*
-de `Modal.jsx`, y una condición de carrera en `POST /api/people` que podía devolver un 409
-genérico sin `details.code` en altas concurrentes con el mismo documento — ver
-`server/src/services/people.service.js`).
-
-## Qué NO funciona todavía (Fase 2)
-
-Todos estos endpoints existen (montados y protegidos con `requireAuth` donde corresponde) pero
-responden **`501 Not Implemented`** con un mensaje indicando la fase que los va a implementar
-— confirmado leyendo cada router en `server/src/routes/`:
-
-| Endpoint | Fase que lo implementa |
-|---|---|
-| `GET /api/months`, `POST /api/months`, `GET /api/months/:id` | Fase 3 (ciclo mensual) |
-| `POST /api/months/:id/generate-teams`, `GET /api/months/:id/teams`, `PATCH /api/teams/:teamId` | Fase 3 (generación/edición de equipos) |
-| `POST /api/months/:id/events`, `DELETE /api/events/:eventId` | Fase 4 (eventos extraordinarios) |
-| `PATCH /api/assignments/:id` | Fase 4 (lock/unlock de asignaciones, balance) |
-| `GET /api/months/:id/special-saturday`, `PUT /api/months/:id/special-saturday/members` | Fase 4 (evento del último sábado) |
-| `GET /api/uniforms`, `POST /api/uniforms`, `GET/PUT /api/uniforms/weekday-config` | Fase 3-4 (uniformes) |
-| `GET /api/schedule/:year/:month` | Fase 5 (página pública real) — hoy responde `501` incluso sin autenticación, aunque el `publicLimiter` (rate limit) ya está activo sobre esta ruta |
-
-`GET /api/people`, `POST /api/people`, `PATCH /api/people/:id`, `DELETE /api/people/:id` y
-`POST /api/people/import` **ya no están en esta lista**: quedaron implementados en la Fase 2
-(ver [`docs/api/people.md`](./docs/api/people.md)).
-
-En el frontend, las pantallas correspondientes (`TeamGenerator`, `EventsManager`,
-`SpecialSaturdayManager`, `UniformsManager`, `PublicSchedule`) ya están construidas como
-navegación y layout, pero muestran estados vacíos o mensajes de "esta función se activará
-cuando el servidor esté conectado" — **no son bugs**, es el estado esperado de esta fase.
-`PeopleManager` es la excepción: es una pantalla completa y funcional contra el backend real.
-
-Lo único end-to-end real hoy es: `POST /api/auth/login` (backend) ↔ pantalla de login
-(frontend) ↔ sesión persistida y `ProtectedRoute` del router; y el CRUD + import de personas
-completo, descrito arriba.
+Backend: incluye pruebas de regresión de bugs ya corregidos (ver el historial de commits para
+el detalle completo). Las más recientes: un bug real en `Modal.jsx` donde escribir en
+cualquier campo de un modal devolvía el foco al botón "Cerrar" después de cada letra, y un bug
+en `useApi.js` donde cada refetch tras una acción desmontaba toda la vista detrás de un
+spinner (se sentía como que la página se recargaba y saltaba al inicio). También cubre una
+condición de carrera en `POST /api/people` (dos altas concurrentes con el mismo documento
+nuevo podían devolver un 409 genérico sin `details.code` en vez del `409 DOCUMENTO_DUPLICADO`
+estructurado) en `server/src/services/people.service.js`.
 
 ## Estructura del repositorio
 

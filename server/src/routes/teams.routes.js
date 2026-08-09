@@ -9,12 +9,15 @@
 // y /teams/:id), así que requireAuth se aplica POR RUTA (no con
 // `router.use(requireAuth)` a nivel de router) — un `router.use` sin filtro
 // de path en un router montado en "/" correría como middleware global para
-// CUALQUIER request de la app, incluidos los endpoints públicos.
+// CUALQUIER request de la app, incluidos los endpoints públicos. Por la
+// misma razón, `adminLimiter` (ver rateLimit.js y el comentario en
+// routes/index.js) también se aplica POR RUTA acá, no con `router.use`.
 
 import { Router } from "express";
 import { z } from "zod";
 import { validate } from "../middleware/validate.js";
 import { requireAuth } from "../middleware/auth.js";
+import { adminLimiter } from "../middleware/rateLimit.js";
 import { generateTeams, listTeamsForMonth, updateTeam } from "../services/teamGeneration.service.js";
 
 const router = Router();
@@ -83,6 +86,7 @@ const patchBodySchema = z
 
 router.post(
   "/months/:id/generate-teams",
+  adminLimiter,
   requireAuth,
   validate({ params: monthIdParamSchema, body: generateTeamsBodySchema }),
   async (req, res, next) => {
@@ -95,7 +99,7 @@ router.post(
   }
 );
 
-router.get("/months/:id/teams", requireAuth, validate({ params: monthIdParamSchema }), async (req, res, next) => {
+router.get("/months/:id/teams", adminLimiter, requireAuth, validate({ params: monthIdParamSchema }), async (req, res, next) => {
   try {
     const result = await listTeamsForMonth(req.params.id);
     res.json(result);
@@ -106,6 +110,7 @@ router.get("/months/:id/teams", requireAuth, validate({ params: monthIdParamSche
 
 router.patch(
   "/teams/:teamId",
+  adminLimiter,
   requireAuth,
   validate({ params: teamIdParamSchema, body: patchBodySchema }),
   async (req, res, next) => {

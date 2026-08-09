@@ -1,4 +1,4 @@
-import { formatCivilDate, formatTimeLabel } from '../../utils/dates.js';
+import { formatTimeLabel } from '../../utils/dates.js';
 import { UniformBadge } from './UniformBadge.jsx';
 import { Badge } from '../ui/Badge.jsx';
 import { Button } from '../ui/Button.jsx';
@@ -74,9 +74,8 @@ export function ScheduleSlotCard({
   return (
     <article className="slot-card schedule-slot-card">
       <header className="slot-card__header">
-        <p className="slot-card__datetime">
-          {formatCivilDate(slot.date)} · {formatTimeLabel(slot.startTime)}
-        </p>
+        {/* La fecha ya la dice el subtítulo del grupo en CalendarGrid, no hace falta repetirla acá. */}
+        <p className="slot-card__time">{formatTimeLabel(slot.startTime)}</p>
         <span className="slot-card__type">{SLOT_TYPE_LABELS[slot.slotType] || slot.slotType}</span>
       </header>
 

@@ -83,10 +83,34 @@ export async function createMonthCycle({ year, month, teamCount }) {
     });
   }
 
-  return prisma.monthCycle.create({
-    data: { year, month, teamCount },
-    select: MONTH_SELECT,
-  });
+  try {
+    return await prisma.monthCycle.create({
+      data: { year, month, teamCount },
+      select: MONTH_SELECT,
+    });
+  } catch (err) {
+    // Carrera: dos POST /api/months concurrentes con el mismo (year, month)
+    // pueden pasar ambos el findUnique de arriba (no está en una transacción
+    // serializable) antes de que el primero confirme; el segundo choca con
+    // el índice único `@@unique([year, month])` recién al escribir. Mismo
+    // patrón que la carrera de POST /api/people (ver people.service.js):
+    // se traduce al MISMO 409 MES_YA_EXISTE estructurado del camino
+    // secuencial, en vez de dejar pasar el P2002 crudo al errorHandler
+    // genérico (que respondería 409 sin `details.code`).
+    if (err?.code === "P2002") {
+      const clashing = await prisma.monthCycle.findUnique({
+        where: { year_month: { year, month } },
+        select: { id: true },
+      });
+      if (clashing) {
+        throw new ConflictError("Ya existe un mes creado para ese año/mes.", {
+          code: "MES_YA_EXISTE",
+          monthCycleId: clashing.id,
+        });
+      }
+    }
+    throw err;
+  }
 }
 
 export async function getMonthCycle(id) {
@@ -107,38 +131,46 @@ export async function getMonthCycle(id) {
  * a aplicar apenas cambia el status.
  */
 export async function finalizeMonthCycle(id) {
-  const month = await prisma.monthCycle.findUnique({ where: { id } });
-  if (!month) throw new NotFoundError("Mes no encontrado.");
+  // Envuelto en $transaction (mismo estilo que generateTeams/updateTeam de
+  // este archivo): lee estado + cuenta equipos/slots + escribe el nuevo
+  // status de forma atómica, en vez de en pasos sueltos que otra escritura
+  // concurrente (p. ej. un borrado de equipos por re-sorteo) podría intercalar.
+  const updated = await prisma.$transaction(async (tx) => {
+    const month = await tx.monthCycle.findUnique({ where: { id } });
+    if (!month) throw new NotFoundError("Mes no encontrado.");
 
-  if (month.status === "FINALIZED") {
-    throw new ConflictError("El mes ya está finalizado.", { code: "MES_YA_FINALIZADO" });
-  }
+    if (month.status === "FINALIZED") {
+      throw new ConflictError("El mes ya está finalizado.", { code: "MES_YA_FINALIZADO" });
+    }
 
-  const [teamCount, slotCount] = await Promise.all([
-    prisma.team.count({ where: { monthCycleId: id, teamType: "REGULAR" } }),
-    prisma.serviceSlot.count({ where: { monthCycleId: id } }),
-  ]);
+    const [teamCount, slotCount] = await Promise.all([
+      tx.team.count({ where: { monthCycleId: id, teamType: "REGULAR" } }),
+      tx.serviceSlot.count({ where: { monthCycleId: id } }),
+    ]);
 
-  const hasTeams = teamCount > 0;
-  const hasSchedule = slotCount > 0;
+    const hasTeams = teamCount > 0;
+    const hasSchedule = slotCount > 0;
 
-  if (!hasTeams || !hasSchedule) {
-    throw new ConflictError("El mes todavía no tiene equipos y/o horario; no se puede finalizar.", {
-      code: "MES_INCOMPLETO",
-      hasTeams,
-      hasSchedule,
+    if (!hasTeams || !hasSchedule) {
+      throw new ConflictError("El mes todavía no tiene equipos y/o horario; no se puede finalizar.", {
+        code: "MES_INCOMPLETO",
+        hasTeams,
+        hasSchedule,
+      });
+    }
+
+    return tx.monthCycle.update({
+      where: { id },
+      data: { status: "FINALIZED", finalizedAt: new Date() },
+      select: MONTH_SELECT,
     });
-  }
-
-  const updated = await prisma.monthCycle.update({
-    where: { id },
-    data: { status: "FINALIZED", finalizedAt: new Date() },
-    select: MONTH_SELECT,
   });
 
   // Defensivo (ver contrato §1): un mes recién finalizado nunca estuvo
   // cacheado antes bajo su clave pública, pero invalidar es barato y evita
-  // sorpresas si en el futuro se agrega "des-finalizar".
+  // sorpresas si en el futuro se agrega "des-finalizar". Fuera de la
+  // transacción a propósito: es un efecto en memoria del proceso, no una
+  // escritura de base que deba ser atómica con lo anterior.
   invalidateByPrefix("schedule:");
 
   return updated;
@@ -165,6 +197,33 @@ function assertDraft(month) {
  * @param {{ youthTeam?: { enabled: boolean, size?: number, leaderPersonId?: string } }} [options]
  */
 export async function generateTeams(monthCycleId, options = {}) {
+  try {
+    return await generateTeamsTransaction(monthCycleId, options);
+  } catch (err) {
+    // Carrera: dos POST /months/:id/generate-teams concurrentes sobre el
+    // MISMO mes pueden pasar ambos el assertDraft(month) de arriba (leído
+    // fuera de un lock) antes de que el primero confirme su transacción. El
+    // segundo, al intentar escribir sus propios `Team` con
+    // `orderIndex`/`label` ya tomados por los del primero (índices únicos
+    // `@@unique([monthCycleId, orderIndex])` / `@@unique([monthCycleId, label])`
+    // — ver prisma/schema.prisma), choca con P2002 recién al escribir, no
+    // antes. No hay un código de error ya establecido en el resto del
+    // proyecto para "dos escrituras destructivas de la misma operación
+    // corriendo a la vez" (a diferencia de MES_YA_EXISTE/DOCUMENTO_DUPLICADO/
+    // UNIFORME_DUPLICADO/EQUIPO_EDITADO_CONCURRENTEMENTE, que son duplicados
+    // de un recurso), así que se traduce a un código nuevo específico:
+    // 409 SORTEO_EN_CURSO. Ver docs/architecture/phase3-teams-contract.md §0.
+    if (err?.code === "P2002") {
+      throw new ConflictError(
+        "Ya se está generando el sorteo de este mes en otra pestaña o solicitud; esperá a que termine y volvé a intentar.",
+        { code: "SORTEO_EN_CURSO" }
+      );
+    }
+    throw err;
+  }
+}
+
+async function generateTeamsTransaction(monthCycleId, options = {}) {
   const { youthTeam } = options;
 
   return prisma.$transaction(async (tx) => {

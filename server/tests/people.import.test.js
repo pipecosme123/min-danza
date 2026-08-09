@@ -255,6 +255,31 @@ describe("POST /api/people/import — formatos de archivo", () => {
     expect(created.isJoven).toBe(false);
   });
 
+  it("CSV guardado como Windows-1252/latin1 (sin BOM) se detecta y decodifica bien (tildes/ñ no se corrompen)", async () => {
+    const doc = `${DOC_PREFIX}LATIN1`;
+    // Construido directamente como bytes latin1 -- así es como Excel en
+    // español guarda un CSV "ANSI" (sin BOM UTF-8). Si se decodificara como
+    // UTF-8 a secas, cada tilde/ñ se corrompería a "�" y la fila fallaría
+    // con NOMBRE_CARACTERES_INVALIDOS en vez de crear a la persona.
+    const csvText = [
+      "Nombre,Categoria,Documento",
+      `${NAME_PREFIX} José Muñoz Peña,Colaborador,${doc}`,
+    ].join("\n");
+    const latin1Buffer = Buffer.from(csvText, "latin1");
+
+    const res = await authedPost("/api/people/import").attach("file", latin1Buffer, "latin1.csv");
+
+    expect(res.status).toBe(200);
+    expect(res.body.summary.failed).toBe(0);
+    expect(res.body.summary.created).toBe(1);
+    expect(res.body.created[0].fullName).toBe(`${NAME_PREFIX} José Muñoz Peña`);
+
+    const created = await prisma.person.findUnique({ where: { documentId: doc } });
+    expect(created).not.toBeNull();
+    expect(created.fullName).toBe(`${NAME_PREFIX} José Muñoz Peña`);
+    expect(created.fullName).not.toContain("�");
+  });
+
   it("archivo .xls legacy se rechaza con mensaje explícito", async () => {
     const res = await authedPost("/api/people/import").attach("file", Buffer.from("contenido"), "legacy.xls");
     expect(res.status).toBe(400);
