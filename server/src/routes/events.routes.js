@@ -13,7 +13,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { validate } from "../middleware/validate.js";
 import { requireAuth } from "../middleware/auth.js";
-import { createEvent, deleteEvent, updateEvent } from "../services/events.service.js";
+import { createEvent, deleteEvent, updateEvent, cancelEvent } from "../services/events.service.js";
 
 const router = Router();
 
@@ -83,6 +83,20 @@ router.delete(
   async (req, res, next) => {
     try {
       const result = await deleteEvent(req.params.eventId);
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.post(
+  "/events/:eventId/cancel",
+  requireAuth,
+  validate({ params: eventIdParamSchema }),
+  async (req, res, next) => {
+    try {
+      const result = await cancelEvent(req.params.eventId);
       res.json(result);
     } catch (err) {
       next(err);

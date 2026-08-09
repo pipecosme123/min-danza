@@ -6,9 +6,14 @@ import './TeamCard.css';
  * detalle (líder/apoyo/ministros). La usan `TeamGenerator` (vista de
  * administración) y, en fases futuras, la página pública.
  *
- * @param {{ team: { id: string, label: string, members: Array }, actions?: React.ReactNode, className?: string }} props
+ * @param {{
+ *   team: { id: string, label: string, members: Array },
+ *   actions?: React.ReactNode,
+ *   className?: string,
+ *   onlyShowLeaderRole?: boolean,
+ * }} props
  */
-export function TeamCard({ team, actions, className = '' }) {
+export function TeamCard({ team, actions, className = '', onlyShowLeaderRole = false }) {
   return (
     <article className={`team-card${className ? ` ${className}` : ''}`}>
       <header className="team-card__header">
@@ -18,7 +23,7 @@ export function TeamCard({ team, actions, className = '' }) {
         </span>
       </header>
 
-      <MemberList members={team.members} />
+      <MemberList members={team.members} onlyShowLeaderRole={onlyShowLeaderRole} />
 
       {actions ? <div className="team-card__actions">{actions}</div> : null}
     </article>

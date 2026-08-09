@@ -123,3 +123,25 @@ export function formatTime(hour, minute) {
   const mm = String(minute).padStart(2, "0");
   return `${hh}:${mm}`;
 }
+
+/**
+ * Fecha civil {year, month, day} de "hoy" en `timeZone` (no la hora del
+ * proceso del servidor). Única función de este archivo donde corresponde
+ * usar la zona horaria real: "cuál es el mes actual" depende de la hora
+ * real, a diferencia del resto de la aritmética de calendario de arriba
+ * (ver comentario de cabecera). Usado por
+ * docs/architecture/phase4c-post-publish-edits-contract.md §2-3 para decidir
+ * si un mes FINALIZED ya pasó.
+ * @param {string} timeZone p. ej. "America/Bogota"
+ * @returns {{ year: number, month: number, day: number }}
+ */
+export function currentCivilDate(timeZone) {
+  const formatted = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const [year, month, day] = formatted.split("-").map(Number);
+  return { year, month, day };
+}

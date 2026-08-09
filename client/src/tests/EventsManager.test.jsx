@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
@@ -22,8 +22,10 @@ vi.mock("../api/schedule.js", () => ({
   createEvent: vi.fn(),
   updateEvent: vi.fn(),
   deleteEvent: vi.fn(),
+  cancelEvent: vi.fn(),
   updateAssignment: vi.fn(),
   updateSlotUniform: vi.fn(),
+  finalizeMonth: vi.fn(),
 }));
 
 vi.mock("../api/uniforms.js", () => ({
@@ -37,8 +39,10 @@ import {
   createEvent,
   updateEvent,
   deleteEvent,
+  cancelEvent,
   updateAssignment,
   updateSlotUniform,
+  finalizeMonth,
 } from "../api/schedule.js";
 import { getUniforms } from "../api/uniforms.js";
 import { ApiError } from "../api/client.js";
@@ -138,6 +142,10 @@ function fullSchedule() {
   };
 }
 
+function cancelledExtraordinarySlot() {
+  return { ...extraordinarySlot(), cancelledAt: "2026-08-08T12:00:00.000Z", countsTowardBalance: false, teams: [] };
+}
+
 function renderPage() {
   return render(
     <MemoryRouter>
@@ -156,14 +164,20 @@ describe("EventsManager", () => {
     createEvent.mockReset();
     updateEvent.mockReset();
     deleteEvent.mockReset();
+    cancelEvent.mockReset();
     updateAssignment.mockReset();
     updateSlotUniform.mockReset();
+    finalizeMonth.mockReset();
     getUniforms.mockReset();
 
     getUniforms.mockResolvedValue([
       { id: "u-1", name: "Uniforme A", colorHex: "#1E40AF", active: true },
       { id: "u-2", name: "Uniforme B", colorHex: "#16A34A", active: true },
     ]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("muestra el selector de mes con los meses disponibles", async () => {
@@ -498,5 +512,263 @@ describe("EventsManager", () => {
     expect(screen.getByText("Vigilia")).toBeInTheDocument();
 
     expect(getMonthSchedule.mock.calls.length).toBe(callsBefore);
+  });
+
+  it("el botón «Finalizar mes» está deshabilitado y explica el motivo cuando faltan equipos y horario", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue({ teams: [] });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Finalizar mes" })).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Finalizar mes" })).toBeDisabled();
+    expect(
+      screen.getByText("Todavía falta generar los equipos y el horario de este mes."),
+    ).toBeInTheDocument();
+    expect(finalizeMonth).not.toHaveBeenCalled();
+  });
+
+  it("el botón «Finalizar mes» está deshabilitado si ya hay equipos pero falta el horario", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(emptySchedule());
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText("Este mes todavía no tiene horario generado")).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "Finalizar mes" })).toBeDisabled();
+    expect(screen.getByText("Todavía falta generar el horario de este mes.")).toBeInTheDocument();
+  });
+
+  it("el botón «Finalizar mes» está deshabilitado si el mes ya está finalizado", async () => {
+    getMonths.mockResolvedValue({
+      data: [sampleMonth({ status: "FINALIZED", finalizedAt: "2026-08-08T00:00:00.000Z" })],
+    });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(fullSchedule());
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Finalizar mes" })).toBeDisabled();
+  });
+
+  it("habilitado con equipos y horario, pide confirmación y llama a finalizeMonth", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(fullSchedule());
+    finalizeMonth.mockResolvedValueOnce(
+      sampleMonth({ status: "FINALIZED", finalizedAt: "2026-08-08T00:00:00.000Z" }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+    const finalizeButton = screen.getByRole("button", { name: "Finalizar mes" });
+    expect(finalizeButton).not.toBeDisabled();
+
+    await user.click(finalizeButton);
+    expect(screen.getByRole("heading", { name: "Finalizar el mes" })).toBeInTheDocument();
+    expect(finalizeMonth).not.toHaveBeenCalled();
+
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Sí, finalizar mes" }));
+
+    await waitFor(() => expect(finalizeMonth).toHaveBeenCalledWith("month-1"));
+    await waitFor(() =>
+      expect(screen.getByText("Se finalizó el mes: ya está visible en la página pública.")).toBeInTheDocument(),
+    );
+  });
+
+  it("muestra un mensaje claro cuando finalizar falla con MES_INCOMPLETO", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(fullSchedule());
+    finalizeMonth.mockRejectedValueOnce(
+      new ApiError("Conflicto.", {
+        status: 409,
+        details: { code: "MES_INCOMPLETO", hasTeams: true, hasSchedule: false },
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Finalizar mes" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Sí, finalizar mes" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Todavía falta generar el horario de este mes.")).toBeInTheDocument(),
+    );
+  });
+
+  // Fase 4c: docs/architecture/phase4c-post-publish-edits-contract.md §0/§8.
+  // Un mes FINALIZED "actual o futuro" relaja solo agregar/cancelar/eliminar
+  // evento y el uniforme por turno; el resto sigue bloqueado por completo.
+  it("con un mes finalizado actual, agregar/cancelar/eliminar evento y el uniforme siguen habilitados, pero regenerar/bloquear/reasignar/editar evento completo siguen deshabilitados", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 8)); // 8 de agosto de 2026: mismo mes/año que sampleMonth().
+
+    getMonths.mockResolvedValue({
+      data: [sampleMonth({ status: "FINALIZED", finalizedAt: "2026-08-01T00:00:00.000Z" })],
+    });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(fullSchedule());
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+
+    // Grupo nuevo: habilitado.
+    expect(screen.getByRole("button", { name: "Agregar evento extraordinario" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Eliminar evento" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancelar evento" })).not.toBeDisabled();
+    screen.getAllByLabelText("Uniforme de este turno").forEach((select) => expect(select).not.toBeDisabled());
+
+    // Grupo viejo: sigue deshabilitado, sin excepción de fecha.
+    expect(screen.getByRole("button", { name: "Regenerar horario" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Editar evento" })).toBeDisabled();
+    screen.getAllByRole("button", { name: "Bloquear" }).forEach((button) => expect(button).toBeDisabled());
+    screen.getAllByLabelText("Equipo asignado a este turno").forEach((select) => expect(select).toBeDisabled());
+  });
+
+  it("con un mes finalizado ya pasado, todo sigue deshabilitado (comportamiento viejo)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 8, 8)); // 8 de setiembre de 2026: sampleMonth() (agosto 2026) ya pasó.
+
+    getMonths.mockResolvedValue({
+      data: [sampleMonth({ status: "FINALIZED", finalizedAt: "2026-08-01T00:00:00.000Z" })],
+    });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(fullSchedule());
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+
+    expect(screen.getByRole("button", { name: "Agregar evento extraordinario" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Eliminar evento" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancelar evento" })).toBeDisabled();
+    screen.getAllByLabelText("Uniforme de este turno").forEach((select) => expect(select).toBeDisabled());
+    expect(screen.getByRole("button", { name: "Regenerar horario" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Editar evento" })).toBeDisabled();
+  });
+
+  it("cancela un evento extraordinario tras confirmar y muestra «Cancelado» tras refrescar", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValueOnce(fullSchedule()).mockResolvedValueOnce({
+      slots: [fixedSlot(), fixedSlot2(), cancelledExtraordinarySlot(), youthSlot()],
+      balance: fullSchedule().balance,
+    });
+    cancelEvent.mockResolvedValueOnce({ slot: cancelledExtraordinarySlot() });
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "Cancelar evento" }));
+    expect(screen.getByRole("heading", { name: "Cancelar evento" })).toBeInTheDocument();
+
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Sí, cancelar evento" }));
+
+    await waitFor(() => expect(cancelEvent).toHaveBeenCalledWith("slot-extra"));
+    await waitFor(() => expect(screen.getByText("Se canceló el evento.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Cancelado")).toBeInTheDocument());
+    expect(screen.getByText("Este evento fue cancelado.")).toBeInTheDocument();
+  });
+
+  it("no ofrece «Cancelar evento» para un evento que ya está cancelado, pero sí «Eliminar evento»", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue({
+      slots: [fixedSlot(), fixedSlot2(), cancelledExtraordinarySlot(), youthSlot()],
+      balance: fullSchedule().balance,
+    });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Cancelado")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Cancelar evento" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar evento" })).toBeInTheDocument();
+  });
+
+  it("en un mes DRAFT, cambiar el uniforme de un turno fijo sigue sincronizando el turno hermano del mismo día (sin cambios)", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth({ status: "DRAFT" })] });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(fullSchedule());
+    updateSlotUniform.mockResolvedValue({ slot: fixedSlot() });
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+
+    const uniformSelects = screen.getAllByLabelText("Uniforme de este turno");
+    await user.selectOptions(uniformSelects[0], "u-2");
+
+    await waitFor(() => expect(updateSlotUniform).toHaveBeenCalledWith("slot-fixed", "u-2"));
+    await waitFor(() => expect(updateSlotUniform).toHaveBeenCalledWith("slot-fixed-2", "u-2"));
+    expect(updateSlotUniform).toHaveBeenCalledTimes(2);
+  });
+
+  it("en un mes FINALIZED actual/futuro, cambiar el uniforme de un turno fijo afecta SOLO ese turno (no sincroniza el hermano)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 8)); // agosto 2026: mismo mes que sampleMonth(), mes actual.
+
+    getMonths.mockResolvedValue({
+      data: [sampleMonth({ status: "FINALIZED", finalizedAt: "2026-08-01T00:00:00.000Z" })],
+    });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(fullSchedule());
+    updateSlotUniform.mockResolvedValue({ slot: fixedSlot() });
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+
+    const uniformSelects = screen.getAllByLabelText("Uniforme de este turno");
+    await user.selectOptions(uniformSelects[0], "u-2");
+
+    await waitFor(() => expect(updateSlotUniform).toHaveBeenCalledTimes(1));
+    expect(updateSlotUniform).toHaveBeenCalledWith("slot-fixed", "u-2");
+    expect(updateSlotUniform).not.toHaveBeenCalledWith("slot-fixed-2", "u-2");
+  });
+
+  it("mapea MES_PASADO a un mensaje claro (eliminar evento)", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(fullSchedule());
+    deleteEvent.mockRejectedValueOnce(
+      new ApiError("Conflicto.", { status: 409, details: { code: "MES_PASADO" } }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Eliminar evento" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Sí, eliminar" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Este mes ya pasó, no se puede modificar.")).toBeInTheDocument(),
+    );
+  });
+
+  it("mapea EVENTO_YA_CANCELADO a un mensaje claro (cancelar evento)", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(fullSchedule());
+    cancelEvent.mockRejectedValueOnce(
+      new ApiError("Conflicto.", { status: 409, details: { code: "EVENTO_YA_CANCELADO" } }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Cancelar evento" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Sí, cancelar evento" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Este evento ya está cancelado.")).toBeInTheDocument(),
+    );
   });
 });

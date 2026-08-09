@@ -20,7 +20,7 @@ describe("App — enrutamiento de alto nivel", () => {
 
   it("la ruta pública '/' renderiza sin sesión y sin crashear", () => {
     renderAppAt("/");
-    expect(screen.getByRole("heading", { name: "Horario del mes" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ministerio de danza" })).toBeInTheDocument();
   });
 
   it("ProtectedRoute redirige a /admin/login cuando no hay token en el contexto de auth", () => {

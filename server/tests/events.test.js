@@ -187,18 +187,24 @@ describe("POST /api/months/:id/events", () => {
     expect(res.status).toBe(404);
   });
 
-  it("409 MES_FINALIZADO si el mes ya no está DRAFT", async () => {
-    const { monthCycle } = await setupMonthWithSchedule({ year: 2095, month: 5, teamCount: 1 });
+  // Nota (Fase 4c, docs/architecture/phase4c-post-publish-edits-contract.md
+  // §0): agregar un evento a un mes FINALIZED ya NO es 409 MES_FINALIZADO
+  // incondicional — está permitido si el mes es actual/futuro, y pasa a ser
+  // 409 MES_PASADO solo si el mes ya pasó. Cobertura completa (ambos casos)
+  // en tests/phase4c-post-publish-edits.test.js; acá solo confirmamos el
+  // caso "ya pasó" para no perder cobertura de este describe.
+  it("409 MES_PASADO si el mes ya finalizado ya pasó", async () => {
+    const { monthCycle } = await setupMonthWithSchedule({ year: 2020, month: 5, teamCount: 1 });
     await prisma.monthCycle.update({ where: { id: monthCycle.id }, data: { status: "FINALIZED" } });
 
     const res = await authed(request(app).post(`/api/months/${monthCycle.id}/events`)).send({
       date: midMonthDate(monthCycle),
       startTime: "19:00",
-      title: "QA Finalizado",
+      title: "QA Finalizado Pasado",
       teamsNeeded: 1,
     });
     expect(res.status).toBe(409);
-    expect(res.body.error.details.code).toBe("MES_FINALIZADO");
+    expect(res.body.error.details.code).toBe("MES_PASADO");
   });
 
   it("400 con teamsNeeded fuera de {1,2}", async () => {

@@ -56,3 +56,28 @@
   border-left: 3px solid var(--color-border-input);
   padding-left: var(--space-1);
 }
+
+/* Resaltado de los turnos que corresponden a la persona filtrada en la
+   página pública: más contraste, nunca la única señal (el texto sigue
+   siendo el mismo, siempre legible). */
+.month-occupancy-calendar__indicator--highlighted {
+  background-color: var(--color-info-bg);
+  border-left-color: var(--color-info-border);
+  border-radius: var(--radius-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-info-text);
+}
+
+/* El resto de los indicadores se atenúan levemente cuando hay resaltado
+   activo, para que los de la persona filtrada salten a la vista — pero
+   siguen totalmente legibles, nunca se ocultan. */
+.month-occupancy-calendar__indicator--dimmed {
+  opacity: 0.6;
+}
+
+/* Evento extraordinario cancelado (`slot.cancelledAt`): texto tachado, para
+   distinguirlo de un evento activo sin depender solo del color. El texto
+   sigue siendo el mismo (título del evento), nunca desaparece. */
+.month-occupancy-calendar__indicator--cancelled {
+  text-decoration: line-through;
+}

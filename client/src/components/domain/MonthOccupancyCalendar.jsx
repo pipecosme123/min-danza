@@ -36,19 +36,28 @@ function buildMonthWeeks(year, month) {
  * asignado (`FIXED`/`YOUTH_SERVICE`), o uno solo con el título
  * (`EXTRAORDINARY`). El color del uniforme, si tiene, es solo un acento
  * visual (borde) — el texto siempre está presente, nunca es la única señal.
+ *
+ * `highlightTeamIds`, si se pasa (`Set<string>` no vacío), marca cada
+ * indicador como resaltado cuando el equipo al que pertenece (o, para
+ * `EXTRAORDINARY`, alguno de los equipos del turno) está en el set.
  */
-function slotIndicators(slot) {
+function slotIndicators(slot, highlightTeamIds) {
+  const hasHighlightSet = Boolean(highlightTeamIds && highlightTeamIds.size > 0);
   const colorHex = slot.uniform?.colorHex || null;
   if (slot.slotType === 'EXTRAORDINARY') {
-    return [{ key: slot.id, text: slot.title || 'Evento', colorHex }];
+    const highlighted = hasHighlightSet && (slot.teams || []).some((team) => highlightTeamIds.has(team.id));
+    const cancelled = Boolean(slot.cancelledAt);
+    return [{ key: slot.id, text: slot.title || 'Evento', colorHex, highlighted, cancelled }];
   }
   if (!slot.teams || slot.teams.length === 0) {
-    return [{ key: slot.id, text: 'Sin equipo asignado', colorHex }];
+    return [{ key: slot.id, text: 'Sin equipo asignado', colorHex, highlighted: false, cancelled: false }];
   }
   return slot.teams.map((team) => ({
     key: `${slot.id}-${team.assignmentId || team.id}`,
     text: team.label,
     colorHex,
+    highlighted: hasHighlightSet && highlightTeamIds.has(team.id),
+    cancelled: false,
   }));
 }
 
@@ -60,9 +69,17 @@ function slotIndicators(slot) {
  * la vista de lista. Contrato:
  * `docs/architecture/phase4b-schedule-refinements-contract.md` §6.
  *
- * @param {{ year: number, month: number, slots: Array }} props
+ * `highlightTeamIds` (opcional): ids de equipo a resaltar visualmente (ver
+ * `slotIndicators`). Sin este prop, el comportamiento es idéntico al
+ * anterior — no afecta el uso existente en `EventsManager`.
+ *
+ * @param {{ year: number, month: number, slots: Array, highlightTeamIds?: Set<string>|string[] }} props
  */
-export function MonthOccupancyCalendar({ year, month, slots }) {
+export function MonthOccupancyCalendar({ year, month, slots, highlightTeamIds }) {
+  const highlightSet =
+    highlightTeamIds instanceof Set ? highlightTeamIds : highlightTeamIds ? new Set(highlightTeamIds) : null;
+  const hasHighlight = Boolean(highlightSet && highlightSet.size > 0);
+
   const slotsByDate = new Map();
   slots.forEach((slot) => {
     if (!slotsByDate.has(slot.date)) slotsByDate.set(slot.date, []);
@@ -108,16 +125,27 @@ export function MonthOccupancyCalendar({ year, month, slots }) {
                       <span className="month-occupancy-calendar__day-number">{cell.day}</span>
                       {daySlots.length > 0 ? (
                         <ul className="month-occupancy-calendar__indicators">
-                          {daySlots.flatMap(slotIndicators).map((indicator) => (
-                            <li
-                              key={indicator.key}
-                              className="month-occupancy-calendar__indicator"
-                              style={indicator.colorHex ? { borderLeftColor: indicator.colorHex } : undefined}
-                              title={indicator.text}
-                            >
-                              {indicator.text}
-                            </li>
-                          ))}
+                          {daySlots
+                            .flatMap((slot) => slotIndicators(slot, highlightSet))
+                            .map((indicator) => (
+                              <li
+                                key={indicator.key}
+                                className={[
+                                  'month-occupancy-calendar__indicator',
+                                  indicator.highlighted ? 'month-occupancy-calendar__indicator--highlighted' : '',
+                                  hasHighlight && !indicator.highlighted
+                                    ? 'month-occupancy-calendar__indicator--dimmed'
+                                    : '',
+                                  indicator.cancelled ? 'month-occupancy-calendar__indicator--cancelled' : '',
+                                ]
+                                  .filter(Boolean)
+                                  .join(' ')}
+                                style={indicator.colorHex ? { borderLeftColor: indicator.colorHex } : undefined}
+                                title={indicator.cancelled ? `${indicator.text} (cancelado)` : indicator.text}
+                              >
+                                {indicator.text}
+                              </li>
+                            ))}
                         </ul>
                       ) : null}
                     </td>

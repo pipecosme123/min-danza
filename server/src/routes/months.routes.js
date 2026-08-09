@@ -1,5 +1,7 @@
-// GET /api/months, POST /api/months, GET /api/months/:id — ciclo mensual.
-// Contrato cerrado: docs/architecture/phase3-teams-contract.md.
+// GET /api/months, POST /api/months, GET /api/months/:id,
+// POST /api/months/:id/finalize — ciclo mensual. Contrato cerrado:
+// docs/architecture/phase3-teams-contract.md (creación/consulta) y
+// docs/architecture/phase5-public-page-contract.md §1 (finalize).
 // Este router SOLO parsea/valida/serializa; toda la lógica de negocio vive
 // en services/teamGeneration.service.js.
 // Router administrativo -> protegido con requireAuth.
@@ -8,7 +10,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { validate } from "../middleware/validate.js";
 import { requireAuth } from "../middleware/auth.js";
-import { listMonthCycles, createMonthCycle, getMonthCycle } from "../services/teamGeneration.service.js";
+import { listMonthCycles, createMonthCycle, getMonthCycle, finalizeMonthCycle } from "../services/teamGeneration.service.js";
 import { generateSchedule, getMonthSchedule } from "../services/scheduleGeneration.service.js";
 
 const router = Router();
@@ -79,6 +81,15 @@ router.get("/:id/schedule", validate({ params: idParamSchema }), async (req, res
   try {
     const result = await getMonthSchedule(req.params.id);
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/:id/finalize", validate({ params: idParamSchema }), async (req, res, next) => {
+  try {
+    const month = await finalizeMonthCycle(req.params.id);
+    res.json(month);
   } catch (err) {
     next(err);
   }

@@ -1,19 +1,31 @@
 // Eventos extraordinarios (ServiceSlot slotType EXTRAORDINARY). Contrato
 // cerrado: docs/architecture/phase4-schedule-contract.md §4-5, ampliado por
 // docs/architecture/phase4b-schedule-refinements-contract.md §5.1
-// (PATCH para editar en vez de eliminar+recrear). El router
-// (routes/events.routes.js) solo parsea/valida/serializa; toda regla vive
-// acá.
+// (PATCH para editar en vez de eliminar+recrear) y por
+// docs/architecture/phase4c-post-publish-edits-contract.md §4 (agregar/
+// cancelar/eliminar siguen permitidos tras publicar, si el mes es actual o
+// futuro). El router (routes/events.routes.js) solo parsea/valida/
+// serializa; toda regla vive acá.
 
 import { prisma } from "../lib/prisma.js";
 import { ConflictError, NotFoundError, ValidationError } from "../utils/errors.js";
 import { SLOT_SELECT, serializeSlot } from "./scheduleGeneration.service.js";
 import { recomputeBalance } from "./balance.service.js";
+import { assertEditableConsideringFinalization } from "../utils/monthLifecycle.js";
+import { invalidateCached } from "../lib/cache.js";
+import { cacheKeyFor } from "./publicSchedule.service.js";
 
-function assertDraft(month) {
-  if (month.status !== "DRAFT") {
-    throw new ConflictError("El mes ya está finalizado y no admite cambios.", { code: "MES_FINALIZADO" });
-  }
+// Fase 4c: antes de esta fase, ninguna de estas escrituras podía tocar un
+// mes FINALIZED (todas exigían DRAFT), así que el mes ya publicado -y por lo
+// tanto ya cacheado bajo `schedule:${year}:${month}` en publicSchedule
+// service- nunca podía quedar desactualizado. Ahora que agregar/cancelar/
+// eliminar SÍ pueden mutar un mes FINALIZED actual/futuro, hay que invalidar
+// explícitamente esa clave puntual (CLAUDE.md, sección Caché: "nunca dejes
+// un caché sirviendo datos obsoletos tras un cambio administrativo"). No
+// hace falta condicionar a "estaba FINALIZED": invalidar una clave que nunca
+// se cacheó (mes todavía DRAFT) es una operación barata sin efecto.
+function invalidatePublicCache(year, month) {
+  invalidateCached(cacheKeyFor(year, month));
 }
 
 /**
@@ -24,7 +36,7 @@ export async function createEvent(monthCycleId, data) {
   return prisma.$transaction(async (tx) => {
     const month = await tx.monthCycle.findUnique({ where: { id: monthCycleId } });
     if (!month) throw new NotFoundError("Mes no encontrado.");
-    assertDraft(month);
+    assertEditableConsideringFinalization(month);
 
     const [year, monthNum] = data.date.split("-").map(Number);
     if (year !== month.year || monthNum !== month.month) {
@@ -61,9 +73,18 @@ export async function createEvent(monthCycleId, data) {
       },
     });
 
-    await recomputeBalance(tx, monthCycleId);
+    // Mes DRAFT: recompute completo, sin cambios respecto al comportamiento
+    // histórico. Mes FINALIZED (ya validado actual/futuro arriba): modo
+    // acotado, decide equipo(s) SOLO para el evento nuevo, sin reordenar
+    // nada de lo ya publicado (contrato Fase 4c §4).
+    if (month.status === "DRAFT") {
+      await recomputeBalance(tx, monthCycleId);
+    } else {
+      await recomputeBalance(tx, monthCycleId, { onlySlotIds: [created.id] });
+    }
 
     const slot = await tx.serviceSlot.findUnique({ where: { id: created.id }, select: SLOT_SELECT });
+    invalidatePublicCache(month.year, month.month);
     return { slot: serializeSlot(slot) };
   });
 }
@@ -137,19 +158,63 @@ export async function deleteEvent(eventId) {
   return prisma.$transaction(async (tx) => {
     const slot = await tx.serviceSlot.findUnique({
       where: { id: eventId },
-      include: { monthCycle: { select: { id: true, status: true } } },
+      include: { monthCycle: { select: { id: true, year: true, month: true, status: true } } },
     });
 
     if (!slot || slot.slotType !== "EXTRAORDINARY") {
       throw new NotFoundError("Evento no encontrado.", { code: "EVENTO_NO_ENCONTRADO" });
     }
-    if (slot.monthCycle.status !== "DRAFT") {
-      throw new ConflictError("El mes ya está finalizado y no admite cambios.", { code: "MES_FINALIZADO" });
-    }
+    assertEditableConsideringFinalization(slot.monthCycle);
+
+    const wasDraft = slot.monthCycle.status === "DRAFT";
 
     await tx.serviceSlot.delete({ where: { id: eventId } });
-    await recomputeBalance(tx, slot.monthCycleId);
 
+    // Mes DRAFT: recompute completo, sin cambios respecto al comportamiento
+    // histórico. Mes FINALIZED (ya validado actual/futuro arriba): nada más
+    // necesita reacomodarse, no se llama recomputeBalance (contrato Fase 4c §4).
+    if (wasDraft) {
+      await recomputeBalance(tx, slot.monthCycleId);
+    }
+
+    invalidatePublicCache(slot.monthCycle.year, slot.monthCycle.month);
     return { deleted: true };
+  });
+}
+
+/**
+ * Cancela (no elimina) un evento extraordinario: queda registrado y visible,
+ * marcado como cancelado, deja de necesitar equipo. Contrato Fase 4c §4.
+ * @param {string} eventId
+ */
+export async function cancelEvent(eventId) {
+  return prisma.$transaction(async (tx) => {
+    const slot = await tx.serviceSlot.findUnique({
+      where: { id: eventId },
+      include: { monthCycle: { select: { id: true, year: true, month: true, status: true } } },
+    });
+
+    if (!slot || slot.slotType !== "EXTRAORDINARY") {
+      throw new NotFoundError("Evento no encontrado.", { code: "EVENTO_NO_ENCONTRADO" });
+    }
+    assertEditableConsideringFinalization(slot.monthCycle);
+
+    if (slot.cancelledAt !== null) {
+      throw new ConflictError("Este evento ya está cancelado.", { code: "EVENTO_YA_CANCELADO" });
+    }
+
+    await tx.serviceSlot.update({
+      where: { id: eventId },
+      data: { cancelledAt: new Date(), countsTowardBalance: false },
+    });
+    // Cancelar es una decisión explícita del admin que prevalece sobre
+    // `locked`: se borran todas las SlotAssignment del evento, fijadas o no.
+    await tx.slotAssignment.deleteMany({ where: { serviceSlotId: eventId } });
+
+    // Nada se reacomoda: no se llama recomputeBalance.
+
+    const updated = await tx.serviceSlot.findUnique({ where: { id: eventId }, select: SLOT_SELECT });
+    invalidatePublicCache(slot.monthCycle.year, slot.monthCycle.month);
+    return { slot: serializeSlot(updated) };
   });
 }

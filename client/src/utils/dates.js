@@ -56,3 +56,21 @@ export function formatTimeLabel(startTime) {
   const hour12 = hours % 12 === 0 ? 12 : hours % 12;
   return `${hour12}:${minutes} ${period}`;
 }
+
+/**
+ * ¿`(year, month)` es el mes actual o uno posterior, comparado contra la
+ * fecha del navegador? Aproximación del lado cliente para habilitar/
+ * deshabilitar controles de inmediato sin ida y vuelta al servidor — el
+ * backend, que compara contra `APP_TIMEZONE`, es la autoridad real y
+ * rechaza con `MES_PASADO` si corresponde aunque acá se calcule distinto por
+ * un desfase de reloj. Ver `docs/architecture/phase4c-post-publish-edits-contract.md` §0/§8.
+ * @param {number} year
+ * @param {number} month 1..12
+ * @returns {boolean}
+ */
+export function isMonthCurrentOrFuture(year, month) {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  return year > currentYear || (year === currentYear && month >= currentMonth);
+}

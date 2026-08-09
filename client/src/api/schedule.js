@@ -25,6 +25,7 @@ import { apiClient } from './client.js';
  * @property {boolean} countsTowardBalance
  * @property {{id: string, name: string, colorHex: string|null}|null} uniform
  * @property {ScheduleTeamRef[]} teams
+ * @property {string|null} [cancelledAt] ISO string si el evento (siempre `EXTRAORDINARY`) fue cancelado; `null`/ausente si no.
  */
 
 /**
@@ -112,4 +113,34 @@ export function updateSlotUniform(slotId, uniformId) {
  */
 export function updateEvent(eventId, data) {
   return apiClient.patch(`/events/${eventId}`, data);
+}
+
+/**
+ * Cancela un evento extraordinario sin eliminarlo: el turno queda registrado
+ * y visible (con `cancelledAt` no nulo), deja de necesitar equipo (sus
+ * `SlotAssignment` se limpian) y deja de contar en el balance. A diferencia
+ * de `deleteEvent`, es reversible en el sentido de que el evento sigue
+ * existiendo para consulta; no hay forma de "descancelarlo" en esta fase.
+ * Distinto de `updateEvent`/`deleteEvent` en los códigos de error que puede
+ * devolver (`MES_PASADO` en vez de `MES_FINALIZADO` cuando el mes ya
+ * finalizado es actual/futuro, `EVENTO_YA_CANCELADO` si ya estaba
+ * cancelado). Contrato: `docs/architecture/phase4c-post-publish-edits-contract.md` §4.
+ * @param {string} eventId
+ * @returns {Promise<{ slot: ServiceSlotDto }>}
+ */
+export function cancelEvent(eventId) {
+  return apiClient.post(`/events/${eventId}/cancel`);
+}
+
+/**
+ * Finaliza el mes: pasa `status` a `FINALIZED` y fija `finalizedAt`. A partir
+ * de ahí el mes queda visible en la página pública y se vuelve inmutable (ya
+ * no admite sorteos, ediciones de equipos, cambios de horario ni eventos).
+ * No hay forma de deshacer esta acción en esta fase (no existe
+ * "des-finalizar"). Contrato: `docs/architecture/phase5-public-page-contract.md` §1.
+ * @param {string} monthId
+ * @returns {Promise<import('./months.js').MonthCycle>} el mismo DTO de `MonthCycle` de siempre, con `finalizedAt` ya no nulo.
+ */
+export function finalizeMonth(monthId) {
+  return apiClient.post(`/months/${monthId}/finalize`);
 }

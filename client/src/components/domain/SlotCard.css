@@ -17,9 +17,11 @@
   flex-wrap: wrap;
 }
 
-.slot-card__datetime {
+.slot-card__time {
   margin: 0;
+  font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
 }
 
 .slot-card__type {
@@ -32,12 +34,21 @@
   color: var(--color-text-secondary);
 }
 
+/* Turno/evento cancelado (`slot.cancelledAt`): el título se tacha y se
+   acompaña siempre de la insignia "Cancelado" (nunca solo el tachado, que
+   por sí solo es una señal débil para lectura rápida). */
+.slot-card__title--cancelled {
+  text-decoration: line-through;
+  color: var(--color-text-secondary);
+}
+
 .slot-card__team-list {
   list-style: none;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
 }
 
 .slot-card__no-team {

@@ -35,9 +35,12 @@ export function sortMembers(members) {
  * Lista de integrantes de un equipo con su rol. Se usa dentro de `TeamCard`
  * y también podrá reutilizarse sola en vistas de detalle.
  *
- * @param {{ members: Array<{ id: string, fullName: string, role: 'LEADER'|'SUPPORT'|'COLLABORATOR' }> }} props
+ * @param {{
+ *   members: Array<{ id: string, fullName: string, role: 'LEADER'|'SUPPORT'|'COLLABORATOR' }>,
+ *   onlyShowLeaderRole?: boolean,
+ * }} props
  */
-export function MemberList({ members }) {
+export function MemberList({ members, onlyShowLeaderRole = false }) {
   if (!members || members.length === 0) {
     return <p className="member-list__empty">Este equipo todavía no tiene integrantes.</p>;
   }
@@ -53,9 +56,11 @@ export function MemberList({ members }) {
             {index + 1}.
           </span>
           <span className="member-list__name">{member.fullName}</span>
-          <Badge variant={ROLE_BADGE_VARIANTS[member.role] || 'neutral'}>
-            {ROLE_LABELS[member.role] || member.role}
-          </Badge>
+          {onlyShowLeaderRole && member.role !== 'LEADER' ? null : (
+            <Badge variant={ROLE_BADGE_VARIANTS[member.role] || 'neutral'}>
+              {ROLE_LABELS[member.role] || member.role}
+            </Badge>
+          )}
         </li>
       ))}
     </ol>

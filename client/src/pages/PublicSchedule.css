@@ -1,0 +1,61 @@
+.public-schedule__month-header {
+  margin-bottom: var(--space-6);
+}
+
+.public-schedule__month-title {
+  margin: 0;
+  font-size: var(--font-size-2xl);
+}
+
+.public-schedule__published-at {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.public-schedule__filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.public-schedule__filter .field {
+  flex: 1 1 260px;
+  margin-bottom: 0;
+}
+
+.public-schedule__view-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.public-schedule__section {
+  margin-bottom: var(--space-7);
+}
+
+.public-schedule__section-title {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-xl);
+}
+
+.public-schedule__teams-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+
+@media (min-width: 640px) {
+  .public-schedule__teams-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .public-schedule__teams-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

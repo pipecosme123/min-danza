@@ -133,6 +133,13 @@ button {
   max-width: 640px;
 }
 
+.page-header__subtitle {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
 .admin-layout__session {
   display: flex;
   align-items: center;

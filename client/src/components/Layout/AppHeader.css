@@ -13,10 +13,16 @@
 }
 
 .app-header__brand {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-bold);
+  display: inline-flex;
+  align-items: center;
   color: var(--color-text);
   text-decoration: none;
+}
+
+.app-header__logo {
+  height: 2.25rem;
+  width: auto;
+  max-width: 100%;
 }
 
 .app-header__actions {

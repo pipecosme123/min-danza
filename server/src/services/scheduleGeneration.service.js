@@ -21,6 +21,7 @@ export const SLOT_SELECT = {
   title: true,
   teamsNeeded: true,
   countsTowardBalance: true,
+  cancelledAt: true,
   uniform: { select: { id: true, name: true, colorHex: true } },
   assignments: {
     orderBy: { slotIndex: "asc" },
@@ -44,6 +45,7 @@ export function serializeSlot(slot) {
     title: slot.title,
     teamsNeeded: slot.teamsNeeded,
     countsTowardBalance: slot.countsTowardBalance,
+    cancelledAt: slot.cancelledAt ? slot.cancelledAt.toISOString() : null,
     uniform: slot.uniform ? { id: slot.uniform.id, name: slot.uniform.name, colorHex: slot.uniform.colorHex } : null,
     teams: slot.assignments.map((a) => ({
       id: a.team.id,

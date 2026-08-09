@@ -276,6 +276,13 @@ model ServiceSlot {
   countsTowardBalance Boolean  @default(true) @map("counts_toward_balance")
   uniformId           String?  @map("uniform_id")
   notes               String?
+  /// No nulo únicamente cuando el admin canceló un evento EXTRAORDINARY
+  /// después de publicado (o antes, no hay restricción). El slot queda, se
+  /// ve, pero deja de necesitar equipo: se le limpian sus SlotAssignment y
+  /// se le pone countsTowardBalance = false (mismo mecanismo que ya usaba
+  /// SPECIAL/YOUTH_SERVICE para "no cuenta al balance", reutilizado tal
+  /// cual). Ver docs/architecture/phase4c-post-publish-edits-contract.md §1.
+  cancelledAt         DateTime? @map("cancelled_at")
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 

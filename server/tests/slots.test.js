@@ -188,14 +188,20 @@ describe("PATCH /api/slots/:id", () => {
     expect(res.body.error.details.code).toBe("TURNO_NO_ENCONTRADO");
   });
 
-  it("409 MES_FINALIZADO si el mes del turno no está DRAFT", async () => {
-    const { monthCycle, slots } = await setupMonthWithSchedule({ year: 2096, month: 4, teamCount: 1 });
+  // Nota (Fase 4c, docs/architecture/phase4c-post-publish-edits-contract.md
+  // §0): cambiar el uniforme de un turno en un mes FINALIZED ya NO es 409
+  // MES_FINALIZADO incondicional — está permitido si el mes es actual/futuro,
+  // y pasa a ser 409 MES_PASADO solo si el mes ya pasó. Cobertura completa
+  // (ambos casos) en tests/phase4c-post-publish-edits.test.js; acá solo
+  // confirmamos el caso "ya pasó" para no perder cobertura de este describe.
+  it("409 MES_PASADO si el mes del turno ya finalizado ya pasó", async () => {
+    const { monthCycle, slots } = await setupMonthWithSchedule({ year: 2020, month: 4, teamCount: 1 });
     await prisma.monthCycle.update({ where: { id: monthCycle.id }, data: { status: "FINALIZED" } });
 
     const fixedSlot = slots.find((s) => s.slotType === "FIXED");
     const res = await authed(request(app).patch(`/api/slots/${fixedSlot.id}`)).send({ uniformId: null });
     expect(res.status).toBe(409);
-    expect(res.body.error.details.code).toBe("MES_FINALIZADO");
+    expect(res.body.error.details.code).toBe("MES_PASADO");
   });
 
   it("400 UNIFORME_NO_VALIDO si el uniformId no existe o no está activo", async () => {

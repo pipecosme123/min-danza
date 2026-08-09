@@ -89,9 +89,13 @@ describe("GET /api/schedule/:year/:month es público (regresión del bug de auth
     expect(res.status).not.toBe(403);
   });
 
-  it("responde 501 (no implementado todavía en esta fase) sin auth", async () => {
+  it("responde con el shape público real (200 si el mes está publicado, 404 MES_NO_PUBLICADO si no) — nunca 501 (Fase 5 ya implementada)", async () => {
     const res = await request(app).get("/api/schedule/2026/8");
-    expect(res.status).toBe(501);
+    expect(res.status).not.toBe(501);
+    expect([200, 404]).toContain(res.status);
+    if (res.status === 404) {
+      expect(res.body.error.details.code).toBe("MES_NO_PUBLICADO");
+    }
   });
 
   it("sigue siendo público incluso con un token corrupto/basura en el header", async () => {

@@ -6,6 +6,7 @@
 import { prisma } from "../lib/prisma.js";
 import { ConflictError, NotFoundError, ValidationError } from "../utils/errors.js";
 import { shuffle } from "../utils/shuffle.js";
+import { invalidateByPrefix } from "../lib/cache.js";
 
 const MONTH_SELECT = {
   id: true,
@@ -31,7 +32,10 @@ const MEMBER_SELECT = {
   person: { select: { fullName: true } },
 };
 
-const TEAM_SELECT = {
+// Exportados: reusados por publicSchedule.service.js (Fase 5) para armar el
+// payload público con el mismo shape que GET /api/months/:id/teams, mismo
+// patrón que SLOT_SELECT/serializeSlot en scheduleGeneration.service.js.
+export const TEAM_SELECT = {
   id: true,
   label: true,
   orderIndex: true,
@@ -39,7 +43,7 @@ const TEAM_SELECT = {
   members: { select: MEMBER_SELECT },
 };
 
-function serializeTeam(team) {
+export function serializeTeam(team) {
   return {
     id: team.id,
     label: team.label,
@@ -89,6 +93,55 @@ export async function getMonthCycle(id) {
   const month = await prisma.monthCycle.findUnique({ where: { id }, select: MONTH_SELECT });
   if (!month) throw new NotFoundError("Mes no encontrado.");
   return month;
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/months/:id/finalize
+// ---------------------------------------------------------------------------
+
+/**
+ * Publica un mes: DRAFT -> FINALIZED. No hay vuelta atrás en esta fase (ver
+ * docs/architecture/phase5-public-page-contract.md §0/§5). No agrega ningún
+ * candado nuevo -- el chequeo MES_FINALIZADO que protege generate-teams,
+ * generate-schedule, eventos y asignaciones ya existe desde Fase 3-4 y pasa
+ * a aplicar apenas cambia el status.
+ */
+export async function finalizeMonthCycle(id) {
+  const month = await prisma.monthCycle.findUnique({ where: { id } });
+  if (!month) throw new NotFoundError("Mes no encontrado.");
+
+  if (month.status === "FINALIZED") {
+    throw new ConflictError("El mes ya está finalizado.", { code: "MES_YA_FINALIZADO" });
+  }
+
+  const [teamCount, slotCount] = await Promise.all([
+    prisma.team.count({ where: { monthCycleId: id, teamType: "REGULAR" } }),
+    prisma.serviceSlot.count({ where: { monthCycleId: id } }),
+  ]);
+
+  const hasTeams = teamCount > 0;
+  const hasSchedule = slotCount > 0;
+
+  if (!hasTeams || !hasSchedule) {
+    throw new ConflictError("El mes todavía no tiene equipos y/o horario; no se puede finalizar.", {
+      code: "MES_INCOMPLETO",
+      hasTeams,
+      hasSchedule,
+    });
+  }
+
+  const updated = await prisma.monthCycle.update({
+    where: { id },
+    data: { status: "FINALIZED", finalizedAt: new Date() },
+    select: MONTH_SELECT,
+  });
+
+  // Defensivo (ver contrato §1): un mes recién finalizado nunca estuvo
+  // cacheado antes bajo su clave pública, pero invalidar es barato y evita
+  // sorpresas si en el futuro se agrega "des-finalizar".
+  invalidateByPrefix("schedule:");
+
+  return updated;
 }
 
 async function loadMonthOrThrow(tx, id) {

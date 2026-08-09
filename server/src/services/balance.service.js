@@ -6,6 +6,18 @@
 // repetir equipo en la misma semana ISO ANTES que el menor conteo
 // acumulado) — no reinventar el algoritmo acá.
 //
+// Fase 4c (docs/architecture/phase4c-post-publish-edits-contract.md §6)
+// agrega un modo acotado (`onlySlotIds`) para agregar un evento a un mes ya
+// publicado sin reordenar nada de lo que ya estaba asignado: solo borra/
+// decide los slots indicados, y arranca el conteo/semanas de partida desde
+// TODO lo que sobrevive en el mes (no solo lo `locked`), porque en ese modo
+// nada fuera de `onlySlotIds` se borra. El modo completo (sin `onlySlotIds`)
+// sigue siendo el default, sin cambios de comportamiento: después del borrado
+// completo de lo no-locked, "todo lo que sobrevive en el mes" y "lo locked"
+// son exactamente el mismo conjunto, así que ambos modos comparten el mismo
+// código de acá en más — no hay dos algoritmos, uno solo con un borrado/
+// alcance de slots distinto según el modo.
+//
 // Deliberadamente NO abre su propia transacción: recibe el cliente `tx` de
 // una transacción ya en curso (scheduleGeneration.service.js, events al
 // crear/borrar) para poder componerse sin anidar transacciones de Prisma.
@@ -20,10 +32,22 @@ function weekKey({ year, month, day }) {
 /**
  * @param {import("@prisma/client").Prisma.TransactionClient} tx
  * @param {string} monthCycleId
+ * @param {{ onlySlotIds?: string[] }} [options] Ausente/undefined: modo
+ *   completo (comportamiento idéntico al histórico). Presente: modo acotado,
+ *   solo decide equipo para los ServiceSlot cuyo id esté en la lista, sin
+ *   tocar ninguna otra asignación del mes.
  */
-export async function recomputeBalance(tx, monthCycleId) {
-  // 1. Borra las asignaciones no fijadas del mes. Las `locked: true` nunca se tocan.
-  await tx.slotAssignment.deleteMany({ where: { monthCycleId, locked: false } });
+export async function recomputeBalance(tx, monthCycleId, { onlySlotIds } = {}) {
+  // 1. Borra las asignaciones no fijadas del mes (modo completo) o
+  // únicamente las de los slots indicados (modo acotado). Las `locked: true`
+  // nunca se tocan, en ningún modo.
+  await tx.slotAssignment.deleteMany({
+    where: {
+      monthCycleId,
+      locked: false,
+      ...(onlySlotIds ? { serviceSlotId: { in: onlySlotIds } } : {}),
+    },
+  });
 
   const teams = await tx.team.findMany({
     where: { monthCycleId },
@@ -32,42 +56,50 @@ export async function recomputeBalance(tx, monthCycleId) {
   const regularTeams = teams.filter((t) => t.teamType === "REGULAR");
   const youthTeam = teams.find((t) => t.teamType === "YOUTH");
 
-  // 2. Slots que cuentan al balance, en orden cronológico.
+  // 2. Slots a procesar, en orden cronológico: los que cuentan al balance
+  // (modo completo) o, dentro de esos, únicamente los indicados (modo acotado).
   const slots = await tx.serviceSlot.findMany({
-    where: { monthCycleId, countsTowardBalance: true },
+    where: {
+      monthCycleId,
+      countsTowardBalance: true,
+      ...(onlySlotIds ? { id: { in: onlySlotIds } } : {}),
+    },
     orderBy: [{ date: "asc" }, { startTime: "asc" }],
     select: { id: true, slotType: true, teamsNeeded: true, date: true },
   });
 
-  // 3. Lo que sobrevivió al borrado de arriba: únicamente asignaciones locked.
-  // Sirve para (a) el conteo acumulado de partida de cada equipo y (b) saber
-  // qué cupos de cada slot ya están ocupados y (c) reconstruir en qué semanas
-  // ya participó cada equipo (para no repetir semana si hay alternativa).
-  const lockedAssignments = await tx.slotAssignment.findMany({
-    where: { monthCycleId, locked: true },
+  // 3. Lo que sobrevivió al borrado de arriba. En modo completo, esto es
+  // exactamente lo `locked` (todo lo demás del mes se borró en el paso 1).
+  // En modo acotado, esto es TODO lo que sigue vigente en el mes (nada fuera
+  // de `onlySlotIds` se tocó) — sirve para (a) el conteo acumulado de
+  // partida de cada equipo, (b) qué cupos de cada slot procesado ya están
+  // ocupados y (c) en qué semanas ya participó cada equipo (para no repetir
+  // semana si hay alternativa), considerando SIEMPRE el mes completo.
+  const survivingAssignments = await tx.slotAssignment.findMany({
+    where: { monthCycleId },
     include: { serviceSlot: { select: { date: true } } },
   });
 
   const countByTeam = new Map(regularTeams.map((t) => [t.id, 0]));
   // Conjunto (en memoria) de semanas (clave "year-month-day" del lunes) en
   // las que cada equipo REGULAR ya tiene una asignación — arranca con lo
-  // locked, se actualiza a medida que el algoritmo asigna más turnos.
+  // sobreviviente, se actualiza a medida que el algoritmo asigna más turnos.
   const weeksByTeam = new Map(regularTeams.map((t) => [t.id, new Set()]));
-  const lockedBySlot = new Map();
-  for (const a of lockedAssignments) {
+  const existingBySlot = new Map();
+  for (const a of survivingAssignments) {
     if (countByTeam.has(a.teamId)) {
       countByTeam.set(a.teamId, countByTeam.get(a.teamId) + 1);
       const civilDate = dbDateToCivilDate(a.serviceSlot.date);
       weeksByTeam.get(a.teamId).add(weekKey(mondayOfWeek(civilDate)));
     }
-    if (!lockedBySlot.has(a.serviceSlotId)) lockedBySlot.set(a.serviceSlotId, []);
-    lockedBySlot.get(a.serviceSlotId).push(a);
+    if (!existingBySlot.has(a.serviceSlotId)) existingBySlot.set(a.serviceSlotId, []);
+    existingBySlot.get(a.serviceSlotId).push(a);
   }
 
   const toCreate = [];
 
   for (const slot of slots) {
-    const existingForSlot = lockedBySlot.get(slot.id) ?? [];
+    const existingForSlot = existingBySlot.get(slot.id) ?? [];
     const usedTeamIds = new Set(existingForSlot.map((a) => a.teamId));
     const usedIndexes = new Set(existingForSlot.map((a) => a.slotIndex));
 

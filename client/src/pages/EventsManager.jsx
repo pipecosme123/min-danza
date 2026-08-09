@@ -7,12 +7,15 @@ import {
   createEvent,
   updateEvent,
   deleteEvent,
+  cancelEvent,
   updateAssignment,
   updateSlotUniform,
+  finalizeMonth,
 } from '../api/schedule.js';
 import { getUniforms } from '../api/uniforms.js';
 import { describeApiError } from '../utils/apiError.js';
-import { formatMonthYear, formatCivilDate, formatTimeLabel } from '../utils/dates.js';
+import { formatMonthYear, formatCivilDate, formatTimeLabel, isMonthCurrentOrFuture } from '../utils/dates.js';
+import { groupSlotsByDate } from '../utils/schedule.js';
 import { useApi } from '../hooks/useApi.js';
 import { useToast } from '../hooks/useToast.js';
 import { useMonthSelector } from '../hooks/useMonthSelector.js';
@@ -31,21 +34,12 @@ import './EventsManager.css';
 
 const EMPTY_EVENT_FORM = { date: '', startTime: '', title: '', teamsNeeded: '1', uniformId: '' };
 
-/** Agrupa los turnos por fecha civil, en el mismo orden en que llegan (ya vienen ordenados por fecha/hora del backend). */
-function groupSlotsByDate(slots) {
-  const map = new Map();
-  slots.forEach((slot) => {
-    if (!map.has(slot.date)) map.set(slot.date, []);
-    map.get(slot.date).push(slot);
-  });
-  return Array.from(map.entries()).map(([date, dateSlots]) => ({
-    key: date,
-    heading: formatCivilDate(date),
-    slots: dateSlots,
-  }));
-}
-
-/** Traduce los códigos de error del formulario de evento extraordinario a lenguaje llano. */
+/**
+ * Traduce los códigos de error de las acciones sobre el horario/eventos a
+ * lenguaje llano: crear/editar/eliminar/cancelar un evento, y cambiar el
+ * uniforme de un turno. Contrato de `MES_PASADO`/`EVENTO_YA_CANCELADO`:
+ * `docs/architecture/phase4c-post-publish-edits-contract.md` §0/§8.
+ */
 function describeEventError(info) {
   if (info.code === 'FECHA_FUERA_DE_MES') {
     return 'La fecha del evento debe caer dentro del mes elegido.';
@@ -59,14 +53,40 @@ function describeEventError(info) {
   if (info.code === 'MES_FINALIZADO') {
     return 'Este mes ya está finalizado y no admite cambios.';
   }
+  if (info.code === 'MES_PASADO') {
+    return 'Este mes ya pasó, no se puede modificar.';
+  }
   if (info.code === 'EVENTO_NO_ENCONTRADO') {
     return 'Este evento ya no existe. Es posible que se haya eliminado o que el horario se haya regenerado.';
+  }
+  if (info.code === 'EVENTO_YA_CANCELADO') {
+    return 'Este evento ya está cancelado.';
   }
   if (info.code === 'EQUIPOS_BLOQUEADOS_EXCEDEN_CUPO') {
     const locked = info.details?.locked ?? 0;
     return `No se puede bajar la cantidad de equipos: ya hay ${locked} equipo${locked === 1 ? '' : 's'} bloqueado${
       locked === 1 ? '' : 's'
     } en este turno. Desbloqueá alguno primero.`;
+  }
+  return info.message;
+}
+
+/** Traduce los códigos de error de "Finalizar mes" a lenguaje llano. Contrato: `docs/architecture/phase5-public-page-contract.md` §1. */
+function describeFinalizeError(info) {
+  if (info.code === 'MES_YA_FINALIZADO') {
+    return 'Este mes ya estaba finalizado.';
+  }
+  if (info.code === 'MES_INCOMPLETO') {
+    const { hasTeams, hasSchedule } = info.details || {};
+    if (!hasTeams && !hasSchedule) {
+      return 'Todavía falta generar los equipos y el horario de este mes.';
+    }
+    if (!hasTeams) {
+      return 'Todavía falta generar los equipos de este mes.';
+    }
+    if (!hasSchedule) {
+      return 'Todavía falta generar el horario de este mes.';
+    }
   }
   return info.message;
 }
@@ -181,8 +201,53 @@ export function EventsManager() {
 
   const monthFinalized = selectedMonth?.status === 'FINALIZED';
 
+  // Grupo nuevo de acciones (agregar/cancelar/eliminar evento, uniforme por
+  // turno): se deshabilita solo cuando el mes finalizado ya pasó, no cuando
+  // está finalizado pero es el mes actual o uno futuro. El resto de las
+  // acciones (generar/regenerar horario, bloquear/reasignar, "Editar
+  // evento" completo) sigue atado únicamente a `monthFinalized`, sin
+  // cambios. Ver `docs/architecture/phase4c-post-publish-edits-contract.md` §0/§8.
+  const monthIsPast =
+    monthFinalized && Boolean(selectedMonth) && !isMonthCurrentOrFuture(selectedMonth.year, selectedMonth.month);
+  const eventActionsDisabled = monthIsPast;
+
   function handleMonthChange(id) {
     setSelectedMonthId(id);
+  }
+
+  // ---- Finalizar mes (publica el mes en la página pública; irreversible en esta fase) ----
+  const [finalizeOpen, setFinalizeOpen] = useState(false);
+  const [finalizeLoading, setFinalizeLoading] = useState(false);
+
+  // Mismas dos condiciones que exige el servidor (`MES_INCOMPLETO`), anticipadas en el
+  // cliente para no depender de un viaje al servidor para saber si el botón debe estar
+  // habilitado. `teamsLoading`/`scheduleLoading` también deshabilitan: mientras cargan,
+  // `hasRegularTeams`/`slots` todavía no reflejan el estado real del mes.
+  const finalizeDisabledReason = monthFinalized
+    ? 'Este mes ya está finalizado.'
+    : teamsLoading || scheduleLoading
+      ? 'Cargando la información del mes...'
+      : !hasRegularTeams && slots.length === 0
+        ? 'Todavía falta generar los equipos y el horario de este mes.'
+        : !hasRegularTeams
+          ? 'Todavía falta generar los equipos de este mes.'
+          : slots.length === 0
+            ? 'Todavía falta generar el horario de este mes.'
+            : null;
+
+  async function handleFinalizeConfirm() {
+    if (!selectedMonthId) return;
+    setFinalizeLoading(true);
+    try {
+      await finalizeMonth(selectedMonthId);
+      showSuccess('Se finalizó el mes: ya está visible en la página pública.');
+      setFinalizeOpen(false);
+      await fetchMonths();
+    } catch (err) {
+      showError(describeFinalizeError(describeApiError(err)));
+    } finally {
+      setFinalizeLoading(false);
+    }
   }
 
   // ---- Uniformes activos (para el selector de uniforme de cada turno y del evento) ----
@@ -263,14 +328,21 @@ export function EventsManager() {
 
   // ---- Asignar/cambiar el uniforme de un turno puntual ----
   // No hay endpoint de "asignar a una fecha completa" en el backend: si el
-  // turno es FIXED, se sincroniza a mano llamando updateSlotUniform para
-  // cada ServiceSlot FIXED que comparta la misma fecha (a lo sumo 2, ej.
-  // miércoles 17:00/19:00), en paralelo con Promise.allSettled (mismo
-  // patrón de acciones en lote que ya usa PeopleManager).
+  // turno es FIXED y el mes todavía está en borrador, se sincroniza a mano
+  // llamando updateSlotUniform para cada ServiceSlot FIXED que comparta la
+  // misma fecha (a lo sumo 2, ej. miércoles 17:00/19:00), en paralelo con
+  // Promise.allSettled (mismo patrón de acciones en lote que ya usa
+  // PeopleManager). Una vez que el mes está FINALIZED (aunque sea actual/
+  // futuro y por lo tanto editable), esa sincronización se desactiva a
+  // propósito: cambiar el uniforme de un turno ya publicado afecta
+  // únicamente a ese turno puntual, nunca a su hermano del mismo día
+  // (pedido explícito del usuario). Ver
+  // `docs/architecture/phase4c-post-publish-edits-contract.md` §4/§8.
   const [uniformBusySlotIds, setUniformBusySlotIds] = useState(() => new Set());
 
   async function handleSlotUniformChange(slot, uniformId) {
-    const targets = slot.slotType === 'FIXED' ? slots.filter((s) => s.slotType === 'FIXED' && s.date === slot.date) : [slot];
+    const shouldSyncSiblingDay = slot.slotType === 'FIXED' && !monthFinalized;
+    const targets = shouldSyncSiblingDay ? slots.filter((s) => s.slotType === 'FIXED' && s.date === slot.date) : [slot];
 
     setUniformBusySlotIds(new Set(targets.map((t) => t.id)));
     const results = await Promise.allSettled(targets.map((t) => updateSlotUniform(t.id, uniformId)));
@@ -283,7 +355,7 @@ export function EventsManager() {
     if (failures.length === 0) {
       showSuccess(targets.length > 1 ? 'Se actualizó el uniforme de ambos turnos de este día.' : 'Se actualizó el uniforme del turno.');
     } else if (failures.length === targets.length) {
-      showError(`No se pudo actualizar el uniforme (${describeApiError(failures[0].result.reason).message}).`);
+      showError(`No se pudo actualizar el uniforme (${describeEventError(describeApiError(failures[0].result.reason))}).`);
     } else {
       const failedLabels = failures.map(({ target }) => formatTimeLabel(target.startTime)).join(', ');
       showWarning(`Se actualizó el uniforme, pero el turno de las ${failedLabels} no se pudo actualizar. Intentá de nuevo.`);
@@ -304,9 +376,29 @@ export function EventsManager() {
       setDeleteTarget(null);
       refetchSchedule();
     } catch (err) {
-      showError(describeApiError(err).message);
+      showError(describeEventError(describeApiError(err)));
     } finally {
       setDeleteLoading(false);
+    }
+  }
+
+  // ---- Cancelar evento extraordinario (distinto de eliminar: el evento
+  // queda registrado y visible, marcado como cancelado) ----
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelLoading, setCancelLoading] = useState(false);
+
+  async function handleCancelConfirm() {
+    if (!cancelTarget) return;
+    setCancelLoading(true);
+    try {
+      await cancelEvent(cancelTarget.id);
+      showSuccess('Se canceló el evento.');
+      setCancelTarget(null);
+      refetchSchedule();
+    } catch (err) {
+      showError(describeEventError(describeApiError(err)));
+    } finally {
+      setCancelLoading(false);
     }
   }
 
@@ -438,9 +530,32 @@ export function EventsManager() {
 
           {monthFinalized ? (
             <p className="events-manager__finalized-notice" role="status">
-              Este mes está finalizado: ya no admite cambios de horario.
+              {monthIsPast
+                ? 'Este mes ya pasó y está finalizado: no admite ningún cambio.'
+                : 'Este mes está finalizado: no se puede volver a sortear equipos, regenerar el horario, bloquear/reasignar turnos ni editar eventos por completo. Todavía podés agregar, cancelar o eliminar eventos extraordinarios, y cambiar el uniforme de un turno puntual.'}
             </p>
           ) : null}
+
+          <div className="events-manager__finalize-bar">
+            <div>
+              <p className="events-manager__finalize-summary">
+                {monthFinalized
+                  ? 'Este mes está publicado en la página pública.'
+                  : 'Cuando los equipos y el horario estén listos, finaliza el mes para publicarlo.'}
+              </p>
+              {!monthFinalized && finalizeDisabledReason ? (
+                <p className="events-manager__finalize-reason">{finalizeDisabledReason}</p>
+              ) : null}
+            </div>
+            <Button
+              variant="primary"
+              onClick={() => setFinalizeOpen(true)}
+              disabled={Boolean(finalizeDisabledReason)}
+              title={finalizeDisabledReason || undefined}
+            >
+              Finalizar mes
+            </Button>
+          </div>
 
           {uniformsError ? (
             <ErrorMessage
@@ -494,7 +609,7 @@ export function EventsManager() {
                       {slots.length} {slots.length === 1 ? 'turno generado' : 'turnos generados'} para este mes.
                     </p>
                     <div className="events-manager__action-bar-buttons">
-                      <Button onClick={openCreateEventModal} variant="secondary" disabled={monthFinalized}>
+                      <Button onClick={openCreateEventModal} variant="secondary" disabled={eventActionsDisabled}>
                         Agregar evento extraordinario
                       </Button>
                       <Button
@@ -538,12 +653,14 @@ export function EventsManager() {
                             regularTeams={regularTeamOptions}
                             uniforms={activeUniforms}
                             disabled={monthFinalized}
+                            eventActionsDisabled={eventActionsDisabled}
                             busyAssignmentId={busyAssignmentId}
                             uniformBusy={uniformBusySlotIds.has(slot.id)}
                             onToggleLock={handleToggleLock}
                             onReassign={handleReassign}
                             onUniformChange={handleSlotUniformChange}
                             onDeleteEvent={(s) => setDeleteTarget(s)}
+                            onCancelEvent={(s) => setCancelTarget(s)}
                             onEditEvent={openEditEventModal}
                           />
                         )}
@@ -560,6 +677,20 @@ export function EventsManager() {
           ) : null}
         </>
       ) : null}
+
+      {/* Finalizar mes: publica el mes en la página pública. Irreversible en esta fase (no hay "des-finalizar"). */}
+      <ConfirmDialog
+        open={finalizeOpen}
+        onClose={() => setFinalizeOpen(false)}
+        onConfirm={handleFinalizeConfirm}
+        title="Finalizar el mes"
+        description={`Se publicará ${
+          selectedMonth ? formatMonthYear(selectedMonth.year, selectedMonth.month) : 'este mes'
+        } en la página pública, con los equipos y el horario tal como están ahora mismo. A partir de ese momento el mes queda bloqueado: no vas a poder volver a sortear equipos, editar el horario ni agregar o quitar eventos. Hoy no existe una forma de deshacer esta acción.`}
+        confirmLabel="Sí, finalizar mes"
+        variant="danger"
+        loading={finalizeLoading}
+      />
 
       {/* Regenerar horario: solo turnos fijos y Servicio de jóvenes, los eventos extraordinarios se conservan */}
       <ConfirmDialog
@@ -587,6 +718,23 @@ export function EventsManager() {
         confirmLabel="Sí, eliminar"
         variant="danger"
         loading={deleteLoading}
+      />
+
+      {/* Cancelar evento extraordinario: a diferencia de eliminar, el evento queda
+          registrado y visible, marcado como cancelado. No hay forma de "descancelarlo". */}
+      <ConfirmDialog
+        open={Boolean(cancelTarget)}
+        onClose={() => setCancelTarget(null)}
+        onConfirm={handleCancelConfirm}
+        title="Cancelar evento"
+        description={
+          cancelTarget
+            ? `Se marcará "${cancelTarget.title}" del ${formatCivilDate(cancelTarget.date)} como cancelado. El evento queda registrado y visible (ya no necesita equipo asignado). Hoy no existe una forma de deshacer esto: si te equivocás, hay que crear un evento nuevo.`
+            : ''
+        }
+        confirmLabel="Sí, cancelar evento"
+        variant="danger"
+        loading={cancelLoading}
       />
 
       {/* Nuevo evento / Editar evento extraordinario (mismo formulario compartido) */}
