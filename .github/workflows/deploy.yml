@@ -53,6 +53,13 @@ jobs:
       # igual que va a pasar en producción -- nunca `prisma db push`.
       - run: npx prisma migrate deploy
 
+      # Los tests hacen login contra un AdminUser real (ADMIN_USERNAME/
+      # ADMIN_PASSWORD) en vez de crear uno propio -- sin sembrarlo acá,
+      # el Postgres nuevo del job no tiene ningún admin y todo lo que
+      # requiere auth cae en cascada con 401 (confirmado reproduciendo el
+      # primer fallo real del pipeline, 2026-08-11).
+      - run: node prisma/seed.js
+
       - run: npm test
 
   test-frontend:
