@@ -25,11 +25,16 @@ export function cacheKeyFor(year, month) {
   return `schedule:${year}:${month}`;
 }
 
+// TTL de defensa en profundidad: un mes FINALIZED es inmutable por diseño
+// (contrato §2) y la invalidación explícita (invalidateByPrefix("schedule:"))
+// sigue siendo el mecanismo principal. El TTL solo acota a 60s la ventana de
+// inconsistencia si la app llega a correr en más de un proceso (ej. Passenger
+// con varios workers) y una invalidación disparada en un proceso no llega a
+// los demás, que seguirían sirviendo el payload viejo indefinidamente sin él.
+const PUBLIC_CACHE_TTL_MS = 60_000;
+
 /**
  * Arma el payload público a partir de un MonthCycle ya confirmado FINALIZED.
- * Cacheado sin TTL bajo `schedule:${year}:${month}` -- un mes FINALIZED es
- * inmutable por diseño (ver contrato §2), así que no hace falta expiración;
- * la única invalidación es explícita, vía invalidateByPrefix("schedule:").
  *
  * @param {{ id: string, year: number, month: number, finalizedAt: Date }} monthCycle
  */
@@ -61,7 +66,7 @@ export async function buildPublicPayload(monthCycle) {
     slots: slots.map(serializeSlot),
   };
 
-  setCached(cacheKey, payload);
+  setCached(cacheKey, payload, PUBLIC_CACHE_TTL_MS);
   return payload;
 }
 

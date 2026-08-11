@@ -12,6 +12,11 @@ import { errorHandler } from "./middleware/errorHandler.js";
 export function createApp() {
   const app = express();
 
+  // Detrás de un proxy inverso (hosting compartido/PaaS) sin esto
+  // express-rate-limit no ve la IP real del cliente y trata a todos los
+  // visitantes como si vinieran de la misma IP.
+  app.set("trust proxy", 1);
+
   app.use(helmet());
   app.use(
     cors({
