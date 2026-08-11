@@ -1,0 +1,167 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  # Rutas reales del hosting (no son secretas -- ver docs/deployment/cpanel-deployment-plan.md §8).
+  APP_ROOT: nodeapps/equipos-api
+  FRONTEND_DOCROOT: apps/mindanza/app
+  NODE_SELECTOR_VERSION: 24
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: api_ejercicio
+          POSTGRES_PASSWORD: ci_password
+          POSTGRES_DB: api_ejercicio
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U api_ejercicio"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://api_ejercicio:ci_password@localhost:5432/api_ejercicio?schema=public
+      JWT_SECRET: ci_only_jwt_secret_not_used_in_prod_1234567890
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: ci_only_admin_password
+      CLIENT_ORIGIN: http://localhost:5173
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - run: npm ci
+
+      # Valida las migraciones versionadas reales contra un Postgres real,
+      # igual que va a pasar en producción -- nunca `prisma db push`.
+      - run: npx prisma migrate deploy
+
+      - run: npm test
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test -- --run
+
+      # client/.env.production ya está comiteado (no es secreto, ver
+      # docs/deployment/cpanel-deployment-plan.md §5.2) -- `vite build` lo
+      # toma solo, sin variables extra.
+      - run: npm run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: client/dist
+          retention-days: 1
+
+  deploy:
+    needs: [test-backend, test-frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: client/dist
+
+      - name: Configurar SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.CPANEL_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ secrets.CPANEL_SSH_PORT }}" "${{ secrets.CPANEL_SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Subir frontend (estático)
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p ${{ secrets.CPANEL_SSH_PORT }}" \
+            client/dist/ \
+            "${{ secrets.CPANEL_SSH_USER }}@${{ secrets.CPANEL_SSH_HOST }}:${{ env.FRONTEND_DOCROOT }}/"
+
+      - name: Subir backend (código)
+        run: |
+          rsync -az --delete \
+            --exclude=node_modules --exclude=.git --exclude=.env --exclude=tests \
+            --exclude=tmp --exclude=public \
+            -e "ssh -i ~/.ssh/deploy_key -p ${{ secrets.CPANEL_SSH_PORT }}" \
+            server/ \
+            "${{ secrets.CPANEL_SSH_USER }}@${{ secrets.CPANEL_SSH_HOST }}:${{ env.APP_ROOT }}/"
+
+      - name: Instalar dependencias y generar cliente Prisma
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "${{ secrets.CPANEL_SSH_PORT }}" \
+            "${{ secrets.CPANEL_SSH_USER }}@${{ secrets.CPANEL_SSH_HOST }}" '
+            set -e
+            source "$HOME/nodevenv/${{ env.APP_ROOT }}/${{ env.NODE_SELECTOR_VERSION }}/bin/activate"
+            cd "$HOME/${{ env.APP_ROOT }}"
+            npm install --ignore-scripts
+            npx prisma generate
+          '
+
+      - name: Migrar base de datos
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "${{ secrets.CPANEL_SSH_PORT }}" \
+            "${{ secrets.CPANEL_SSH_USER }}@${{ secrets.CPANEL_SSH_HOST }}" '
+            set -e
+            source "$HOME/nodevenv/${{ env.APP_ROOT }}/${{ env.NODE_SELECTOR_VERSION }}/bin/activate"
+            cd "$HOME/${{ env.APP_ROOT }}"
+            npm run deploy:migrate
+          '
+          # Si este paso falla, el job se corta ACÁ -- nunca se llega al
+          # restart. El proceso viejo sigue sirviendo con código y schema
+          # viejos, consistentes entre sí (ver plan §3.3).
+
+      - name: Reiniciar la app (solo si migró bien)
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "${{ secrets.CPANEL_SSH_PORT }}" \
+            "${{ secrets.CPANEL_SSH_USER }}@${{ secrets.CPANEL_SSH_HOST }}" \
+            "cloudlinux-selector restart --json --interpreter nodejs --user ${{ secrets.CPANEL_SSH_USER }} --app-root ${{ env.APP_ROOT }}"
+
+      - name: Smoke test
+        run: |
+          for i in $(seq 1 15); do
+            code=$(curl -s -o /tmp/health.json -w "%{http_code}" --max-time 8 https://server.mindanza.lluviasdebendiciones.com/health || true)
+            if [ "$code" = "200" ]; then
+              echo "OK: $(cat /tmp/health.json)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Smoke test falló. Última respuesta:"
+          cat /tmp/health.json 2>/dev/null || echo "(sin respuesta)"
+          exit 1
