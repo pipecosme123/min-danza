@@ -6,7 +6,14 @@
 // ---------------------------------------------------------------------------
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // El proceso corre bajo Phusion Passenger (cPanel/CloudLinux) en un runtime
+  // distinto ("debian-openssl-1.0.x") al que ve una sesión SSH interactiva de
+  // la misma cuenta ("debian-openssl-1.1.x", probablemente por CageFS) --
+  // confirmado en el primer deploy real. Se listan ambos target explícitos
+  // además de "native" para no depender de la autodetección en ninguno de
+  // los dos contextos.
+  binaryTargets = ["native", "debian-openssl-1.0.x", "debian-openssl-1.1.x"]
 }
 
 datasource db {

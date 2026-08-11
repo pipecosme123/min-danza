@@ -1,7 +1,7 @@
 # Plan de despliegue en cPanel (hosting compartido)
 
-**Estado:** propuesto, pendiente de confirmar algunos datos del hosting (§5) y de ejecutar. No implementado todavía.
-**Fecha:** 2026-08-10
+**Estado:** **backend y frontend desplegados y funcionando en producción** (verificado 2026-08-11, deploy manual por SSH — ver hallazgos reales en §8). Pendiente: pipeline de GitHub Actions (§3) para automatizar despliegues futuros — hoy los cambios se suben a mano con el procedimiento de §8.
+**Fecha:** 2026-08-10 (última actualización 2026-08-11)
 **Reemplaza a:** `docs/deployment/production-deployment-plan.md` (plan para Railway, descartado — el usuario decidió usar el cPanel al que ya tiene acceso).
 
 Decisiones ya confirmadas con el usuario:
@@ -9,7 +9,7 @@ Decisiones ya confirmadas con el usuario:
 2. El repositorio ya está en GitHub.
 3. Prioridad explícita: que los despliegues con cambios/actualizaciones futuras sean **lo más automatizados posible** desde `git push`.
 4. **SSH confirmado disponible** en el plan de hosting → el pipeline completamente automatizado (§3.1, GitHub Actions → SSH) es la ruta a construir, sin necesidad del runbook manual de respaldo.
-5. **Topología de dominios confirmada**: la página pública vive en un **subdominio dedicado** (ej. `app.midominio.com`), no en la raíz del dominio — el dominio raíz (`midominio.com`) queda libre para lo que ya aloja o vaya a alojar, sin tocar. El backend va en otro subdominio (`api.midominio.com`). Todo el documento usa `app.midominio.com`/`api.midominio.com` como placeholders de este esquema; reemplazar por los nombres reales al ejecutar.
+5. **Dominio y subdominios reales confirmados**: dominio raíz `lluviasdebendiciones.com` (queda libre para lo que ya aloja o vaya a alojar, sin tocar). Frontend (página pública/admin) en `mindanza.lluviasdebendiciones.com`. Backend (API) en `server.mindanza.lluviasdebendiciones.com`, un subdominio de dos niveles.
 
 Este documento fue elaborado por dos agentes especializados (arquitectura y DevOps) y consolidado acá. Con SSH ya confirmado, el resto de los puntos de la sección 4 (checklist) siguen pendientes de verificar con el hosting antes de construir el pipeline, pero ya no cambian la estrategia principal.
 
@@ -17,7 +17,7 @@ Este documento fue elaborado por dos agentes especializados (arquitectura y DevO
 
 ## 0. Resumen ejecutivo
 
-- **Topología**: dos vhosts — frontend estático (`client/dist/`) servido directo por Apache/LiteSpeed en el dominio raíz (o un subdominio), y backend Express bajo Passenger en un subdominio dedicado (ej. `api.midominio.com`), con el código del backend **fuera** del document root por seguridad.
+- **Topología**: dos vhosts — frontend estático (`client/dist/`) servido directo por Apache/LiteSpeed en `mindanza.lluviasdebendiciones.com`, y backend Express bajo Passenger en `server.mindanza.lluviasdebendiciones.com`, con el código del backend **fuera** del document root por seguridad.
 - **Passenger no tiene "start command"** como Railway: solo corre un *startup file*. Las migraciones de Prisma y el restart de la app pasan a ser pasos explícitos del pipeline, no automáticos al arrancar.
 - **Automatización recomendada**: GitHub Actions con gate de tests → build → despliegue por SSH (rsync + comandos remotos) → migración → restart → smoke test — **si el plan de hosting tiene SSH**. El frontend se puede automatizar igual incluso sin SSH (FTP/SFTP alcanza, porque es solo archivos estáticos). El backend, sin SSH, cae a un runbook semi-manual documentado en §4.4.
 - **Cambios de código necesarios**: 6 cambios quirúrgicos, ninguno toca reglas de negocio (tabla completa en §2).
@@ -30,33 +30,33 @@ Este documento fue elaborado por dos agentes especializados (arquitectura y DevO
 ### 1.1 Topología (recomendada)
 
 ```
-                    HTTPS (AutoSSL, un certificado por vhost)
-                              │
-        ┌─────────────────────┴─────────────────────┐
-        ▼                                             ▼
- app.midominio.com                          api.midominio.com
- (docroot del subdominio)                   (vhost solo con el .htaccess
- contenido de client/dist/,                  de Passenger; código NO vive acá)
- servido por Apache/LiteSpeed                        │
- SIN proceso Node                                     ▼
-        │                                    Phusion Passenger
-        │ fetch a VITE_API_URL (CORS)                 │
-        └───────────────────────────────────▶ nodeapps/equipos-api/
-                                               (Application Root,
-                                                fuera del docroot)
-                                                       │
-                                                       ▼
-                                              PostgreSQL (localhost,
-                                              PostgreSQL Databases de cPanel)
+                          HTTPS (AutoSSL, un certificado por vhost)
+                                          │
+              ┌───────────────────────────┴───────────────────────────┐
+              ▼                                                       ▼
+ mindanza.lluviasdebendiciones.com               server.mindanza.lluviasdebendiciones.com
+ (docroot del subdominio,                        (docroot solo con el .htaccess de
+ contenido de client/dist/,                        Passenger; código NO vive acá)
+ servido por Apache/LiteSpeed,                                        │
+ SIN proceso Node)                                                    ▼
+              │                                              Phusion Passenger
+              │ fetch a VITE_API_URL (CORS)                          │
+              └────────────────────────────────────────▶ nodeapps/equipos-api/
+                                                           (Application Root,
+                                                            fuera del docroot)
+                                                                       │
+                                                                       ▼
+                                                          PostgreSQL (localhost,
+                                                          PostgreSQL Databases de cPanel)
 ```
 
 Estructura de carpetas sugerida en la cuenta de cPanel:
 
 ```
 /home/user/
-├── app.midominio.com/            <- docroot del subdominio de la app = contenido de client/dist/
+├── mindanza.lluviasdebendiciones.com/            <- docroot del subdominio de la app = contenido de client/dist/
 │   ├── index.html  assets/  .htaccess
-├── api.midominio.com/           <- docroot del subdominio, SOLO el .htaccess de Passenger
+├── server.mindanza.lluviasdebendiciones.com/           <- docroot del subdominio, SOLO el .htaccess de Passenger
 │   └── .htaccess                (generado por cPanel, no tocar salvo el redirect a HTTPS)
 └── nodeapps/equipos-api/        <- Application Root del backend (NO web-accessible)
     ├── app.cjs                  <- startup file (shim ESM→CJS, ver §1.3)
@@ -64,9 +64,9 @@ Estructura de carpetas sugerida en la cuenta de cPanel:
     └── tmp/restart.txt
 ```
 
-**Regla no negociable**: el *Application Root* del backend debe estar fuera del document root del subdominio. Si coincidieran, `https://api.midominio.com/.env`, `/package.json` y `/prisma/schema.prisma` quedarían descargables por cualquiera — Apache sirve archivos existentes antes de pasarle la request a Passenger.
+**Regla no negociable**: el *Application Root* del backend debe estar fuera del document root del subdominio. Si coincidieran, `https://server.mindanza.lluviasdebendiciones.com/.env`, `/package.json` y `/prisma/schema.prisma` quedarían descargables por cualquiera — Apache sirve archivos existentes antes de pasarle la request a Passenger.
 
-Se descartaron dos alternativas: montar la API bajo `app.midominio.com/api` (mismo origen, sin CORS, pero Passenger no siempre estripa el base URI de forma consistente para apps Node, y `/health` se movería de lugar rompiendo el monitoreo — riesgo de puesta en marcha que no compensa la ventaja) y servir el frontend desde el mismo proceso Node con `express.static` (gasta recursos del plan compartido en algo que Apache/LiteSpeed hace gratis, y requiere código nuevo).
+Se descartaron dos alternativas: montar la API bajo `mindanza.lluviasdebendiciones.com/api` (mismo origen, sin CORS, pero Passenger no siempre estripa el base URI de forma consistente para apps Node, y `/health` se movería de lugar rompiendo el monitoreo — riesgo de puesta en marcha que no compensa la ventaja) y servir el frontend desde el mismo proceso Node con `express.static` (gasta recursos del plan compartido en algo que Apache/LiteSpeed hace gratis, y requiere código nuevo).
 
 ### 1.2 Cómo funciona Passenger/Node.js Selector (lo no obvio)
 
@@ -104,7 +104,7 @@ Se descartaron dos alternativas: montar la API bajo `app.midominio.com/api` (mis
 | `DATABASE_URL` | Ver §1.4, con `connection_limit` | Se arma a mano, no la genera la plataforma |
 | `JWT_SECRET` | Nuevo, 64 hex (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`) | Sin símbolos — la UI de variables de cPanel puede tener problemas con `$`, comillas, espacios |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Reales de producción | Los lee `prisma/seed.js`, no la app en runtime |
-| `CLIENT_ORIGIN` | `https://app.midominio.com` (exacto, con esquema, sin barra final) | `app.js` lo pasa literal a `cors()` |
+| `CLIENT_ORIGIN` | `https://mindanza.lluviasdebendiciones.com` (exacto, con esquema, sin barra final) | `app.js` lo pasa literal a `cors()` |
 | `APP_TIMEZONE` | `America/Bogota` (o la que corresponda) | Ver riesgo ICU en §1.6 |
 | `PORT` | Omitir | Passenger lo ignora; `config/env.js` ya tiene default `4000` |
 | `NODE_ENV` | `production` vía "Application mode" del panel | Ver trampa de `devDependencies` en §1.2 |
@@ -114,13 +114,13 @@ Se descartaron dos alternativas: montar la API bajo `app.midominio.com/api` (mis
 **Frontend** — `VITE_API_URL` se "hornea" en build time (`client/src/api/client.js`), y sin un dashboard tipo Railway que la inyecte, la fuente de verdad pasa a ser un archivo comiteado:
 ```
 # client/.env.production
-VITE_API_URL=https://api.midominio.com/api
+VITE_API_URL=https://server.mindanza.lluviasdebendiciones.com/api
 ```
 Verificado: el `.gitignore` raíz no matchea `.env.production` (solo `.env`/`.env.*.local`), así que se puede comitear sin conflicto — no es un secreto, es una URL pública, y comitearlo hace el build reproducible desde cualquier máquina o desde CI.
 
 ### 1.6 SSL
 
-AutoSSL (Let's Encrypt/Sectigo) emite por vhost, sin distinguir sitio estático de app Node — Apache/LiteSpeed termina TLS antes de pasarle la request a Passenger. Cubre `app.midominio.com` y `api.midominio.com` igual, siempre que el DNS de ambos ya apunte al servidor cuando corre AutoSSL. Forzar HTTPS con el redirect del `.htaccess` (§1.3) en el sitio estático, y un redirect equivalente en el vhost de la API sin borrar el bloque `PassengerAppRoot` generado por cPanel. Si `VITE_API_URL` quedara en `http://`, el navegador bloquea las llamadas por mixed content — está en el checklist post-deploy (§6).
+AutoSSL (Let's Encrypt/Sectigo) emite por vhost, sin distinguir sitio estático de app Node — Apache/LiteSpeed termina TLS antes de pasarle la request a Passenger. Cubre `mindanza.lluviasdebendiciones.com` y `server.mindanza.lluviasdebendiciones.com` igual, siempre que el DNS de ambos ya apunte al servidor cuando corre AutoSSL. Forzar HTTPS con el redirect del `.htaccess` (§1.3) en el sitio estático, y un redirect equivalente en el vhost de la API sin borrar el bloque `PassengerAppRoot` generado por cPanel. Si `VITE_API_URL` quedara en `http://`, el navegador bloquea las llamadas por mixed content — está en el checklist post-deploy (§6).
 
 ### 1.7 Riesgos específicos de shared hosting (para tener en cuenta, no bloqueantes hoy)
 
@@ -145,13 +145,13 @@ Todos quirúrgicos, ninguno toca reglas de negocio:
 | 1 | `server/src/app.js` | `app.set('trust proxy', 1)` antes de los middlewares | Rate limiting correcto detrás del proxy del hosting |
 | 2 | `server/app.cjs` (**nuevo**) | Shim CJS: `import('./src/index.js').catch(err => { console.error(err); process.exit(1); })` | Passenger usa `require()`, el proyecto es ESM — bloqueante, sin esto no arranca |
 | 3 | `server/package.json` | Mover `prisma` de `devDependencies` a `dependencies`; agregar scripts `postinstall: "prisma generate"`, `deploy:migrate: "prisma migrate deploy"`, `deploy:seed: "node prisma/seed.js"` | Con `NODE_ENV=production`, `npm install` omite `devDependencies` — sin esto no hay CLI de Prisma en el servidor |
-| 4 | `client/.env.production` (**nuevo, comiteado**) | `VITE_API_URL=https://api.midominio.com/api` | No hay dashboard que la inyecte en build time |
+| 4 | `client/.env.production` (**nuevo, comiteado**) | `VITE_API_URL=https://server.mindanza.lluviasdebendiciones.com/api` | No hay dashboard que la inyecte en build time |
 | 5 | `client/public/.htaccess` (**nuevo**) | Fallback SPA + redirect HTTPS + cache headers (contenido en §1.3) | Sin esto, rutas de `react-router-dom` dan 404 al refrescar |
 | 6 | `server/src/services/publicSchedule.service.js` (línea del `setCached` del caché público) | Agregar TTL de 60s | Defensa en profundidad ante Passenger corriendo más de un proceso — acota la ventana de inconsistencia sin tocar la invalidación explícita existente |
-| 7 | *(condicional)* `server/package.json` | `bcrypt` → `bcryptjs` | Solo si falla la compilación nativa en el primer `npm install` real |
-| 8 | *(condicional)* `server/prisma/schema.prisma` | `binaryTargets` explícitos | Solo si falla la autodetección del engine de Prisma |
+| 7 | *(condicional, no hizo falta)* `server/package.json` | `bcrypt` → `bcryptjs` | `bcrypt` compiló sin problemas en el primer `npm install` real (Node 24.18.0 del Selector) |
+| 8 | `server/prisma/schema.prisma` | `binaryTargets = ["native", "debian-openssl-1.0.x", "debian-openssl-1.1.x"]` | **Confirmado necesario en el primer deploy real** (2026-08-10): el proceso bajo Passenger ve runtime `debian-openssl-1.0.x`, distinto al `debian-openssl-1.1.x` que ve una sesión SSH interactiva de la misma cuenta (CageFS de CloudLinux aísla cada contexto de forma distinta) — sin esto, `/health` respondía `503 database: disconnected` con `PrismaClientInitializationError` en `stderr.log` |
 
-Los ítems 1-6 son diseño cerrado, listos para pasarle a `backend-developer`/`frontend-developer`. Los ítems 7-8 se deciden con el resultado del primer deploy real.
+Los ítems 1-6 y 8 son diseño cerrado, ya verificados contra el servidor real (ver §9 "Hallazgos del primer deploy real"). El ítem 7 no hizo falta.
 
 ---
 
@@ -159,7 +159,7 @@ Los ítems 1-6 son diseño cerrado, listos para pasarle a `backend-developer`/`f
 
 ### 3.1 Estrategia principal
 
-**Recomendada: GitHub Actions → SSH directo (rsync + comandos remotos)**, condicionada a que el plan de hosting tenga SSH (ver checklist §5, es la variable que decide todo el diseño).
+**Recomendada: GitHub Actions → SSH directo (rsync + comandos remotos)**. SSH confirmado disponible sin restricción de IP (§4, ítem 1) y usado con éxito en el primer deploy manual (§8) — esta es la ruta a construir.
 
 Se evaluó la función nativa "Git™ Version Control" de cPanel con `.cpanel.yml` como alternativa — se descarta como motor principal: si hay SSH para hacer `git push` a un repo alojado en el cPanel, ese mismo SSH permite correr los comandos de deploy directo desde Actions, sin la capa intermedia de `.cpanel.yml` (poco documentada, variable entre versiones de cPanel). Se conserva igual como **mecanismo manual de respaldo** (§3.6): tenerlo configurado en el panel permite al admin, en una emergencia, apretar "Update from Remote" + "Deploy HEAD Commit" sin laptop ni credenciales SSH a mano.
 
@@ -197,28 +197,36 @@ jobs:
       - subir client/dist/ al docroot estático (rsync-ssh o sftp)
       - subir server/ (sin node_modules, sin .git, EXCLUYENDO explícitamente
         .env con --exclude=.env) al Application Root del backend
-      - por SSH: activar el virtualenv del Node Selector && npm install
-        (dispara postinstall -> prisma generate; si falla, el job se corta acá)
+      - por SSH: activar el virtualenv del Node Selector && npm install --ignore-scripts
+        (--ignore-scripts es obligatorio en este host: el hook postinstall
+        corre con el cwd cambiado al lib del virtualenv, ver §8.1; si el
+        install falla, el job se corta acá)
+      - por SSH: npx prisma generate
+        (paso EXPLÍCITO, no delegado al postinstall — confirmado necesario en §8.1;
+        si falla, el job se corta acá)
       - por SSH: npm run deploy:migrate
         (si falla, el job se corta acá — nunca se llega al restart)
-      - por SSH: touch tmp/restart.txt
-        (solo si el paso anterior salió con código 0)
-      - smoke test: GET https://api.midominio.com/health, con reintentos
-        cortos (Passenger tarda unos segundos en levantar el proceso nuevo)
+      - por SSH: cloudlinux-selector restart --json --interpreter nodejs
+        --user <usuario> --app-root nodeapps/equipos-api
+        (NO touch tmp/restart.txt — confirmado insuficiente en este host, ver §8.2;
+        solo se ejecuta si el paso anterior salió con código 0)
+      - smoke test: GET https://server.mindanza.lluviasdebendiciones.com/health, con reintentos
+        cortos (el proceso tarda unos segundos en levantar tras el restart)
 ```
 
 `server/package.json` hoy no tiene ningún script de lint — no es bloqueante para este pipeline, pero es una tarea aparte a considerar.
 
 ### 3.3 Orden seguro de migraciones (punto crítico)
 
-Passenger no permite encadenar "migrar y arrancar" como hacía el comando de arranque de Railway. Orden obligatorio:
+Passenger no permite encadenar "migrar y arrancar" como hacía el comando de arranque de Railway. Orden obligatorio (ajustado tras el primer deploy real, §8):
 
-1. **Subir código nuevo** — no interrumpe el proceso Passenger corriendo actualmente (solo se recicla al tocar `restart.txt`), así que el proceso viejo sigue sirviendo tráfico con código y schema viejos, consistentes entre sí.
-2. **`npm install`** (con el `.env` de producción intacto) → dispara `postinstall: prisma generate`, regenerando el cliente para el schema nuevo, todavía sin aplicar.
-3. **`npm run deploy:migrate`** → aplica las migraciones pendientes contra la base real. `prisma migrate deploy` tiene su propio lock interno (`_prisma_migrations`) contra migraciones concurrentes; el `concurrency: group: deploy-production` del workflow es una segunda barrera.
-4. **Gate no negociable**: si el paso 3 falla, el job se corta ahí — nunca se llega al restart. El proceso viejo sigue corriendo sin downtime ni corrupción; el código nuevo queda en disco pero inerte hasta el próximo deploy exitoso; el fallo queda visible como ❌ en Actions.
-5. **Solo si el paso 3 fue exitoso**: `touch tmp/restart.txt` → Passenger recicla el proceso con código + cliente Prisma + schema ya alineados.
-6. **Smoke test** (`GET /health`) como confirmación final.
+1. **Subir código nuevo** — no interrumpe el proceso corriendo actualmente (solo se recicla al reiniciar explícitamente), así que el proceso viejo sigue sirviendo tráfico con código y schema viejos, consistentes entre sí.
+2. **`npm install --ignore-scripts`** (con el `.env` de producción intacto) — sin `--ignore-scripts`, el hook `postinstall` falla en este host (§8.1).
+3. **`npx prisma generate`** como paso explícito — regenera el cliente para el schema nuevo, todavía sin aplicar.
+4. **`npm run deploy:migrate`** → aplica las migraciones pendientes contra la base real. `prisma migrate deploy` tiene su propio lock interno (`_prisma_migrations`) contra migraciones concurrentes; el `concurrency: group: deploy-production` del workflow es una segunda barrera.
+5. **Gate no negociable**: si el paso 4 falla, el job se corta ahí — nunca se llega al restart. El proceso viejo sigue corriendo sin downtime ni corrupción; el código nuevo queda en disco pero inerte hasta el próximo deploy exitoso; el fallo queda visible como ❌ en Actions.
+6. **Solo si el paso 4 fue exitoso**: `cloudlinux-selector restart --json --interpreter nodejs --user <usuario> --app-root nodeapps/equipos-api` (§8.2) — recicla el proceso con código + cliente Prisma + schema ya alineados.
+7. **Smoke test** (`GET /health`) como confirmación final.
 
 Si el pipeline se corta a mitad de camino (ej. se cae la conexión SSH), el próximo deploy reintenta desde el paso 1 sin problema — rsync, `npm install` y `prisma migrate deploy` son todos idempotentes.
 
@@ -267,29 +275,29 @@ Documentado como runbook explícito, no como automatización disfrazada:
 
 Bloqueante — varias partes del diseño de arriba cambian según las respuestas:
 
-1. ~~¿El plan incluye SSH Access?~~ **Confirmado: sí.** Falta verificar el detalle: ¿permite agregar una llave pública sin restricción de IP de origen, o exige allowlisting? Los runners de GitHub Actions tienen IPs dinámicas — si el host exige IP fija, la estrategia principal (§3.1) queda bloqueada salvo runner autoalojado (fuera de alcance de este plan).
-2. **¿Hay Cron Jobs?** Habilita el escenario intermedio de §3.4 si SSH entrante está bloqueado. Confirmar intervalo mínimo permitido.
-3. **Límite de conexiones SSH concurrentes.**
-4. **¿`rsync` está disponible en el servidor vía SSH?** Si no, cae a `scp`/`sftp`.
-5. **Límite real de conexiones concurrentes de PostgreSQL del plan** — para fijar `connection_limit` con margen real, no un número arbitrario.
-6. **Qué hace exactamente el botón "Run JS script" (o equivalente) del Node.js Selector**: si corre `npm run <script>` arbitrario y si muestra código de salida/stdout/stderr — de esto depende si el fallback de §3.4 es viable sin SSH.
-7. **¿El SSH del panel permite conexiones salientes hacia GitHub?** (para Git Version Control como respaldo manual, §3.1, y para el modelo de Cron de §3.4).
+1. ~~¿El plan incluye SSH Access?~~ **Confirmado: sí, sin restricción de IP.** Se agregó una llave dedicada (`deploy-equipos-turnos`) vía "SSH Access" → "Manage SSH Keys" → "Import Key" y se conectó sin problema desde una IP residencial distinta a la del servidor — no hay allowlisting de IP de origen. La estrategia principal (§3.1) queda validada.
+2. **¿Hay Cron Jobs?** Sin confirmar todavía — no fue necesario para el primer deploy manual.
+3. **Límite de conexiones SSH concurrentes.** No encontrado en uso normal (conexiones secuenciales), no se probó en paralelo.
+4. ~~¿`rsync` está disponible en el servidor vía SSH?~~ **Confirmado: sí** (`/usr/bin/rsync`). La primera subida manual se hizo con `tar` sobre SSH porque la máquina local no tenía `rsync` instalado, pero el runner de GitHub Actions (Ubuntu) sí lo trae de fábrica, así que el pipeline puede usarlo del lado del servidor sin problema.
+5. **Límite real de conexiones concurrentes de PostgreSQL del plan** — `connection_limit=3` funcionó sin problema en el primer deploy, no se confirmó el máximo real del servidor.
+6. **Qué hace exactamente el botón "Run JS script" (o equivalente) del Node.js Selector** — no hizo falta probarlo, se usó SSH directo.
+7. **¿El SSH del panel permite conexiones salientes hacia GitHub?** Sin confirmar todavía.
 8. **Cuota de disco** — para decidir cuántos backups de "release anterior" retener sin arriesgar la cuota.
-9. **Versión de Node ofrecida por el Selector** — `server/package.json` declara `"node": ">=20"`; si el host solo ofrece ≤18, revisar compatibilidad de `bcrypt@6`, `express-rate-limit@8` y Prisma 6 antes de nada.
-10. **Apache vs LiteSpeed** — ambos honran `.htaccess` y `tmp/restart.txt`, pero logs y mensajes de error difieren.
-11. **¿Los backups automáticos de cPanel cubren PostgreSQL** o solo MySQL?
-12. **Confirmar que `.env` en el Application Root queda realmente fuera del docroot** en la instalación concreta del hoster — verificar con `curl https://api.midominio.com/.env` tras el primer deploy (debe dar 404).
-13. ~~¿Qué dominio va a la raíz?~~ **Confirmado: la página pública vive en un subdominio dedicado** (`app.midominio.com`), el dominio raíz queda libre. Falta solo definir los nombres reales de los dos subdominios a usar.
+9. ~~¿Versión de Node ofrecida por el Selector?~~ **Confirmado: hasta 24.18.0 disponible** (se usó esa). `bcrypt@6` compiló sin problema con esa versión.
+10. ~~¿Apache vs LiteSpeed?~~ **Confirmado: LiteSpeed** (header `server: LiteSpeed` / `x-turbo-charged-by: LiteSpeed`). Esto tiene una consecuencia real, no cosmética: **el restart de Passenger clásico (`tmp/restart.txt`) NO fue suficiente** para que LiteSpeed reconectara el proxy hacia el proceso Node tras el primer deploy — hizo falta `cloudlinux-selector restart --json --interpreter nodejs --user <usuario> --app-root <ruta-relativa>` (confirmado disponible en `/usr/sbin/cloudlinux-selector`, documentado en §9). El pipeline de CI/CD (§3) debe usar ese comando, no `touch tmp/restart.txt`.
+11. **¿Los backups automáticos de cPanel cubren PostgreSQL** o solo MySQL? Sin confirmar todavía.
+12. ~~¿`.env` en el Application Root queda fuera del docroot?~~ **Confirmado: sí**, `curl https://server.mindanza.lluviasdebendiciones.com/.env` responde **403** (más estricto incluso que el 404 esperado).
+13. ~~¿Qué dominio va a la raíz?~~ **Confirmado y resuelto.** Página pública: `mindanza.lluviasdebendiciones.com` (docroot real `/home/<usuario>/apps/mindanza/app`). Backend: `server.mindanza.lluviasdebendiciones.com` (docroot real `/home/<usuario>/apps/mindanza/server`, distinto del Application Root `/home/<usuario>/nodeapps/equipos-api` — cPanel asignó esas rutas de docroot en vez de las que se supuso originalmente en §1.1, ver §9).
 
 ---
 
 ## 5. Checklist post-deploy (probar en el sitio real)
 
-- [ ] `curl https://api.midominio.com/.env` responde 404 (Application Root no expuesto).
-- [ ] `GET https://api.midominio.com/health` responde `{"status":"ok","database":"connected"}`.
-- [ ] Página pública carga en `https://app.midominio.com` (esperado: "Todavía no hay un mes publicado" hasta finalizar el primer mes real).
-- [ ] Refrescar directo en una ruta de admin (ej. `/admin/eventos`) no da 404 (confirma el `.htaccess` SPA).
-- [ ] Login admin funciona con credenciales reales de producción.
+- [x] `curl https://server.mindanza.lluviasdebendiciones.com/.env` responde 403 (Application Root no expuesto).
+- [x] `GET https://server.mindanza.lluviasdebendiciones.com/health` responde `{"status":"ok","database":"connected"}`.
+- [x] Página pública carga en `https://mindanza.lluviasdebendiciones.com`.
+- [x] Refrescar directo en una ruta de admin (`/admin/eventos`) no da 404 (confirma el `.htaccess` SPA).
+- [x] Login admin funciona con credenciales reales de producción (`admin_beatriz`).
 - [ ] Crear una persona de prueba, importar un CSV de prueba.
 - [ ] Crear un mes, sortear equipos, generar horario, finalizar el mes; confirmar que la página pública lo muestra.
 - [ ] Verificar ICU/timezone con el one-liner de §1.7 y confirmar que el último domingo/sábado del mes calculan bien.
@@ -310,7 +318,50 @@ Bloqueante — varias partes del diseño de arriba cambian según las respuestas
 
 ---
 
-## 7. Fuera de alcance de este plan (a propósito)
+## 8. Hallazgos del primer deploy real (2026-08-10/11)
+
+El backend y el frontend quedaron desplegados manualmente por SSH (previo a construir el pipeline de GitHub Actions), lo que permitió verificar contra el servidor real varios supuestos del plan. Documentado acá para que el pipeline de CI/CD (§3) y cualquier futuro deploy manual usen el procedimiento correcto, no el asumido originalmente.
+
+### 8.1 `npm install` corre `postinstall` con el cwd equivocado
+
+Al correr `npm install` dentro del Application Root (con el virtualenv del Node Selector activado), el hook `postinstall: "prisma generate"` falla con `Could not find Prisma Schema` — el error de npm reporta `npm error path .../nodevenv/nodeapps/equipos-api/24/lib`, es decir, el lifecycle script corrió con el working directory cambiado al `lib` del virtualenv, no al Application Root, aunque las dependencias sí se instalan correctamente en el lugar esperado (confirmado: 198-232 paquetes, `@prisma/client` presente sin generar). Es reproducible (pasó dos veces seguidas).
+
+**Procedimiento correcto, en dos pasos separados en vez de confiar en `postinstall`:**
+```bash
+npm install --ignore-scripts
+npx prisma generate    # cwd correcto cuando se corre como comando suelto, no como hook
+```
+El script `postinstall` se deja en `package.json` (sirve para desarrollo local y otros entornos donde el hook sí funciona), pero el runbook/pipeline de este hosting específico **no debe depender de él** — el paso de `prisma generate` va explícito.
+
+### 8.2 El restart real es `cloudlinux-selector`, no `tmp/restart.txt`
+
+El servidor corre **LiteSpeed** (no Apache), confirmado por los headers `server: LiteSpeed` / `x-turbo-charged-by: LiteSpeed`. Tocar `tmp/restart.txt` en el Application Root (la convención clásica de Passenger que asumía §1.2) **no fue suficiente**: el código nuevo se sirvió recién después de reiniciar con la herramienta nativa de CloudLinux, disponible en `/usr/sbin/cloudlinux-selector`:
+
+```bash
+cloudlinux-selector restart --json --interpreter nodejs --user <usuario> --app-root <ruta-relativa-al-home>
+```
+
+Devuelve `{"result": "success", ...}` en JSON. Es el comando que el pipeline de GitHub Actions (§3.2/§3.5) debe ejecutar por SSH en el paso de restart, no `touch tmp/restart.txt`. (`cloudlinux-selector` también soporta `start`/`stop`/`destroy`/`run-script` con la misma sintaxis, útiles si hace falta diagnosticar en el futuro.)
+
+### 8.3 Los document roots reales no fueron los asumidos en §1.1
+
+cPanel asignó, al crear los subdominios:
+- Frontend (`mindanza.lluviasdebendiciones.com`): docroot `/home/<usuario>/apps/mindanza/app`.
+- Backend (`server.mindanza.lluviasdebendiciones.com`): docroot `/home/<usuario>/apps/mindanza/server`.
+
+(Verificable con `uapi DomainInfo single_domain_data domain=<subdominio>`.) Estas rutas son **distintas** del Application Root del backend (`/home/<usuario>/nodeapps/equipos-api`, configurado aparte en "Setup Node.js App"), así que la regla no negociable de §1.1 (código del backend fuera del docroot) se sigue cumpliendo — solo cambian los nombres de carpeta exactos, no la relación entre ellas. No hace falta ajustar el diseño, solo saber dónde mirar.
+
+### 8.4 `binaryTargets` de Prisma — sí hizo falta (ver §2, ítem 8)
+
+Confirmado el escenario que el plan marcaba como contingencia: el proceso bajo Passenger no encontraba el motor de Prisma (`PrismaClientInitializationError`, runtime `debian-openssl-1.0.x` esperado vs `debian-openssl-1.1.x` generado desde una sesión SSH interactiva de la misma cuenta). Se agregaron ambos targets explícitos en `schema.prisma` — una vez hecho eso y regenerado el cliente, `/health` pasó de `503 database: disconnected` a `200 database: connected` sin ningún otro cambio.
+
+### 8.5 SSH sin restricción de IP, `rsync` disponible en el servidor
+
+Ambos confirman que la estrategia principal de CI/CD (§3.1, GitHub Actions → SSH directo) es viable tal cual está diseñada, sin necesitar el fallback de Cron ni el runbook manual.
+
+---
+
+## 9. Fuera de alcance de este plan (a propósito)
 
 - **Dominio propio**: si aún no está decidido, se resuelve apuntando el DNS al hosting cPanel — el mecanismo es independiente de este plan.
 - **Alta disponibilidad / múltiples instancias del backend**: innecesario para el volumen de esta app; si algún día hiciera falta, primero hay que resolver el caché en memoria (ya mitigado con TTL en §2, ítem 6).
