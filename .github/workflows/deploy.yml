@@ -109,7 +109,10 @@ jobs:
       - name: Configurar SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.CPANEL_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          # CPANEL_SSH_PRIVATE_KEY está en base64: evita que saltos de línea o
+          # espacios se corrompan al pasar por el campo de texto de GitHub
+          # (causó "Permission denied" en el primer intento real, 2026-08-11).
+          echo "${{ secrets.CPANEL_SSH_PRIVATE_KEY }}" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -p "${{ secrets.CPANEL_SSH_PORT }}" "${{ secrets.CPANEL_SSH_HOST }}" >> ~/.ssh/known_hosts
 
