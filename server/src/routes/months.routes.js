@@ -10,7 +10,13 @@ import { Router } from "express";
 import { z } from "zod";
 import { validate } from "../middleware/validate.js";
 import { requireAuth } from "../middleware/auth.js";
-import { listMonthCycles, createMonthCycle, getMonthCycle, finalizeMonthCycle } from "../services/teamGeneration.service.js";
+import {
+  listMonthCycles,
+  createMonthCycle,
+  getMonthCycle,
+  finalizeMonthCycle,
+  deleteMonthCycle,
+} from "../services/teamGeneration.service.js";
 import { generateSchedule, getMonthSchedule } from "../services/scheduleGeneration.service.js";
 
 const router = Router();
@@ -90,6 +96,15 @@ router.post("/:id/finalize", validate({ params: idParamSchema }), async (req, re
   try {
     const month = await finalizeMonthCycle(req.params.id);
     res.json(month);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/:id", validate({ params: idParamSchema }), async (req, res, next) => {
+  try {
+    const result = await deleteMonthCycle(req.params.id);
+    res.json(result);
   } catch (err) {
     next(err);
   }

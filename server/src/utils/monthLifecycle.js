@@ -4,10 +4,13 @@
 // un turno), según si el mes ya pasó. Contrato cerrado:
 // docs/architecture/phase4c-post-publish-edits-contract.md §0 y §3.
 //
-// Usado por events.service.js (createEvent, deleteEvent, cancelEvent) y
-// slots.service.js (updateSlotUniform). NO lo uses en updateEvent (edición
-// completa) ni en ninguna otra acción de la tabla §0 que sigue bloqueada sin
-// excepción de fecha — esas siguen con el `assertDraft` de siempre.
+// Usado por events.service.js (createEvent, deleteEvent, cancelEvent),
+// slots.service.js (updateSlotUniform) y teamGeneration.service.js
+// (deleteMonthCycle, agregado 2026-08-22 -- eliminar el mes por completo
+// sigue el mismo criterio: DRAFT sin restricción, FINALIZED solo actual o
+// futuro). NO lo uses en updateEvent (edición completa) ni en ninguna otra
+// acción de la tabla §0 que sigue bloqueada sin excepción de fecha — esas
+// siguen con el `assertDraft` de siempre.
 
 import { ConflictError } from "./errors.js";
 import { currentCivilDate } from "./dates.js";

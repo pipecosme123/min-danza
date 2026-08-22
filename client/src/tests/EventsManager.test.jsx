@@ -14,6 +14,7 @@ import { ToastViewport } from "../components/ui/Toast.jsx";
 vi.mock("../api/months.js", () => ({
   getMonths: vi.fn(),
   getMonthTeams: vi.fn(),
+  deleteMonth: vi.fn(),
 }));
 
 vi.mock("../api/schedule.js", () => ({
@@ -32,7 +33,7 @@ vi.mock("../api/uniforms.js", () => ({
   getUniforms: vi.fn(),
 }));
 
-import { getMonths, getMonthTeams } from "../api/months.js";
+import { getMonths, getMonthTeams, deleteMonth } from "../api/months.js";
 import {
   generateSchedule,
   getMonthSchedule,
@@ -159,6 +160,7 @@ describe("EventsManager", () => {
   beforeEach(() => {
     getMonths.mockReset();
     getMonthTeams.mockReset();
+    deleteMonth.mockReset();
     generateSchedule.mockReset();
     getMonthSchedule.mockReset();
     createEvent.mockReset();
@@ -613,6 +615,64 @@ describe("EventsManager", () => {
 
     await waitFor(() =>
       expect(screen.getByText("Todavía falta generar el horario de este mes.")).toBeInTheDocument(),
+    );
+  });
+
+  it("«Eliminar mes» está habilitado en un mes DRAFT, pide confirmación y llama a deleteMonth", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(fullSchedule());
+    deleteMonth.mockResolvedValueOnce({ deleted: true });
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+    const deleteButton = screen.getByRole("button", { name: "Eliminar mes" });
+    expect(deleteButton).not.toBeDisabled();
+
+    await user.click(deleteButton);
+    expect(screen.getByRole("heading", { name: "Eliminar el mes" })).toBeInTheDocument();
+    expect(deleteMonth).not.toHaveBeenCalled();
+
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Sí, eliminar mes" }));
+
+    await waitFor(() => expect(deleteMonth).toHaveBeenCalledWith("month-1"));
+    await waitFor(() => expect(screen.getByText("Se eliminó el mes.")).toBeInTheDocument());
+  });
+
+  it("«Eliminar mes» está deshabilitado en un mes FINALIZED que ya pasó, con el motivo visible", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 8, 8)); // 8 de setiembre de 2026: sampleMonth() (agosto 2026) ya pasó.
+
+    getMonths.mockResolvedValue({
+      data: [sampleMonth({ status: "FINALIZED", finalizedAt: "2026-08-01T00:00:00.000Z" })],
+    });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(fullSchedule());
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Eliminar mes" })).toBeDisabled();
+  });
+
+  it("mapea MES_PASADO a un mensaje claro (eliminar mes)", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue(fullSchedule());
+    deleteMonth.mockRejectedValueOnce(
+      new ApiError("Conflicto.", { status: 409, details: { code: "MES_PASADO" } }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Eliminar mes" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Sí, eliminar mes" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Este mes ya pasó, no se puede eliminar.")).toBeInTheDocument(),
     );
   });
 

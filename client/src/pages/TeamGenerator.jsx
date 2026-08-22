@@ -189,6 +189,7 @@ export function TeamGenerator() {
   const [youthEnabled, setYouthEnabled] = useState(true);
   const [youthSize, setYouthSize] = useState(DEFAULT_YOUTH_SIZE);
   const [youthLeaderId, setYouthLeaderId] = useState('');
+  const [teamCountInput, setTeamCountInput] = useState('');
 
   const {
     data: youthPeopleData,
@@ -207,6 +208,7 @@ export function TeamGenerator() {
     setYouthEnabled(selectedMonth?.youthTeamEnabled ?? true);
     setYouthSize(String(selectedMonth?.youthTeamSize ?? DEFAULT_YOUTH_SIZE));
     setYouthLeaderId('');
+    setTeamCountInput(String(selectedMonth?.teamCount ?? 4));
     setGenerateModalOpen(true);
     loadYouthLeaderOptions();
   }
@@ -217,15 +219,19 @@ export function TeamGenerator() {
 
   const isResort = teams.length > 0;
   const youthSizeNumber = Number(youthSize);
+  const teamCountNumber = Number(teamCountInput);
+  const teamCountInvalid = !Number.isInteger(teamCountNumber) || teamCountNumber < 1 || teamCountNumber > 50;
   const youthFormInvalid = youthEnabled && (!youthLeaderId || !Number.isInteger(youthSizeNumber) || youthSizeNumber < 1);
+  const generateFormInvalid = teamCountInvalid || youthFormInvalid;
 
   async function submitGenerate(event) {
     event.preventDefault();
-    if (!effectiveMonthId || youthFormInvalid) return;
+    if (!effectiveMonthId || generateFormInvalid) return;
     setGenerateSubmitting(true);
     setGenerateError(null);
     try {
       const payload = {
+        teamCount: teamCountNumber,
         youthTeam: youthEnabled
           ? { enabled: true, size: youthSizeNumber, leaderPersonId: youthLeaderId }
           : { enabled: false },
@@ -235,6 +241,7 @@ export function TeamGenerator() {
       showSuccess(isResort ? 'Se volvieron a sortear los equipos del mes.' : 'Se sortearon los equipos del mes.');
       (result.warnings || []).forEach((warning) => showWarning(warning.message));
       setGenerateModalOpen(false);
+      await fetchMonths(); // el teamCount pudo haber cambiado; refresca el selector de mes
     } catch (err) {
       setGenerateError(describeApiError(err));
     } finally {
@@ -527,6 +534,21 @@ export function TeamGenerator() {
             </p>
           )}
 
+          <Field
+            label="Cantidad de equipos"
+            type="number"
+            required
+            min={1}
+            max={50}
+            hint={
+              isResort
+                ? 'Podés cambiar cuántos equipos formar en este re-sorteo.'
+                : 'El sistema reparte a las personas de forma equitativa entre esta cantidad de equipos.'
+            }
+            value={teamCountInput}
+            onChange={(event) => setTeamCountInput(event.target.value)}
+          />
+
           <Checkbox
             label="Habilitar equipo de jóvenes"
             hint="Además de los equipos regulares, arma un equipo aparte para el servicio de jóvenes con personas marcadas como «Joven»."
@@ -596,7 +618,7 @@ export function TeamGenerator() {
               type="submit"
               variant={isResort ? 'danger' : 'primary'}
               loading={generateSubmitting}
-              disabled={youthFormInvalid}
+              disabled={generateFormInvalid}
             >
               {isResort ? 'Sí, volver a sortear' : 'Confirmar sorteo'}
             </Button>

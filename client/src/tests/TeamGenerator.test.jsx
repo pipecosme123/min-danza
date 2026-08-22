@@ -224,6 +224,7 @@ describe("TeamGenerator", () => {
 
     await waitFor(() =>
       expect(generateTeams).toHaveBeenCalledWith("month-1", {
+        teamCount: 2,
         youthTeam: { enabled: true, size: 5, leaderPersonId: "p-5" },
       }),
     );
@@ -252,7 +253,7 @@ describe("TeamGenerator", () => {
     await user.click(within(dialog).getByRole("button", { name: "Confirmar sorteo" }));
 
     await waitFor(() =>
-      expect(generateTeams).toHaveBeenCalledWith("month-1", { youthTeam: { enabled: false } }),
+      expect(generateTeams).toHaveBeenCalledWith("month-1", { teamCount: 2, youthTeam: { enabled: false } }),
     );
   });
 
@@ -284,11 +285,41 @@ describe("TeamGenerator", () => {
 
     await waitFor(() =>
       expect(generateTeams).toHaveBeenCalledWith("month-1", {
+        teamCount: 2,
         youthTeam: { enabled: true, size: 10, leaderPersonId: "p-5" },
       }),
     );
     await waitFor(() => expect(screen.getByText("Es posible que se repita algún líder.")).toBeInTheDocument());
     expect(screen.getByText("Es posible que se repita alguien del equipo de jóvenes.")).toBeInTheDocument();
+  });
+
+  it("permite elegir de nuevo la cantidad de equipos al re-sortear (ajustado 2026-08-22)", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValueOnce(sampleTeams());
+    mockGetPeopleByFilter();
+    generateTeams.mockResolvedValueOnce({ teams: sampleTeams().teams, warnings: [] });
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Equipo 1")).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "Re-sortear equipos" }));
+    const dialog = screen.getByRole("dialog");
+
+    const teamCountField = within(dialog).getByLabelText(/^Cantidad de equipos/);
+    // Precargado con el teamCount que el mes ya tiene (sampleMonth().teamCount = 2).
+    expect(teamCountField).toHaveValue(2);
+
+    // Desmarca jóvenes para simplificar: el foco de este test es teamCount.
+    await user.click(within(dialog).getByRole("checkbox", { name: "Habilitar equipo de jóvenes" }));
+    fireEvent.change(teamCountField, { target: { value: "5" } });
+
+    await user.click(within(dialog).getByRole("button", { name: "Sí, volver a sortear" }));
+
+    await waitFor(() =>
+      expect(generateTeams).toHaveBeenCalledWith("month-1", { teamCount: 5, youthTeam: { enabled: false } }),
+    );
+    await waitFor(() => expect(getMonths).toHaveBeenCalledTimes(2)); // refresca el selector de mes tras cambiar teamCount
   });
 
   it("muestra un mensaje claro y accionable cuando el pool de instructores es insuficiente", async () => {
