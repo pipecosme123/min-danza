@@ -48,13 +48,16 @@ const CANONICAL_ALIASES = {
   ],
   notes: ["notas", "observaciones", "comentarios", "notes"],
   isJoven: ["joven", "jovenes", "jóvenes", "es joven"],
+  isAdultoMayor: ["adulto mayor", "adultos mayores", "es adulto mayor", "tercera edad"],
 };
 
 // P-ish (mismo mecanismo que CATEGORY_TABLE, pero sin error de fila): valores
-// que se reconocen como "sí" en la columna opcional "Joven". Cualquier otra
-// cosa (vacío, "no", "false", "0", texto libre) se interpreta como negativo —
-// nunca falla la fila por esto.
-const JOVEN_TRUE_VALUES = new Set(["SI", "TRUE", "1", "X"]);
+// que se reconocen como "sí" en las columnas opcionales "Joven"/"Adulto mayor".
+// Cualquier otra cosa (vacío, "no", "false", "0", texto libre) se interpreta
+// como negativo — nunca falla la fila por esto.
+const BOOLEAN_TRUE_VALUES = new Set(["SI", "TRUE", "1", "X"]);
+// Alias retenido por claridad en el resto del archivo (mismo Set).
+const JOVEN_TRUE_VALUES = BOOLEAN_TRUE_VALUES;
 
 // P5 — tabla CERRADA de valores aceptados en la columna de categoría.
 // Los alias en español ("Elegible líder", "Colaborador", etc.) se conservan
@@ -361,7 +364,12 @@ function validateDocumentCell(raw) {
 
 // Columna opcional "Joven": nunca falla la fila, solo mapea a boolean.
 function parseJovenCell(raw) {
-  return JOVEN_TRUE_VALUES.has(normalizeCellText(raw));
+  return BOOLEAN_TRUE_VALUES.has(normalizeCellText(raw));
+}
+
+// Columna opcional "Adulto mayor": mismo criterio que "Joven".
+function parseAdultoMayorCell(raw) {
+  return BOOLEAN_TRUE_VALUES.has(normalizeCellText(raw));
 }
 
 function validateNotesCell(raw) {
@@ -511,6 +519,33 @@ export async function importPeopleFromFile({ buffer, originalName }) {
       isJovenProvided = true;
     }
 
+    // Columna opcional "Adulto mayor": mismo criterio de "provided" que
+    // "Joven" arriba.
+    let isAdultoMayor = false;
+    let isAdultoMayorProvided = false;
+    if (assigned.isAdultoMayor !== undefined) {
+      const rawIsAdultoMayor = getCell(row, "isAdultoMayor") ?? "";
+      isAdultoMayor = parseAdultoMayorCell(rawIsAdultoMayor);
+      isAdultoMayorProvided = true;
+    }
+
+    // Conflicto en la misma fila (regla de negocio confirmada, ver
+    // keen-moseying-lake.md §2): si la fila trae AMBAS columnas en positivo,
+    // NO se rechaza la fila entera (se perdería nombre/categoría/documento
+    // válidos) -- se deja ambos flags en false para esta fila puntual y se
+    // agrega una nota al reporte (mismo mecanismo que `changes`), sin mover
+    // la fila a errors ni a skipped.
+    const rowNotes = [];
+    if (isJoven && isAdultoMayor) {
+      isJoven = false;
+      isAdultoMayor = false;
+      rowNotes.push({
+        code: "JOVEN_ADULTO_MAYOR_CONFLICTO_EN_FILA",
+        message:
+          "La fila marcaba 'Joven' y 'Adulto mayor' a la vez; son mutuamente excluyentes, así que ambos quedaron en false para esta persona.",
+      });
+    }
+
     const fullName = nameResult.value;
     const category = categoryResult.value;
 
@@ -541,7 +576,19 @@ export async function importPeopleFromFile({ buffer, originalName }) {
     }
     fileKeyMap.set(dedupKey, rowNumber);
 
-    validRows.push({ rowNumber, fullName, category, documentId, notes, notesProvided, isJoven, isJovenProvided });
+    validRows.push({
+      rowNumber,
+      fullName,
+      category,
+      documentId,
+      notes,
+      notesProvided,
+      isJoven,
+      isJovenProvided,
+      isAdultoMayor,
+      isAdultoMayorProvided,
+      rowNotes,
+    });
   }
 
   // ---- Pasada 2: resolver contra la base (P11) ----
@@ -589,6 +636,9 @@ export async function importPeopleFromFile({ buffer, originalName }) {
         if (row.isJovenProvided && row.isJoven !== existing.isJoven) {
           changes.isJoven = { from: existing.isJoven, to: row.isJoven };
         }
+        if (row.isAdultoMayorProvided && row.isAdultoMayor !== existing.isAdultoMayor) {
+          changes.isAdultoMayor = { from: existing.isAdultoMayor, to: row.isAdultoMayor };
+        }
 
         if (Object.keys(changes).length === 0) {
           skipped.push({
@@ -596,6 +646,7 @@ export async function importPeopleFromFile({ buffer, originalName }) {
             code: "SIN_CAMBIOS",
             personId: existing.id,
             message: "No hubo cambios respecto al registro existente.",
+            ...(row.rowNotes.length > 0 ? { notes: row.rowNotes } : {}),
           });
           continue;
         }
@@ -605,6 +656,7 @@ export async function importPeopleFromFile({ buffer, originalName }) {
         if (changes.category) updateData.category = row.category;
         if (changes.notes) updateData.notes = row.notes;
         if (changes.isJoven) updateData.isJoven = row.isJoven;
+        if (changes.isAdultoMayor) updateData.isAdultoMayor = row.isAdultoMayor;
 
         pendingOps.push({
           kind: "update",
@@ -612,12 +664,14 @@ export async function importPeopleFromFile({ buffer, originalName }) {
           personId: existing.id,
           reportedFullName: row.fullName ?? existing.fullName,
           changes,
+          rowNotes: row.rowNotes,
           execute: (tx) => tx.person.update({ where: { id: existing.id }, data: updateData, select: { id: true } }),
         });
       } else {
         pendingOps.push({
           kind: "create",
           rowNumber: row.rowNumber,
+          rowNotes: row.rowNotes,
           execute: (tx) =>
             tx.person.create({
               data: {
@@ -625,6 +679,7 @@ export async function importPeopleFromFile({ buffer, originalName }) {
                 documentId: row.documentId,
                 category: row.category,
                 isJoven: row.isJoven,
+                isAdultoMayor: row.isAdultoMayor,
                 notes: row.notes,
               },
               select: { id: true, fullName: true, category: true },
@@ -645,6 +700,7 @@ export async function importPeopleFromFile({ buffer, originalName }) {
       pendingOps.push({
         kind: "create",
         rowNumber: row.rowNumber,
+        rowNotes: row.rowNotes,
         execute: (tx) =>
           tx.person.create({
             data: {
@@ -652,6 +708,7 @@ export async function importPeopleFromFile({ buffer, originalName }) {
               documentId: null,
               category: row.category,
               isJoven: row.isJoven,
+              isAdultoMayor: row.isAdultoMayor,
               notes: row.notes,
             },
             select: { id: true, fullName: true, category: true },
@@ -682,9 +739,21 @@ export async function importPeopleFromFile({ buffer, originalName }) {
     results.forEach((record, idx) => {
       const op = pendingOps[idx];
       if (op.kind === "create") {
-        created.push({ row: op.rowNumber, personId: record.id, fullName: record.fullName, category: record.category });
+        created.push({
+          row: op.rowNumber,
+          personId: record.id,
+          fullName: record.fullName,
+          category: record.category,
+          ...(op.rowNotes?.length > 0 ? { notes: op.rowNotes } : {}),
+        });
       } else {
-        updated.push({ row: op.rowNumber, personId: op.personId, fullName: op.reportedFullName, changes: op.changes });
+        updated.push({
+          row: op.rowNumber,
+          personId: op.personId,
+          fullName: op.reportedFullName,
+          changes: op.changes,
+          ...(op.rowNotes?.length > 0 ? { notes: op.rowNotes } : {}),
+        });
       }
     });
   }

@@ -88,6 +88,10 @@ function describeFinalizeError(info) {
       return 'Todavía falta generar el horario de este mes.';
     }
   }
+  if (info.code === 'TURNOS_SIN_UNIFORME') {
+    const count = info.details?.slots?.length ?? 0;
+    return `Hay ${count} turno${count === 1 ? '' : 's'} sin uniforme asignado. Asigná el uniforme de cada turno antes de finalizar.`;
+  }
   return info.message;
 }
 
@@ -219,10 +223,15 @@ export function EventsManager() {
   const [finalizeOpen, setFinalizeOpen] = useState(false);
   const [finalizeLoading, setFinalizeLoading] = useState(false);
 
-  // Mismas dos condiciones que exige el servidor (`MES_INCOMPLETO`), anticipadas en el
-  // cliente para no depender de un viaje al servidor para saber si el botón debe estar
-  // habilitado. `teamsLoading`/`scheduleLoading` también deshabilitan: mientras cargan,
-  // `hasRegularTeams`/`slots` todavía no reflejan el estado real del mes.
+  // Turnos sin uniforme (excluidos los cancelados, que ya no lo necesitan) --
+  // misma condición que exige el servidor (TURNOS_SIN_UNIFORME, 2026-08-22).
+  const slotsWithoutUniform = slots.filter((s) => !s.uniform && !s.cancelledAt);
+
+  // Mismas condiciones que exige el servidor (`MES_INCOMPLETO`/`TURNOS_SIN_UNIFORME`),
+  // anticipadas en el cliente para no depender de un viaje al servidor para saber si
+  // el botón debe estar habilitado. `teamsLoading`/`scheduleLoading` también
+  // deshabilitan: mientras cargan, `hasRegularTeams`/`slots` todavía no reflejan el
+  // estado real del mes.
   const finalizeDisabledReason = monthFinalized
     ? 'Este mes ya está finalizado.'
     : teamsLoading || scheduleLoading
@@ -233,7 +242,9 @@ export function EventsManager() {
           ? 'Todavía falta generar los equipos de este mes.'
           : slots.length === 0
             ? 'Todavía falta generar el horario de este mes.'
-            : null;
+            : slotsWithoutUniform.length > 0
+              ? `Hay ${slotsWithoutUniform.length} turno${slotsWithoutUniform.length === 1 ? '' : 's'} sin uniforme asignado.`
+              : null;
 
   async function handleFinalizeConfirm() {
     if (!selectedMonthId) return;

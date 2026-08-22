@@ -3,15 +3,36 @@
 // Los routers (routes/schedule.routes.js) solo parsean/validan/serializan;
 // toda la lógica vive acá.
 //
-// La página pública muestra SOLO el mes finalizado más reciente (decisión
-// confirmada con el usuario, ver contrato §0) -- no hay historial ni
-// selector de meses anteriores.
+// La página pública muestra por defecto el mes finalizado "vigente" (GET
+// /latest: el mes civil actual si está publicado, si no el más reciente
+// hacia atrás -- NUNCA salta a un mes futuro ya finalizado por anticipado,
+// ajustado 2026-08-22), y además permite consultar meses FINALIZED
+// anteriores hasta PUBLIC_HISTORY_MONTHS de antigüedad (ajustado el
+// 2026-08-22, revierte la decisión original de Fase 5 de "sin historial")
+// vía GET /:year/:month y GET /history.
 
 import { prisma } from "../lib/prisma.js";
 import { NotFoundError } from "../utils/errors.js";
 import { getCached, setCached } from "../lib/cache.js";
+import { env } from "../config/env.js";
+import { currentCivilDate, monthsBetween } from "../utils/dates.js";
 import { TEAM_SELECT, serializeTeam } from "./teamGeneration.service.js";
 import { SLOT_SELECT, serializeSlot } from "./scheduleGeneration.service.js";
+
+// Ventana del historial público: hasta 12 meses hacia atrás desde la fecha
+// civil de hoy, inclusive (ej. hoy agosto 2026 -> permite hasta agosto 2025).
+// Aplica a GET /:year/:month y GET /history, NO a GET /latest (que siempre
+// muestra lo último publicado, sea cual sea su antigüedad). Ojo: el límite
+// es SOLO hacia atrás -- un mes actual o futuro (ej. finalizado
+// anticipadamente) nunca queda bloqueado por esta ventana, solo lo hacen los
+// meses demasiado viejos.
+const PUBLIC_HISTORY_MONTHS = 12;
+
+function isWithinHistoryWindow(year, month) {
+  const today = currentCivilDate(env.APP_TIMEZONE);
+  const monthsAgo = monthsBetween({ year, month }, today);
+  return monthsAgo <= PUBLIC_HISTORY_MONTHS;
+}
 
 // Mensaje único a propósito: la página pública nunca debe permitir distinguir
 // "el mes no existe" de "el mes existe pero sigue en DRAFT" (ver contrato §0).
@@ -75,6 +96,12 @@ export async function buildPublicPayload(monthCycle) {
  * @param {number} month
  */
 export async function getPublicScheduleFor(year, month) {
+  // Fuera de la ventana de 1 año: mismo 404 genérico que "no existe"/"DRAFT"
+  // -- nunca se distingue el motivo (regla de privacidad ya establecida).
+  if (!isWithinHistoryWindow(year, month)) {
+    throw new NotFoundError(PUBLIC_NOT_FOUND_MESSAGE, { code: "MES_NO_PUBLICADO" });
+  }
+
   const monthCycle = await prisma.monthCycle.findUnique({
     where: { year_month: { year, month } },
     select: { id: true, year: true, month: true, status: true, finalizedAt: true },
@@ -88,13 +115,37 @@ export async function getPublicScheduleFor(year, month) {
 }
 
 /**
- * Mes FINALIZED más reciente por (year desc, month desc). Esta búsqueda NO
- * se cachea (consulta liviana sobre una tabla chica); una vez resuelto cuál
- * mes es, delega en buildPublicPayload, que sí está cacheado por mes.
+ * Meses FINALIZED dentro de la ventana de historial pública (hasta
+ * PUBLIC_HISTORY_MONTHS meses atrás desde hoy), para poblar el selector de
+ * "ver un mes anterior" de la página pública. Mismo filtro `status:
+ * "FINALIZED"` que getLatestPublicSchedule/getPublicScheduleFor -- nunca
+ * incluye meses DRAFT, así que no revela su existencia.
+ */
+export async function listPublicScheduleHistory() {
+  const monthCycles = await prisma.monthCycle.findMany({
+    where: { status: "FINALIZED" },
+    orderBy: [{ year: "desc" }, { month: "desc" }],
+    select: { year: true, month: true },
+  });
+  return { months: monthCycles.filter((m) => isWithinHistoryWindow(m.year, m.month)) };
+}
+
+/**
+ * Mes FINALIZED "vigente" por defecto: el mes civil actual si ya está
+ * publicado, o si no, el más reciente hacia ATRÁS (nunca salta a un mes
+ * futuro, aunque ya esté finalizado por anticipado -- ajustado 2026-08-22,
+ * el admin puede publicar el mes siguiente antes de tiempo sin que eso
+ * cambie lo que ve por defecto quien visita la página hoy). Esta búsqueda
+ * NO se cachea (consulta liviana sobre una tabla chica); una vez resuelto
+ * cuál mes es, delega en buildPublicPayload, que sí está cacheado por mes.
  */
 export async function getLatestPublicSchedule() {
+  const today = currentCivilDate(env.APP_TIMEZONE);
   const monthCycle = await prisma.monthCycle.findFirst({
-    where: { status: "FINALIZED" },
+    where: {
+      status: "FINALIZED",
+      OR: [{ year: { lt: today.year } }, { year: today.year, month: { lte: today.month } }],
+    },
     orderBy: [{ year: "desc" }, { month: "desc" }],
     select: { id: true, year: true, month: true, status: true, finalizedAt: true },
   });

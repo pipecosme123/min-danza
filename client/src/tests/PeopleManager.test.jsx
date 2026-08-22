@@ -135,6 +135,203 @@ describe("PeopleManager", () => {
     );
   });
 
+  it("el formulario de alta tiene una casilla «Adulto mayor», y marcarla desmarca «Joven» automáticamente", async () => {
+    getPeople.mockResolvedValue(samplePage());
+    createPerson.mockResolvedValueOnce({
+      id: "9",
+      fullName: "Nueva Persona",
+      category: "MINISTRO",
+      isJoven: false,
+      isAdultoMayor: true,
+    });
+    const user = userEvent.setup();
+    render(<PeopleManager />);
+
+    await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Nueva persona" }));
+
+    const dialog = screen.getByRole("dialog");
+    const youthCheckbox = within(dialog).getByRole("checkbox", { name: "Joven" });
+    const elderlyCheckbox = within(dialog).getByRole("checkbox", { name: "Adulto mayor" });
+    expect(elderlyCheckbox).not.toBeChecked();
+
+    fireEvent.change(within(dialog).getByLabelText(/Nombre completo/), { target: { value: "Nueva Persona" } });
+    await user.selectOptions(within(dialog).getByLabelText(/^Categoría/), "MINISTRO");
+
+    // Marcar «Joven» primero y luego «Adulto mayor» debe desmarcar «Joven» sola.
+    await user.click(youthCheckbox);
+    expect(youthCheckbox).toBeChecked();
+    await user.click(elderlyCheckbox);
+    expect(elderlyCheckbox).toBeChecked();
+    expect(youthCheckbox).not.toBeChecked();
+
+    await user.click(within(dialog).getByRole("button", { name: "Crear persona" }));
+
+    await waitFor(() =>
+      expect(createPerson).toHaveBeenCalledWith(
+        expect.objectContaining({ isAdultoMayor: true, isJoven: false }),
+      ),
+    );
+  });
+
+  it("marcar «Joven» estando «Adulto mayor» activo lo desmarca automáticamente", async () => {
+    getPeople.mockResolvedValue(samplePage());
+    const user = userEvent.setup();
+    render(<PeopleManager />);
+
+    await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Nueva persona" }));
+
+    const dialog = screen.getByRole("dialog");
+    const youthCheckbox = within(dialog).getByRole("checkbox", { name: "Joven" });
+    const elderlyCheckbox = within(dialog).getByRole("checkbox", { name: "Adulto mayor" });
+
+    await user.click(elderlyCheckbox);
+    expect(elderlyCheckbox).toBeChecked();
+    await user.click(youthCheckbox);
+    expect(youthCheckbox).toBeChecked();
+    expect(elderlyCheckbox).not.toBeChecked();
+  });
+
+  it("el formulario de edición precarga el valor actual de «Adulto mayor»", async () => {
+    getPeople.mockResolvedValueOnce(
+      samplePage({
+        data: [
+          {
+            id: "1",
+            fullName: "Ana Gómez",
+            documentId: "1234567",
+            category: "INSTRUCTOR",
+            isJoven: false,
+            isAdultoMayor: true,
+            active: true,
+            notes: null,
+          },
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    render(<PeopleManager />);
+
+    await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Editar a Ana Gómez" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("checkbox", { name: "Adulto mayor" })).toBeChecked();
+    expect(within(dialog).getByRole("checkbox", { name: "Joven" })).not.toBeChecked();
+  });
+
+  it("en el formulario de edición, marcar «Joven» estando «Adulto mayor» activo lo desmarca automáticamente (y viceversa)", async () => {
+    getPeople.mockResolvedValueOnce(
+      samplePage({
+        data: [
+          {
+            id: "1",
+            fullName: "Ana Gómez",
+            documentId: "1234567",
+            category: "INSTRUCTOR",
+            isJoven: false,
+            isAdultoMayor: true,
+            active: true,
+            notes: null,
+          },
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    render(<PeopleManager />);
+
+    await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Editar a Ana Gómez" }));
+
+    const dialog = screen.getByRole("dialog");
+    const youthCheckbox = within(dialog).getByRole("checkbox", { name: "Joven" });
+    const elderlyCheckbox = within(dialog).getByRole("checkbox", { name: "Adulto mayor" });
+    expect(elderlyCheckbox).toBeChecked();
+    expect(youthCheckbox).not.toBeChecked();
+
+    // Precarga: "Adulto mayor" ya viene tildado. Tildar "Joven" debe desmarcar
+    // "Adulto mayor" solo, sin esperar respuesta del servidor.
+    await user.click(youthCheckbox);
+    expect(youthCheckbox).toBeChecked();
+    expect(elderlyCheckbox).not.toBeChecked();
+
+    // Y en sentido inverso: volver a tildar "Adulto mayor" desmarca "Joven".
+    await user.click(elderlyCheckbox);
+    expect(elderlyCheckbox).toBeChecked();
+    expect(youthCheckbox).not.toBeChecked();
+  });
+
+  it("la tabla muestra una insignia «Adulto mayor» solo cuando la persona está marcada como tal", async () => {
+    getPeople.mockResolvedValueOnce(
+      samplePage({
+        data: [
+          { id: "1", fullName: "Ana Gómez", documentId: "1234567", category: "INSTRUCTOR", isAdultoMayor: true, active: true, notes: null },
+          { id: "2", fullName: "Beto Ruiz", documentId: "7654321", category: "MINISTRO", isAdultoMayor: false, active: true, notes: null },
+        ],
+        pagination: { page: 1, pageSize: 25, total: 2, totalPages: 1 },
+      }),
+    );
+    render(<PeopleManager />);
+
+    await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
+    const table = within(screen.getByRole("table"));
+    const anaRow = table.getByText("Ana Gómez").closest("tr");
+    const betoRow = table.getByText("Beto Ruiz").closest("tr");
+    expect(within(anaRow).getByText("Adulto mayor")).toBeInTheDocument();
+    expect(within(betoRow).queryByText("Adulto mayor")).not.toBeInTheDocument();
+  });
+
+  it("el filtro «Adulto mayor» permite pedir solo adultos mayores o solo no adultos mayores, además de todas", async () => {
+    getPeople.mockResolvedValue(samplePage());
+    const user = userEvent.setup();
+    render(<PeopleManager />);
+
+    await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
+    expect(getPeople).toHaveBeenLastCalledWith(expect.not.objectContaining({ isAdultoMayor: expect.anything() }));
+
+    await user.selectOptions(screen.getByLabelText("Adulto mayor"), "yes");
+    await waitFor(() => expect(getPeople).toHaveBeenLastCalledWith(expect.objectContaining({ isAdultoMayor: true })));
+
+    await user.selectOptions(screen.getByLabelText("Adulto mayor"), "no");
+    await waitFor(() => expect(getPeople).toHaveBeenLastCalledWith(expect.objectContaining({ isAdultoMayor: false })));
+
+    await user.selectOptions(screen.getByLabelText("Adulto mayor"), "all");
+    await waitFor(() => {
+      const lastCall = getPeople.mock.calls.at(-1)[0];
+      expect(lastCall).not.toHaveProperty("isAdultoMayor");
+    });
+  });
+
+  it("permite seleccionar varias personas y cambiar su marca de Adulto mayor en lote", async () => {
+    getPeople.mockResolvedValue(
+      samplePage({
+        data: [
+          { id: "1", fullName: "Ana Gómez", documentId: "1234567", category: "INSTRUCTOR", isAdultoMayor: false, active: true, notes: null },
+          { id: "2", fullName: "Beto Ruiz", documentId: "7654321", category: "MINISTRO", isAdultoMayor: false, active: true, notes: null },
+        ],
+        pagination: { page: 1, pageSize: 25, total: 2, totalPages: 1 },
+      }),
+    );
+    updatePerson.mockResolvedValue({ person: { id: "1", fullName: "Ana Gómez" }, warnings: [] });
+    const user = userEvent.setup();
+    render(<PeopleManager />);
+
+    await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Seleccionar varias" }));
+    await user.click(screen.getByLabelText("Seleccionar a Ana Gómez"));
+    await user.click(screen.getByLabelText("Seleccionar a Beto Ruiz"));
+
+    await user.click(screen.getByRole("button", { name: "Cambiar Adulto mayor" }));
+    await user.selectOptions(screen.getByLabelText("Marcar como"), "true");
+    await user.click(screen.getByRole("button", { name: "Aplicar" }));
+
+    await waitFor(() => expect(updatePerson).toHaveBeenCalledTimes(2));
+    expect(updatePerson).toHaveBeenCalledWith("1", { isAdultoMayor: true });
+    expect(updatePerson).toHaveBeenCalledWith("2", { isAdultoMayor: true });
+    await waitFor(() => expect(screen.queryByText(/seleccionada/)).not.toBeInTheDocument());
+  });
+
   it("el formulario de edición precarga el valor actual de «Joven»", async () => {
     getPeople.mockResolvedValueOnce(
       samplePage({

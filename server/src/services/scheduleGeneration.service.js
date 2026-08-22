@@ -8,7 +8,7 @@
 
 import { prisma } from "../lib/prisma.js";
 import { ConflictError, NotFoundError } from "../utils/errors.js";
-import { weekdaysIn, lastSundayOf, lastSaturdayOf, isSameCivilDate, formatCivilDate, formatDbDate } from "../utils/dates.js";
+import { weekdaysIn, lastSundayOf, lastSaturdayOf, firstFridayOf, isSameCivilDate, formatCivilDate, formatDbDate } from "../utils/dates.js";
 import { recomputeBalance } from "./balance.service.js";
 
 // Compartido con events.service.js: la respuesta de un ServiceSlot tiene
@@ -141,6 +141,7 @@ export async function generateSchedule(monthCycleId, { regenerate = false } = {}
           date,
           startTime: "08:00",
           slotType: "FIXED",
+          title: "Ayuno Congregacional",
           teamsNeeded: 2,
           countsTowardBalance: true,
           uniformId: null,
@@ -160,7 +161,20 @@ export async function generateSchedule(monthCycleId, { regenerate = false } = {}
       }
     }
 
-    // 3. Servicio de jóvenes, solo si el mes tiene equipo YOUTH.
+    // 3. Primer viernes del mes: 19:00, 2 equipos, "Vigilia Unida - Comuna 21".
+    const firstFriday = firstFridayOf(month.year, month.month);
+    slotsData.push({
+      monthCycleId,
+      date: toDbDate(firstFriday),
+      startTime: "19:00",
+      slotType: "FIXED",
+      title: "Vigilia Unida - Comuna 21",
+      teamsNeeded: 2,
+      countsTowardBalance: true,
+      uniformId: null,
+    });
+
+    // 4. Servicio de jóvenes, solo si el mes tiene equipo YOUTH.
     if (youthTeam) {
       slotsData.push({
         monthCycleId,

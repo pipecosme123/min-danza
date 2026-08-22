@@ -255,6 +255,59 @@ describe("POST /api/people/import — formatos de archivo", () => {
     expect(created.isJoven).toBe(false);
   });
 
+  it("columna opcional 'Adulto mayor' mapea sí/no a isAdultoMayor (crea y actualiza)", async () => {
+    const docSi = `${DOC_PREFIX}AMSI`;
+    const docNo = `${DOC_PREFIX}AMNO`;
+    const docUpdate = `${DOC_PREFIX}AMUPD`;
+
+    const existing = await prisma.person.create({
+      data: { fullName: `${NAME_PREFIX} AM Update`, documentId: docUpdate, category: "MINISTRO", isAdultoMayor: false },
+    });
+
+    const csv = [
+      "Nombre,Categoria,Documento,Adulto Mayor",
+      `${NAME_PREFIX} AM Si,Colaborador,${docSi},Sí`,
+      `${NAME_PREFIX} AM No,Colaborador,${docNo},No`,
+      `${NAME_PREFIX} AM Update,Colaborador,${docUpdate},true`,
+    ].join("\n");
+
+    const res = await attachCsv(authedPost("/api/people/import"), csv, "adulto-mayor.csv");
+    expect(res.status).toBe(200);
+    expect(res.body.summary.created).toBe(2);
+    expect(res.body.summary.updated).toBe(1);
+
+    const created = await prisma.person.findMany({ where: { documentId: { in: [docSi, docNo] } } });
+    const bySi = created.find((p) => p.documentId === docSi);
+    const byNo = created.find((p) => p.documentId === docNo);
+    expect(bySi.isAdultoMayor).toBe(true);
+    expect(byNo.isAdultoMayor).toBe(false);
+
+    const reloadedExisting = await prisma.person.findUnique({ where: { id: existing.id } });
+    expect(reloadedExisting.isAdultoMayor).toBe(true);
+    expect(res.body.updated[0].changes.isAdultoMayor).toEqual({ from: false, to: true });
+  });
+
+  it("fila con 'Joven' Y 'Adulto mayor' ambas en positivo: no se rechaza, queda con ambos flags en false y una nota en el reporte", async () => {
+    const doc = `${DOC_PREFIX}CONFLICTO`;
+    const csv = [
+      "Nombre,Categoria,Documento,Joven,Adulto Mayor",
+      `${NAME_PREFIX} Conflicto Joven Am,Colaborador,${doc},Si,Si`,
+    ].join("\n");
+
+    const res = await attachCsv(authedPost("/api/people/import"), csv, "conflicto.csv");
+    expect(res.status).toBe(200);
+    expect(res.body.summary.created).toBe(1);
+    expect(res.body.summary.failed).toBe(0);
+    expect(res.body.summary.skipped).toBe(0);
+
+    const createdEntry = res.body.created[0];
+    expect(createdEntry.notes?.[0]?.code).toBe("JOVEN_ADULTO_MAYOR_CONFLICTO_EN_FILA");
+
+    const created = await prisma.person.findUnique({ where: { documentId: doc } });
+    expect(created.isJoven).toBe(false);
+    expect(created.isAdultoMayor).toBe(false);
+  });
+
   it("CSV guardado como Windows-1252/latin1 (sin BOM) se detecta y decodifica bien (tildes/ñ no se corrompen)", async () => {
     const doc = `${DOC_PREFIX}LATIN1`;
     // Construido directamente como bytes latin1 -- así es como Excel en

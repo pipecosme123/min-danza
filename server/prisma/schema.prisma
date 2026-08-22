@@ -107,23 +107,29 @@ model AdminUser {
 // ------------------------------- PADRÓN ------------------------------------
 
 model Person {
-  id         String         @id @default(cuid())
-  fullName   String         @map("full_name")
+  id            String         @id @default(cuid())
+  fullName      String         @map("full_name")
   /// Documento opcional. Es la clave natural preferida para el upsert del
   /// import masivo. Postgres permite múltiples NULL en un índice único, así
   /// que "opcional + único" convive sin problema.
-  documentId String?        @unique @map("document_id")
-  category   PersonCategory
+  documentId    String?        @unique @map("document_id")
+  category      PersonCategory
   /// Independiente de `category`: una persona puede ser MINISTRO (o
   /// INSTRUCTOR) Y también pertenecer al pool del equipo de jóvenes. No
   /// reemplaza ni condiciona la categoría.
-  isJoven    Boolean        @default(false) @map("is_joven")
+  isJoven       Boolean        @default(false) @map("is_joven")
+  /// Independiente de `category` e independiente de `isJoven`: una persona
+  /// puede ser INSTRUCTOR/MINISTRO y además isAdultoMayor. Mutuamente
+  /// excluyente con isJoven -- protegido con un CHECK a nivel de base de
+  /// datos (ver migración 20260822000000_add_adulto_mayor) y con
+  /// auto-limpieza en people.service.js; nunca ambos true a la vez.
+  isAdultoMayor Boolean        @default(false) @map("is_adulto_mayor")
   /// Baja lógica. NUNCA se borra una persona que ya participó en un mes
   /// (las FK desde TeamMember son onDelete: Restrict).
-  active     Boolean        @default(true)
-  notes      String?
-  createdAt  DateTime       @default(now()) @map("created_at")
-  updatedAt  DateTime       @updatedAt @map("updated_at")
+  active        Boolean        @default(true)
+  notes         String?
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
 
   teamMemberships TeamMember[]
 
@@ -131,6 +137,7 @@ model Person {
   @@index([active, category])
   /// Consulta caliente: pool de sorteo del equipo de jóvenes.
   @@index([active, isJoven])
+  @@index([active, isAdultoMayor])
   @@index([fullName])
   @@map("person")
 }
@@ -263,25 +270,25 @@ model FixedSlotTemplate {
 }
 
 model ServiceSlot {
-  id                  String   @id @default(cuid())
-  monthCycleId        String   @map("month_cycle_id")
+  id                  String    @id @default(cuid())
+  monthCycleId        String    @map("month_cycle_id")
   /// Fecha civil (sin hora, sin zona horaria). Ver D7.
-  date                DateTime @db.Date
+  date                DateTime  @db.Date
   /// Hora local en formato "HH:mm" 24h, cero-padded ("08:00", "18:50").
   /// Ordena correctamente en forma lexicográfica. Ver D7.
-  startTime           String   @map("start_time") @db.VarChar(5)
-  slotType            SlotType @map("slot_type")
+  startTime           String    @map("start_time") @db.VarChar(5)
+  slotType            SlotType  @map("slot_type")
   /// Nombre visible del evento (solo EXTRAORDINARY/YOUTH_SERVICE). Los FIXED
   /// lo dejan en null y la UI los rotula por día/hora.
   title               String?
   /// 1 por defecto; 2 en el último domingo y opcionalmente en extraordinarios.
-  teamsNeeded         Int      @default(1) @map("teams_needed")
+  teamsNeeded         Int       @default(1) @map("teams_needed")
   /// Si el slot suma o no a recomputeBalance. En esta fase todo slot que se
   /// genera (FIXED, EXTRAORDINARY, YOUTH_SERVICE) nace en true — no hay
   /// ningún camino que produzca false. El campo se conserva para no cerrar
   /// la puerta a un futuro tipo de evento que no deba contar.
-  countsTowardBalance Boolean  @default(true) @map("counts_toward_balance")
-  uniformId           String?  @map("uniform_id")
+  countsTowardBalance Boolean   @default(true) @map("counts_toward_balance")
+  uniformId           String?   @map("uniform_id")
   notes               String?
   /// No nulo únicamente cuando el admin canceló un evento EXTRAORDINARY
   /// después de publicado (o antes, no hay restricción). El slot queda, se
@@ -290,8 +297,8 @@ model ServiceSlot {
   /// SPECIAL/YOUTH_SERVICE para "no cuenta al balance", reutilizado tal
   /// cual). Ver docs/architecture/phase4c-post-publish-edits-contract.md §1.
   cancelledAt         DateTime? @map("cancelled_at")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
   monthCycle  MonthCycle       @relation(fields: [monthCycleId], references: [id], onDelete: Cascade)
   uniform     Uniform?         @relation(fields: [uniformId], references: [id], onDelete: SetNull)

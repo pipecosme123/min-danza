@@ -36,7 +36,7 @@ export function sortMembers(members) {
  * y también podrá reutilizarse sola en vistas de detalle.
  *
  * @param {{
- *   members: Array<{ id: string, fullName: string, role: 'LEADER'|'SUPPORT'|'COLLABORATOR' }>,
+ *   members: Array<{ id: string, fullName: string, role: 'LEADER'|'SUPPORT'|'COLLABORATOR', isAdultoMayor?: boolean }>,
  *   onlyShowLeaderRole?: boolean,
  * }} props
  */
@@ -47,22 +47,36 @@ export function MemberList({ members, onlyShowLeaderRole = false }) {
 
   return (
     <ol className="member-list">
-      {sortMembers(members).map((member, index) => (
-        <li
-          key={member.id}
-          className={`member-list__item${member.role === 'LEADER' ? ' member-list__item--leader' : ''}`}
-        >
-          <span className="member-list__index" aria-hidden="true">
-            {index + 1}.
-          </span>
-          <span className="member-list__name">{member.fullName}</span>
-          {onlyShowLeaderRole && member.role !== 'LEADER' ? null : (
-            <Badge variant={ROLE_BADGE_VARIANTS[member.role] || 'neutral'}>
-              {ROLE_LABELS[member.role] || member.role}
-            </Badge>
-          )}
-        </li>
-      ))}
+      {sortMembers(members).map((member, index) => {
+        // "Ministro" (rol COLLABORATOR) nunca se muestra como insignia --
+        // decisión estética confirmada con el usuario: no aporta información
+        // que no se pueda inferir (todo integrante sin insignia de Líder/Apoyo
+        // es, por descarte, un ministro), y evita el ruido visual de dos
+        // insignias por persona cuando además es adulto mayor.
+        const showRoleBadge =
+          member.role !== 'COLLABORATOR' && (!onlyShowLeaderRole || member.role === 'LEADER');
+        // "Adulto mayor" es exclusivo de la vista de administración -- nunca
+        // aparece en la página pública, ni siquiera para el líder (a
+        // diferencia del rol, que el líder sí muestra ahí).
+        const showAdultoMayor = !onlyShowLeaderRole && member.isAdultoMayor;
+        return (
+          <li
+            key={member.id}
+            className={`member-list__item${member.role === 'LEADER' ? ' member-list__item--leader' : ''}`}
+          >
+            <span className="member-list__index" aria-hidden="true">
+              {index + 1}.
+            </span>
+            <span className="member-list__name">{member.fullName}</span>
+            {showRoleBadge ? (
+              <Badge variant={ROLE_BADGE_VARIANTS[member.role] || 'neutral'}>
+                {ROLE_LABELS[member.role] || member.role}
+              </Badge>
+            ) : null}
+            {showAdultoMayor ? <Badge variant="warning">Adulto mayor</Badge> : null}
+          </li>
+        );
+      })}
     </ol>
   );
 }

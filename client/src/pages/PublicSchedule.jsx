@@ -5,11 +5,12 @@ import { Spinner } from '../components/ui/Spinner.jsx';
 import { ErrorMessage } from '../components/ui/ErrorMessage.jsx';
 import { EmptyState } from '../components/ui/EmptyState.jsx';
 import { SearchableSelect } from '../components/ui/SearchableSelect.jsx';
+import { Field } from '../components/ui/Field.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { TeamCard } from '../components/domain/TeamCard.jsx';
 import { CalendarGrid } from '../components/domain/CalendarGrid.jsx';
 import { MonthOccupancyCalendar } from '../components/domain/MonthOccupancyCalendar.jsx';
-import { getLatestPublicSchedule } from '../api/publicSchedule.js';
+import { getLatestPublicSchedule, getPublicScheduleFor, getScheduleHistory } from '../api/publicSchedule.js';
 import { describeApiError } from '../utils/apiError.js';
 import { formatMonthYear } from '../utils/dates.js';
 import { groupSlotsByDate } from '../utils/schedule.js';
@@ -52,17 +53,44 @@ function formatPublishedAt(finalizedAt) {
 
 /**
  * Página pública, sin autenticación: muestra la organización del mes
- * `FINALIZED` más reciente (equipos, integrantes y horario asignado). No
- * distingue "no existe ningún mes" de "el mes en preparación todavía no se
- * publicó" — ambos casos llegan como el mismo 404 `MES_NO_PUBLICADO` y se
- * muestran con el mismo estado vacío. Contrato:
+ * `FINALIZED` más reciente por defecto (equipos, integrantes y horario
+ * asignado), con la posibilidad de consultar meses anteriores hasta 1 año de
+ * antigüedad (ajustado 2026-08-22). No distingue "no existe ningún mes" de
+ * "el mes en preparación todavía no se publicó" ni de "el mes existe pero ya
+ * pasó la ventana de 1 año" — los tres casos llegan como el mismo 404
+ * `MES_NO_PUBLICADO` y se muestran con el mismo estado vacío. Contrato:
  * `docs/architecture/phase5-public-page-contract.md` §4.
  */
 export function PublicSchedule() {
-  const { data, loading, error, execute } = useApi(getLatestPublicSchedule, { immediate: true });
+  const { data, loading, error, execute } = useApi(
+    (selection) => (selection ? getPublicScheduleFor(selection.year, selection.month) : getLatestPublicSchedule()),
+    { immediate: true, args: [null] },
+  );
+  const { data: historyData } = useApi(getScheduleHistory, { immediate: true });
+  const historyMonths = historyData?.months ?? [];
 
+  const [selectedMonthKey, setSelectedMonthKey] = useState('latest');
   const [selectedPersonId, setSelectedPersonId] = useState(NO_FILTER);
   const [scheduleView, setScheduleView] = useState('list'); // 'list' | 'calendar'
+
+  function handleMonthChange(value) {
+    setSelectedMonthKey(value);
+    // La persona filtrada de un mes anterior probablemente no exista (o no
+    // tenga sentido) en el mes recién elegido.
+    setSelectedPersonId(NO_FILTER);
+    if (value === 'latest') {
+      execute(null);
+    } else {
+      const [year, month] = value.split('-').map(Number);
+      execute({ year, month });
+    }
+  }
+
+  // "Más reciente" siempre primero; el resto del historial excluye el mes
+  // que ya está cargado (para no listar el mismo mes dos veces).
+  const otherMonths = data
+    ? historyMonths.filter((m) => !(m.year === data.month.year && m.month === data.month.month))
+    : [];
 
   const errorInfo = error ? describeApiError(error) : null;
   const notPublished = errorInfo?.code === 'MES_NO_PUBLICADO';
@@ -126,6 +154,21 @@ export function PublicSchedule() {
               </h2>
               {publishedAt ? (
                 <p className="public-schedule__published-at">Publicado el {publishedAt}.</p>
+              ) : null}
+              {otherMonths.length > 0 ? (
+                <Field
+                  label="Ver otro mes"
+                  as="select"
+                  value={selectedMonthKey}
+                  onChange={(event) => handleMonthChange(event.target.value)}
+                >
+                  <option value="latest">Más reciente</option>
+                  {otherMonths.map((m) => (
+                    <option key={`${m.year}-${m.month}`} value={`${m.year}-${m.month}`}>
+                      {formatMonthYear(m.year, m.month)}
+                    </option>
+                  ))}
+                </Field>
               ) : null}
             </div>
 

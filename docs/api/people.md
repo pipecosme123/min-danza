@@ -63,6 +63,7 @@ listado, como cuerpo directo en `POST`, dentro de `{ person }` en `PATCH`/`DELET
   "documentId": "1234567",
   "category": "INSTRUCTOR",
   "isJoven": false,
+  "isAdultoMayor": false,
   "active": true,
   "notes": null,
   "createdAt": "2026-08-07T14:03:11.412Z",
@@ -75,6 +76,13 @@ No se devuelven campos adicionales ni `null` en lugar del objeto.
 > `isJoven` (Fase "equipo de jóvenes") es **independiente** de `category`: una
 > persona puede ser `INSTRUCTOR` o `MINISTRO` y, a la vez, pertenecer (o no) al
 > pool de sorteo del equipo de jóvenes. No lo reemplaza ni lo condiciona.
+
+> `isAdultoMayor` (2026-08-22) es, igual que `isJoven`, **independiente** de
+> `category`: repartido equitativamente en el sorteo mensual (mismo mecanismo que
+> apoyo/colaboradores), sin importar quién puede ser líder. **Mutuamente excluyente
+> con `isJoven`**: nunca ambos `true` a la vez — protegido con un `CHECK` a nivel de
+> base de datos y, en el servidor, con auto-limpieza (`PATCH`, ver más abajo) y
+> rechazo explícito (`POST`/`PATCH` con ambos `true` a la vez → 400).
 
 ---
 
@@ -92,6 +100,7 @@ Lista paginada con búsqueda y filtros.
 | `category` | `INSTRUCTOR` \| `MINISTRO` | — | |
 | `active` | `"true"` \| `"false"` | *(sin filtro)* | **La API es neutral: sin este param devuelve activos e inactivos juntos.** La pantalla `PeopleManager` del frontend envía `active=true` por defecto y tiene un toggle "Ver inactivos" que lo quita — ese default es una decisión de UI, no de la API. |
 | `isJoven` | `"true"` \| `"false"` | *(sin filtro)* | Filtra por elegibilidad para el equipo de jóvenes, independiente de `category`. Sin este param devuelve personas `isJoven: true` e `isJoven: false` juntas. |
+| `isAdultoMayor` | `"true"` \| `"false"` | *(sin filtro)* | Filtra por el pool de adulto mayor, independiente de `category`. Sin este param devuelve personas `isAdultoMayor: true` e `isAdultoMayor: false` juntas. |
 | `sort` | `fullName` \| `-fullName` \| `createdAt` \| `-createdAt` | `fullName` | |
 
 Cualquier valor fuera de estas reglas (`page=0`, `active=si`, `sort=nombre`, etc.) → **400**
@@ -127,6 +136,7 @@ Crea una persona nueva. Toda persona nace `active: true`; el body **no** acepta 
   "documentId": "1.234.567",
   "category": "MINISTRO",
   "isJoven": false,
+  "isAdultoMayor": false,
   "notes": null,
   "confirmDuplicateName": false
 }
@@ -138,13 +148,15 @@ Crea una persona nueva. Toda persona nace `active: true`; el body **no** acepta 
 | `documentId` | No | `string \| null`. `""` o `null` se guardan como `null` (nunca `""`, para no romper el índice único con la segunda persona sin documento). Si trae valor: se normaliza (`trim` + mayúsculas + quitar espacios/puntos/guiones) y valida `3..30` caracteres, solo `[A-Z0-9]`. `"1.234.567"` se guarda como `"1234567"`. |
 | `category` | Sí | Enum exacto `INSTRUCTOR` \| `MINISTRO`. Sin alias aquí (los alias de texto libre son solo del import). |
 | `isJoven` | No | `boolean`, default `false`. Independiente de `category` (ver nota en el DTO arriba). |
+| `isAdultoMayor` | No | `boolean`, default `false`. Independiente de `category`. **Mutuamente excluyente con `isJoven`**: si el body manda ambos en `true` a la vez → 400 (`details` array, `path` termina en `isAdultoMayor`). |
 | `notes` | No | `string \| null`, máx. 500 caracteres. |
 | `confirmDuplicateName` | No | `boolean`, default `false`. Ver 409 `NOMBRE_DUPLICADO` abajo. |
 
 ### Respuestas
 
 - **201** → DTO `Person`.
-- **400** → validación zod, `details` es array.
+- **400** → validación zod, `details` es array. Incluye el caso `isJoven: true` +
+  `isAdultoMayor: true` a la vez en el mismo body.
 - **409** `DOCUMENTO_DUPLICADO` → ya existe una persona (cualquier estado, activa o
   inactiva) con el mismo `documentId` normalizado.
   ```json
@@ -176,8 +188,8 @@ dado de baja (`active: true`).
 ### Body
 
 Al menos uno de: `fullName`, `documentId` (`string | null`; `null` la borra),
-`category`, `isJoven` (`boolean`), `notes` (`string | null`), `active` (`boolean`).
-Mismas reglas de formato que en `POST` para cada campo.
+`category`, `isJoven` (`boolean`), `isAdultoMayor` (`boolean`), `notes` (`string | null`),
+`active` (`boolean`). Mismas reglas de formato que en `POST` para cada campo.
 
 Body vacío (o con solo claves `undefined`) → **400**:
 ```json
@@ -188,6 +200,13 @@ Body vacío (o con solo claves `undefined`) → **400**:
 > en significado del `SIN_CAMBIOS` que aparece en `skipped[].code` del import (200,
 > "esta fila coincide con alguien que ya tenía exactamente estos datos"). Mismo nombre,
 > dos contextos — no los confundas al hacer manejo de errores en el cliente.
+
+Si el body manda `isJoven: true` y `isAdultoMayor: true` explícitos a la vez → **400**
+(`details` array, `path` termina en `isAdultoMayor`) — error real del cliente, no se
+auto-resuelve. En cambio, si el body manda solo uno de los dos en `true` y la persona ya
+tenía el otro en `true`, el servidor lo **auto-limpia**: el campo contrario queda en
+`false` sin que haga falta mandarlo explícito (así, marcar "Adulto mayor" en la interfaz
+estando "Joven" activo desmarca "Joven" solo, y viceversa).
 
 ### Respuesta de éxito
 
@@ -293,6 +312,7 @@ bajos colapsados a un solo espacio) y se compara contra esta tabla:
 | `documentId` | No | `documento`, `documento de identidad`, `cedula`, `cédula`, `identificacion`, `identificación`, `cc`, `document`, `documentid` |
 | `notes` | No | `notas`, `observaciones`, `comentarios`, `notes` |
 | `isJoven` | No | `joven`, `jovenes`, `jóvenes`, `es joven` |
+| `isAdultoMayor` | No | `adulto mayor`, `adultos mayores`, `es adulto mayor`, `tercera edad` |
 
 - Falta `fullName` o `category` → **400** `COLUMNA_REQUERIDA_FALTANTE` (`details.missing`
   lista cuáles). El archivo entero se rechaza.
@@ -337,6 +357,20 @@ Si la columna no está presente en el archivo, `isJoven` queda `false` para **to
 filas que se crean; si la fila corresponde a alguien que ya existe (actualización por
 documento), la ausencia de la columna **no toca** su `isJoven` actual (mismo criterio que
 `notes`: solo se actualiza si el archivo trae la columna).
+
+### Valores aceptados en la columna opcional `Adulto mayor` (2026-08-22)
+
+Mismo tratamiento exacto que la columna `Joven` (misma tabla de valores afirmativos,
+mismo criterio de "no toca lo existente si la columna no vino en el archivo"), en un
+campo independiente: `isAdultoMayor`.
+
+**Conflicto en la misma fila**: si una fila trae **ambas** columnas ("Joven" y "Adulto
+mayor") con un valor afirmativo a la vez, el import **no rechaza la fila** (se perdería
+nombre/categoría/documento válidos). En cambio, deja `isJoven` e `isAdultoMayor` en
+`false` para esa fila puntual (ninguno de los dos gana, no se adivina cuál "vale más") y
+agrega una nota al reporte de esa fila (`notes: [{ code: "JOVEN_ADULTO_MAYOR_CONFLICTO_EN_FILA", message: "…" }]`,
+mismo mecanismo que `changes` en `updated[]`) — la fila sigue contando como `created` o
+`updated` normalmente, nunca se mueve a `errors` ni a `skipped` por este motivo.
 
 ### 200 → reporte de import
 

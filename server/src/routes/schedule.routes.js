@@ -1,9 +1,11 @@
-// GET /api/schedule/latest y GET /api/schedule/:year/:month — únicos
-// endpoints de lectura PÚBLICOS (sin auth) de la app: la organización del
-// mes FINALIZED más reciente. Contrato cerrado:
-// docs/architecture/phase5-public-page-contract.md §3. Un mes DRAFT nunca se
-// expone -- ver publicSchedule.service.js (mismo 404 genérico para "no
-// existe" y "existe pero DRAFT", a propósito).
+// GET /api/schedule/latest, GET /api/schedule/history y
+// GET /api/schedule/:year/:month — únicos endpoints de lectura PÚBLICOS (sin
+// auth) de la app: la organización de meses FINALIZED (el más reciente sin
+// restricción de antigüedad; los anteriores hasta 1 año atrás, ver
+// publicSchedule.service.js). Contrato cerrado:
+// docs/architecture/phase5-public-page-contract.md §3. Un mes DRAFT (o fuera
+// de la ventana de 1 año) nunca se expone -- mismo 404 genérico para "no
+// existe", "existe pero DRAFT" y "existe pero demasiado viejo", a propósito.
 // Este router SOLO parsea/valida/serializa; toda la lógica vive en
 // services/publicSchedule.service.js. Cacheado (lib/cache.js) ahí mismo.
 
@@ -11,7 +13,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { validate } from "../middleware/validate.js";
 import { publicLimiter } from "../middleware/rateLimit.js";
-import { getPublicScheduleFor, getLatestPublicSchedule } from "../services/publicSchedule.service.js";
+import { getPublicScheduleFor, getLatestPublicSchedule, listPublicScheduleHistory } from "../services/publicSchedule.service.js";
 
 const router = Router();
 
@@ -26,6 +28,15 @@ const yearMonthParamSchema = z.object({
 router.get("/latest", async (req, res, next) => {
   try {
     const payload = await getLatestPublicSchedule();
+    res.json(payload);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/history", async (req, res, next) => {
+  try {
+    const payload = await listPublicScheduleHistory();
     res.json(payload);
   } catch (err) {
     next(err);

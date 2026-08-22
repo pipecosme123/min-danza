@@ -15,7 +15,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { weekdaysIn, lastSundayOf, lastSaturdayOf, formatCivilDate, mondayOfWeek } from "../src/utils/dates.js";
+import { weekdaysIn, lastSundayOf, lastSaturdayOf, firstFridayOf, formatCivilDate, mondayOfWeek } from "../src/utils/dates.js";
 
 const app = createApp();
 
@@ -133,17 +133,38 @@ describe("POST /api/months/:id/generate-schedule", () => {
 
     const expectedWedSlots = wednesdays.length * 2;
     const expectedSunSlots = (sundays.length - 1) * 2 + 1;
-    expect(res.body.slots).toHaveLength(expectedWedSlots + expectedSunSlots);
+    // +1: el turno fijo del primer viernes del mes (Vigilia Unida - Comuna 21),
+    // siempre se genera sin importar si hay equipo de jóvenes o no.
+    expect(res.body.slots).toHaveLength(expectedWedSlots + expectedSunSlots + 1);
 
-    // Excepción del último domingo: un solo slot 08:00 con teamsNeeded 2, sin 10:30.
+    // Excepción del último domingo: un solo slot 08:00 con teamsNeeded 2, sin 10:30,
+    // y con el nombre fijo "Ayuno Congregacional".
     const lastSundayStr = formatCivilDate(lastSunday);
     const lastSundaySlots = res.body.slots.filter((s) => s.date === lastSundayStr);
     expect(lastSundaySlots).toHaveLength(1);
-    expect(lastSundaySlots[0]).toMatchObject({ startTime: "08:00", teamsNeeded: 2, slotType: "FIXED" });
+    expect(lastSundaySlots[0]).toMatchObject({
+      startTime: "08:00",
+      teamsNeeded: 2,
+      slotType: "FIXED",
+      title: "Ayuno Congregacional",
+    });
     expect(lastSundaySlots[0].teams).toHaveLength(2);
 
     // Ningún slot 10:30 el último domingo.
     expect(res.body.slots.some((s) => s.date === lastSundayStr && s.startTime === "10:30")).toBe(false);
+
+    // Primer viernes del mes: un solo slot 19:00 con teamsNeeded 2 y el
+    // nombre fijo "Vigilia Unida - Comuna 21".
+    const firstFridayStr = formatCivilDate(firstFridayOf(year, month));
+    const firstFridaySlots = res.body.slots.filter((s) => s.date === firstFridayStr);
+    expect(firstFridaySlots).toHaveLength(1);
+    expect(firstFridaySlots[0]).toMatchObject({
+      startTime: "19:00",
+      teamsNeeded: 2,
+      slotType: "FIXED",
+      title: "Vigilia Unida - Comuna 21",
+    });
+    expect(firstFridaySlots[0].teams).toHaveLength(2);
 
     // Sin equipo YOUTH -> no se genera YOUTH_SERVICE.
     expect(res.body.slots.some((s) => s.slotType === "YOUTH_SERVICE")).toBe(false);

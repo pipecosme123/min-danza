@@ -13,6 +13,7 @@ import { apiClient } from './client.js';
  * @property {string|null} documentId
  * @property {'INSTRUCTOR'|'MINISTRO'} category
  * @property {boolean} isJoven Independiente de `category`: elegible para el pool de sorteo del equipo de jóvenes.
+ * @property {boolean} isAdultoMayor Independiente de `category` y mutuamente excluyente con `isJoven`: pool que se reparte equitativamente entre los equipos regulares.
  * @property {boolean} active
  * @property {string|null} notes
  * @property {string} createdAt
@@ -27,6 +28,7 @@ import { apiClient } from './client.js';
  * @property {'INSTRUCTOR'|'MINISTRO'} [category]
  * @property {boolean} [active]
  * @property {boolean} [isJoven]
+ * @property {boolean} [isAdultoMayor]
  * @property {'fullName'|'-fullName'|'createdAt'|'-createdAt'} [sort]
  */
 
@@ -47,6 +49,7 @@ export function getPeople(params = {}) {
   if (params.category) query.set('category', params.category);
   if (params.active != null) query.set('active', String(params.active));
   if (params.isJoven != null) query.set('isJoven', String(params.isJoven));
+  if (params.isAdultoMayor != null) query.set('isAdultoMayor', String(params.isAdultoMayor));
   if (params.sort) query.set('sort', params.sort);
 
   const queryString = query.toString();
@@ -54,7 +57,7 @@ export function getPeople(params = {}) {
 }
 
 /**
- * @param {{ fullName: string, documentId?: string|null, category: 'INSTRUCTOR'|'MINISTRO', isJoven?: boolean, notes?: string|null, confirmDuplicateName?: boolean }} data
+ * @param {{ fullName: string, documentId?: string|null, category: 'INSTRUCTOR'|'MINISTRO', isJoven?: boolean, isAdultoMayor?: boolean, notes?: string|null, confirmDuplicateName?: boolean }} data
  * @returns {Promise<Person>}
  */
 export function createPerson(data) {
@@ -63,7 +66,7 @@ export function createPerson(data) {
 
 /**
  * @param {string} id
- * @param {Partial<{ fullName: string, documentId: string|null, category: 'INSTRUCTOR'|'MINISTRO', isJoven: boolean, notes: string|null, active: boolean }>} data
+ * @param {Partial<{ fullName: string, documentId: string|null, category: 'INSTRUCTOR'|'MINISTRO', isJoven: boolean, isAdultoMayor: boolean, notes: string|null, active: boolean }>} data
  * @returns {Promise<{ person: Person, warnings: Array<{ code: string, message: string }> }>}
  */
 export function updatePerson(id, data) {

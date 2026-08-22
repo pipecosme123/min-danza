@@ -7,6 +7,7 @@ import { prisma } from "../lib/prisma.js";
 import { ConflictError, NotFoundError, ValidationError } from "../utils/errors.js";
 import { shuffle } from "../utils/shuffle.js";
 import { invalidateByPrefix } from "../lib/cache.js";
+import { formatDbDate } from "../utils/dates.js";
 
 const MONTH_SELECT = {
   id: true,
@@ -29,7 +30,7 @@ const MEMBER_SELECT = {
   personId: true,
   role: true,
   manualOverride: true,
-  person: { select: { fullName: true } },
+  person: { select: { fullName: true, isAdultoMayor: true } },
 };
 
 // Exportados: reusados por publicSchedule.service.js (Fase 5) para armar el
@@ -55,6 +56,7 @@ export function serializeTeam(team) {
       fullName: m.person.fullName,
       role: m.role,
       manualOverride: m.manualOverride,
+      isAdultoMayor: m.person.isAdultoMayor,
     })),
   };
 }
@@ -129,6 +131,11 @@ export async function getMonthCycle(id) {
  * candado nuevo -- el chequeo MES_FINALIZADO que protege generate-teams,
  * generate-schedule, eventos y asignaciones ya existe desde Fase 3-4 y pasa
  * a aplicar apenas cambia el status.
+ *
+ * Ajustado 2026-08-22: además de equipos+horario (MES_INCOMPLETO), exige que
+ * NINGÚN turno no cancelado (FIXED/EXTRAORDINARY/YOUTH_SERVICE) esté sin
+ * uniforme asignado (TURNOS_SIN_UNIFORME) -- no tiene sentido publicar un
+ * horario donde no se sabe qué usar en algún servicio.
  */
 export async function finalizeMonthCycle(id) {
   // Envuelto en $transaction (mismo estilo que generateTeams/updateTeam de
@@ -157,6 +164,32 @@ export async function finalizeMonthCycle(id) {
         hasTeams,
         hasSchedule,
       });
+    }
+
+    // Ningún turno (FIXED/EXTRAORDINARY/YOUTH_SERVICE) puede quedar sin
+    // uniforme asignado para poder publicar el mes -- salvo los cancelados
+    // (cancelledAt no nulo), que ya no necesitan equipo ni cuentan al
+    // balance, así que tampoco tiene sentido exigirles uniforme.
+    const slotsWithoutUniform = await tx.serviceSlot.findMany({
+      where: { monthCycleId: id, uniformId: null, cancelledAt: null },
+      select: { id: true, date: true, startTime: true, slotType: true, title: true },
+      orderBy: [{ date: "asc" }, { startTime: "asc" }],
+    });
+
+    if (slotsWithoutUniform.length > 0) {
+      throw new ConflictError(
+        "Hay turnos sin uniforme asignado; no se puede finalizar el mes hasta asignarlos todos.",
+        {
+          code: "TURNOS_SIN_UNIFORME",
+          slots: slotsWithoutUniform.map((s) => ({
+            id: s.id,
+            date: formatDbDate(s.date),
+            startTime: s.startTime,
+            slotType: s.slotType,
+            title: s.title,
+          })),
+        }
+      );
     }
 
     return tx.monthCycle.update({
@@ -232,11 +265,11 @@ async function generateTeamsTransaction(monthCycleId, options = {}) {
 
     const instructorPool = await tx.person.findMany({
       where: { active: true, category: "INSTRUCTOR" },
-      select: { id: true },
+      select: { id: true, isAdultoMayor: true },
     });
     const ministroPool = await tx.person.findMany({
       where: { active: true, category: "MINISTRO" },
-      select: { id: true },
+      select: { id: true, isAdultoMayor: true },
     });
 
     const { teamCount } = month;
@@ -289,12 +322,33 @@ async function generateTeamsTransaction(monthCycleId, options = {}) {
     const leaders = shuffledLeaderSource.slice(0, teamCount);
     const leaderIdSet = new Set(leaders.map((p) => p.id));
 
-    // Paso 6: resto de instructores (no sorteados como líder) -> SUPPORT round-robin.
+    // Paso 6: resto de instructores (no sorteados como líder) -> SUPPORT
+    // round-robin, con los isAdultoMayor repartidos primero dentro del pool
+    // para que ningún equipo se lleve más de 1 de diferencia (ver
+    // docs/architecture/phase3-teams-contract.md, sección Algoritmo).
     const remainingInstructors = instructorPool.filter((p) => !leaderIdSet.has(p.id));
     const shuffledSupport = shuffle(remainingInstructors);
+    const amSupport = shuffledSupport.filter((p) => p.isAdultoMayor);
+    const restSupport = shuffledSupport.filter((p) => !p.isAdultoMayor);
+    const orderedSupport = [...amSupport, ...restSupport];
 
-    // Paso 7: ministros -> COLLABORATOR round-robin.
+    // Offset compartido: SIEMPRE se sortea (nunca condicional a si hay AM en
+    // ESTE pool), porque el pool de colaboradores lo va a necesitar igual
+    // para no arrancar siempre en el mismo equipo -- si acá se hiciera
+    // condicional a `amSupport.length > 0`, un mes con AM solo entre
+    // ministros heredaría un offset fijo en 0 y el Equipo 1 acumularía sesgo
+    // determinista mes a mes.
+    const sharedBase = Math.floor(Math.random() * teamCount);
+
+    // Paso 7: ministros -> COLLABORATOR round-robin, misma idea, continuando
+    // la rotación donde la dejó el pool de apoyo (no reinicia en 0) -- así el
+    // desbalance COMBINADO de adultos mayores entre apoyo+colaborador por
+    // equipo queda acotado a ±1, igual que ya lo está cada pool por separado.
     const shuffledCollaborators = shuffle(ministroPool);
+    const amCollab = shuffledCollaborators.filter((p) => p.isAdultoMayor);
+    const restCollab = shuffledCollaborators.filter((p) => !p.isAdultoMayor);
+    const orderedCollaborators = [...amCollab, ...restCollab];
+    const collabBase = (sharedBase + amSupport.length) % teamCount;
 
     // --- Equipo de jóvenes (YOUTH), si se pidió. TODO se valida antes de
     // escribir nada (mismo criterio que POOL_INSTRUCTOR_INSUFICIENTE arriba):
@@ -411,8 +465,8 @@ async function generateTeamsTransaction(monthCycleId, options = {}) {
       });
     });
 
-    shuffledSupport.forEach((person, i) => {
-      const team = teams[i % teamCount];
+    orderedSupport.forEach((person, i) => {
+      const team = teams[(sharedBase + i) % teamCount];
       memberRows.push({
         teamId: team.id,
         monthCycleId,
@@ -423,8 +477,8 @@ async function generateTeamsTransaction(monthCycleId, options = {}) {
       });
     });
 
-    shuffledCollaborators.forEach((person, i) => {
-      const team = teams[i % teamCount];
+    orderedCollaborators.forEach((person, i) => {
+      const team = teams[(collabBase + i) % teamCount];
       memberRows.push({
         teamId: team.id,
         monthCycleId,
