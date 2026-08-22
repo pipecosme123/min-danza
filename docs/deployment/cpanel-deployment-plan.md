@@ -1,7 +1,7 @@
 # Plan de despliegue en cPanel (hosting compartido)
 
-**Estado:** **backend y frontend desplegados y funcionando en producción** (verificado 2026-08-11, deploy manual por SSH — ver hallazgos reales en §8). Pendiente: pipeline de GitHub Actions (§3) para automatizar despliegues futuros — hoy los cambios se suben a mano con el procedimiento de §8.
-**Fecha:** 2026-08-10 (última actualización 2026-08-11)
+**Estado:** **en producción con despliegue automatizado funcionando de punta a punta** (verificado 2026-08-22): `.github/workflows/deploy.yml` corre en cada push a `main` — tests de backend/frontend, y si pasan, deploy real por SSH (subida, migración, restart, smoke test contra `/health`). Flujo de trabajo: los cambios se hacen en la rama `develop`, y se mergean a `main` cuando se quiere desplegar. Ver §8 para los hallazgos reales del primer deploy manual y §10 para los del primer pipeline automatizado.
+**Fecha:** 2026-08-10 (última actualización 2026-08-22)
 **Reemplaza a:** `docs/deployment/production-deployment-plan.md` (plan para Railway, descartado — el usuario decidió usar el cPanel al que ya tiene acceso).
 
 Decisiones ya confirmadas con el usuario:
@@ -361,7 +361,23 @@ Ambos confirman que la estrategia principal de CI/CD (§3.1, GitHub Actions → 
 
 ---
 
-## 9. Fuera de alcance de este plan (a propósito)
+## 9. Hallazgos del primer pipeline de CI/CD automatizado (2026-08-22)
+
+`.github/workflows/deploy.yml` quedó confirmado funcionando de punta a punta (`test-backend` → `test-frontend` → `deploy`, con smoke test final en verde) después de tres iteraciones sobre problemas reales, no hipotéticos:
+
+### 9.1 Los tests necesitan el seed, no solo la migración
+
+El primer run falló 151/220 tests con `401` en cascada. Causa: los archivos de test (`uniforms.test.js` y el resto) hacen login real contra `/api/auth/login` usando `ADMIN_USERNAME`/`ADMIN_PASSWORD` de `process.env`, asumiendo que ese `AdminUser` **ya existe** — nunca se crea desde el test mismo. En desarrollo local nunca se notó porque la base de Docker ya tenía un admin sembrado de una sesión anterior; en un Postgres nuevo (como el del job de CI) no hay ninguno. Reproducido localmente contra un Postgres nuevo y confirmado el fix: agregar `node prisma/seed.js` entre `prisma migrate deploy` y `npm test` en el job `test-backend` del workflow.
+
+### 9.2 El secret de la llave SSH tiene que ir en base64
+
+El segundo run pasó los tests pero el `deploy` falló en el primer `rsync` con `Permission denied (publickey,...)` — la clave privada multilínea se corrompió al pasar por el campo de texto del secret de GitHub (saltos de línea/espacios). Se resolvió codificando la clave en base64 como valor del secret y decodificándola en el workflow (`echo "$SECRET" | base64 -d > ~/.ssh/deploy_key`) — inmune a cómo el navegador maneje el formato multilínea. **Ojo con el propio proceso de actualizar el secret**: la primera vez que se intentó este fix, el usuario actualizó el workflow pero no llegó a actualizar el *valor* del secret (se quedó con la clave vieja en texto plano), lo que dio un tercer error distinto: `base64: invalid input` (los guiones de `-----BEGIN...` no son alfabeto base64 válido). El checklist correcto para rotar esta llave a futuro es: generar el par, autorizar la pública en cPanel ("SSH Access" → "Manage SSH Keys"), y actualizar el secret de GitHub con la privada **ya en base64** (`base64 -w0 archivo_privado`) — los dos pasos, no solo uno.
+
+### 9.3 Confirmado: se puede diagnosticar sin `gh` CLI
+
+Sin `gh` instalado localmente, los logs de un job (`GET /repos/{owner}/{repo}/actions/jobs/{id}/logs`) devuelven `403 "Must have admin rights"` incluso en un repo público sin un token. `git credential fill` expone el token OAuth (`gho_...`) que Windows ya tiene cacheado para las operaciones normales de `git push` — ese mismo token alcanza para autenticar contra la API de Actions (bajar logs, re-disparar un run fallido con `POST .../actions/runs/{id}/rerun`) sin pedirle al usuario ninguna credencial nueva.
+
+## 10. Fuera de alcance de este plan (a propósito)
 
 - **Dominio propio**: si aún no está decidido, se resuelve apuntando el DNS al hosting cPanel — el mecanismo es independiente de este plan.
 - **Alta disponibilidad / múltiples instancias del backend**: innecesario para el volumen de esta app; si algún día hiciera falta, primero hay que resolver el caché en memoria (ya mitigado con TTL en §2, ítem 6).

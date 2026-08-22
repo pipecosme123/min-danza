@@ -86,6 +86,26 @@ Body (todo opcional):
 5. Barajar (Fisher-Yates, `Math.random` — no hace falta CSPRNG acá) y tomar los primeros `teamCount` como líderes, uno por equipo.
 6. El resto de `instructorPool` (los no sorteados como líder) se baraja y se reparte round-robin como `SUPPORT` (`i % teamCount`).
 7. `ministroPool` se baraja y se reparte round-robin como `COLLABORATOR` (`i % teamCount`).
+
+> **Reparto equitativo de `isAdultoMayor` (2026-08-22).** `instructorPool`/`ministroPool`
+> traen también `isAdultoMayor` en el `select` (el `WHERE` sigue igual, no arma un pool
+> aparte). Dentro de cada pool ya barajado (apoyo y colaboradores por separado), las
+> personas `isAdultoMayor: true` se anteponen al resto (`[...am, ...rest]`) antes de
+> repartir con módulo — reordenar antes de repartir nunca cambia CUÁNTOS elementos caen en
+> cada equipo, solo altera CUÁLES, así que cuando nadie tiene `isAdultoMayor` el resultado
+> es idéntico al de antes. El punto de arranque del round-robin deja de ser siempre `0`:
+> se sortea un único offset compartido `sharedBase` (`Math.floor(Math.random() * teamCount)`)
+> para el pool de apoyo, y el pool de colaboradores CONTINÚA esa misma rotación
+> (`collabBase = (sharedBase + amSupport.length) % teamCount`) en vez de reiniciar en `0`.
+> Esto acota a ±1 el desbalance COMBINADO de adultos mayores entre apoyo+colaborador por
+> equipo — dos offsets independientes fallarían: con pools chicos podrían coincidir por
+> azar y darle a un mismo equipo el "resto" de ambos pools, un desbalance de 2. No toca la
+> selección de líderes (pasos 4-5): un adulto mayor puede salir líder por el sorteo normal
+> igual que cualquier instructor, y si sale simplemente no entra al round-robin de apoyo
+> (ya queda excluido de `remainingInstructors`). La exclusión mutua con `isJoven` (a nivel
+> de base de datos, ver `Person.isAdultoMayor`) blinda gratis la interacción con el equipo
+> `YOUTH`: como el pool de jóvenes filtra `isJoven: true`, un adulto mayor nunca puede
+> terminar ahí por construcción.
 7b. Si `youthTeam.enabled`, arma el plan del equipo `YOUTH` (validaciones + sorteo del pool de colaboradores — ver §9) ANTES de escribir nada, con el mismo criterio que el paso 3 de arriba (`POOL_INSTRUCTOR_INSUFICIENTE` también se chequea antes de cualquier escritura).
 8. En una transacción: borrar los `Team` existentes del mes — todos, `REGULAR` y `YOUTH` (cascada borra sus `TeamMember`; a esta altura del proyecto ningún `Team` tiene todavía `SlotAssignment`, así que no hay pérdida de horario — anotado para cuando exista Fase 4), crear `teamCount` equipos `REGULAR` nuevos (`label: "Equipo 1"…"Equipo N"`, `orderIndex: 1..N`), crear el equipo `YOUTH` si corresponde (`orderIndex: teamCount + 1`), crear los `TeamMember` (todos con `manualOverride: false`, salvo el líder de `YOUTH` que siempre lleva `manualOverride: true`), y persistir `MonthCycle.youthTeamEnabled`/`youthTeamSize` con lo pedido en esta llamada (solo como default para el próximo form).
 

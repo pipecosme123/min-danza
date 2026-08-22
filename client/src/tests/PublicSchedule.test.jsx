@@ -12,9 +12,11 @@ import { ThemeProvider } from "../context/ThemeContext.jsx";
 // determinista. Contrato: docs/architecture/phase5-public-page-contract.md §4.
 vi.mock("../api/publicSchedule.js", () => ({
   getLatestPublicSchedule: vi.fn(),
+  getPublicScheduleFor: vi.fn(),
+  getScheduleHistory: vi.fn(),
 }));
 
-import { getLatestPublicSchedule } from "../api/publicSchedule.js";
+import { getLatestPublicSchedule, getPublicScheduleFor, getScheduleHistory } from "../api/publicSchedule.js";
 import { ApiError } from "../api/client.js";
 
 function samplePayload() {
@@ -116,6 +118,10 @@ function renderPublicSchedule() {
 describe("PublicSchedule (ruta pública, sin login)", () => {
   beforeEach(() => {
     getLatestPublicSchedule.mockReset();
+    getPublicScheduleFor.mockReset();
+    // Default sin historial: los tests que no lo ejercitan explícitamente no
+    // deben ver aparecer el selector de "Ver otro mes".
+    getScheduleHistory.mockReset().mockResolvedValue({ months: [] });
   });
 
   it("muestra un estado de carga mientras se pide el horario", async () => {
@@ -262,6 +268,50 @@ describe("PublicSchedule (ruta pública, sin login)", () => {
     expect(screen.getByRole("heading", { name: "Equipo 2" })).toBeInTheDocument();
     expect(screen.getByText("Luis Gómez", { selector: ".member-list__name" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Jueves 6 de agosto/i })).toBeInTheDocument();
+  });
+
+  it("el selector de historial permite ver un mes anterior (hasta 1 año) y resetea el filtro de persona activo", async () => {
+    getLatestPublicSchedule.mockResolvedValueOnce(samplePayload());
+    getScheduleHistory.mockResolvedValueOnce({
+      months: [
+        { year: 2026, month: 8 }, // el mismo que "Más reciente" -- no debe listarse dos veces.
+        { year: 2025, month: 8 },
+      ],
+    });
+    const olderPayload = {
+      ...samplePayload(),
+      month: { year: 2025, month: 8, finalizedAt: "2025-08-08T20:00:00.000Z" },
+    };
+    getPublicScheduleFor.mockResolvedValueOnce(olderPayload);
+
+    renderPublicSchedule();
+    await waitFor(() => expect(screen.getByText("Agosto 2026")).toBeInTheDocument());
+
+    // Activar un filtro de persona antes de cambiar de mes.
+    const combobox = screen.getByLabelText("Buscar mi equipo");
+    await userEvent.click(combobox);
+    await userEvent.click(within(screen.getByRole("listbox")).getByRole("option", { name: "Ana Pérez" }));
+    expect(screen.queryByRole("heading", { name: "Equipo 2" })).not.toBeInTheDocument();
+
+    // El selector de historial solo lista "Agosto 2025" (2026 ya es "Más reciente").
+    const monthSelect = screen.getByLabelText("Ver otro mes");
+    expect(within(monthSelect).getAllByRole("option").map((o) => o.textContent)).toEqual(["Más reciente", "Agosto 2025"]);
+
+    await userEvent.selectOptions(monthSelect, "2025-8");
+
+    expect(getPublicScheduleFor).toHaveBeenCalledWith(2025, 8);
+    await waitFor(() => expect(screen.getByText("Agosto 2025")).toBeInTheDocument());
+    // El filtro de persona se resetea al cambiar de mes.
+    expect(screen.getByRole("heading", { name: "Equipo 2" })).toBeInTheDocument();
+  });
+
+  it("no muestra el selector de historial cuando no hay ningún mes anterior disponible", async () => {
+    getLatestPublicSchedule.mockResolvedValueOnce(samplePayload());
+    getScheduleHistory.mockResolvedValueOnce({ months: [{ year: 2026, month: 8 }] });
+    renderPublicSchedule();
+
+    await waitFor(() => expect(screen.getByText("Agosto 2026")).toBeInTheDocument());
+    expect(screen.queryByLabelText("Ver otro mes")).not.toBeInTheDocument();
   });
 
   it("la vista de calendario mensual siempre muestra todos los turnos, incluso con un filtro de persona activo", async () => {

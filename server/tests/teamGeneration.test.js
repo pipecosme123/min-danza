@@ -76,6 +76,7 @@ async function makePerson(category, suffix, opts = {}) {
       documentId: `${DOC_PREFIX}${docCounter}`,
       category,
       isJoven: opts.isJoven ?? false,
+      isAdultoMayor: opts.isAdultoMayor ?? false,
       active: true,
     },
   });
@@ -284,6 +285,72 @@ describe("POST /api/months/:id/generate-teams", () => {
     expect(listed.body.teams).toHaveLength(1);
 
     await retire(instructors);
+  });
+});
+
+describe("POST /api/months/:id/generate-teams — pool adulto mayor (isAdultoMayor)", () => {
+  it("colaboradores: 9 ministros con exactamente 3 isAdultoMayor y 3 equipos -> 1 adulto mayor por equipo", async () => {
+    const instructors = await Promise.all(
+      Array.from({ length: 3 }, (_, i) => makePerson("INSTRUCTOR", `AM Colab Instr ${i + 1}`))
+    );
+    const amMinistros = await Promise.all(
+      Array.from({ length: 3 }, (_, i) => makePerson("MINISTRO", `AM Colab AM ${i + 1}`, { isAdultoMayor: true }))
+    );
+    const restMinistros = await Promise.all(
+      Array.from({ length: 6 }, (_, i) => makePerson("MINISTRO", `AM Colab Rest ${i + 1}`))
+    );
+
+    const month = await createMonth(2092, 1, 3);
+    const res = await authed(request(app).post(`/api/months/${month.id}/generate-teams`));
+    expect(res.status).toBe(200);
+
+    const collabAmPerTeam = res.body.teams
+      .filter((t) => t.teamType === "REGULAR")
+      .map((t) => t.members.filter((m) => m.role === "COLLABORATOR" && amMinistros.some((p) => p.id === m.personId)).length);
+
+    expect(collabAmPerTeam.sort()).toEqual([1, 1, 1]);
+
+    await retire([...instructors, ...amMinistros, ...restMinistros]);
+  });
+
+  it("apoyo: TODOS los instructores marcados isAdultoMayor (6 instructores, 3 equipos) -> 1 adulto mayor de apoyo por equipo, sin importar a quiénes elija el sorteo de líder", async () => {
+    const amInstructores = await Promise.all(
+      Array.from({ length: 6 }, (_, i) => makePerson("INSTRUCTOR", `AM Support Instr ${i + 1}`, { isAdultoMayor: true }))
+    );
+
+    const month = await createMonth(2092, 2, 3);
+    const res = await authed(request(app).post(`/api/months/${month.id}/generate-teams`));
+    expect(res.status).toBe(200);
+
+    const supportAmPerTeam = res.body.teams
+      .filter((t) => t.teamType === "REGULAR")
+      .map((t) => t.members.filter((m) => m.role === "SUPPORT").length);
+
+    // Los 6 instructores son AM; 3 salen líderes (sorteo), los 3 restantes
+    // (garantizadamente AM también) se reparten como apoyo, 1 por equipo.
+    expect(supportAmPerTeam.sort()).toEqual([1, 1, 1]);
+
+    await retire(amInstructores);
+  });
+
+  it("la respuesta de equipos incluye isAdultoMayor por integrante (lo necesita la UI para mostrar el estado)", async () => {
+    const amMinistro = await makePerson("MINISTRO", "AM Response Field Marcado", { isAdultoMayor: true });
+    const restInstructores = await Promise.all(
+      Array.from({ length: 2 }, (_, i) => makePerson("INSTRUCTOR", `AM Response Field Instr ${i + 1}`))
+    );
+
+    const month = await createMonth(2092, 3, 2);
+    const res = await authed(request(app).post(`/api/months/${month.id}/generate-teams`));
+    expect(res.status).toBe(200);
+
+    const allMembers = res.body.teams.filter((t) => t.teamType === "REGULAR").flatMap((t) => t.members);
+    const marcado = allMembers.find((m) => m.personId === amMinistro.id);
+    const noMarcado = allMembers.find((m) => m.personId === restInstructores[0].id);
+
+    expect(marcado.isAdultoMayor).toBe(true);
+    expect(noMarcado.isAdultoMayor).toBe(false);
+
+    await retire([amMinistro, ...restInstructores]);
   });
 });
 

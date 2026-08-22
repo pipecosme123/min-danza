@@ -172,6 +172,36 @@ describe("POST /api/people", () => {
     expect(reloaded.body.data.find((p) => p.id === withFlag.body.id).isJoven).toBe(false);
   });
 
+  it("isAdultoMayor es independiente de category: se guarda y se lee de vuelta (default false si se omite)", async () => {
+    const withoutFlag = await authed(request(app).post("/api/people")).send({
+      fullName: `${NAME_PREFIX} Sin Flag AdultoMayor`,
+      category: "INSTRUCTOR",
+    });
+    expect(withoutFlag.status).toBe(201);
+    expect(withoutFlag.body.isAdultoMayor).toBe(false);
+    createdPersonIds.push(withoutFlag.body.id);
+
+    const withFlag = await authed(request(app).post("/api/people")).send({
+      fullName: `${NAME_PREFIX} Con Flag AdultoMayor`,
+      category: "MINISTRO",
+      isAdultoMayor: true,
+    });
+    expect(withFlag.status).toBe(201);
+    expect(withFlag.body.isAdultoMayor).toBe(true);
+    createdPersonIds.push(withFlag.body.id);
+  });
+
+  it("POST con isJoven: true e isAdultoMayor: true a la vez -> 400 (mutuamente excluyentes)", async () => {
+    const res = await authed(request(app).post("/api/people")).send({
+      fullName: `${NAME_PREFIX} Joven Y AdultoMayor`,
+      category: "MINISTRO",
+      isJoven: true,
+      isAdultoMayor: true,
+    });
+    expect(res.status).toBe(400);
+    expect(Array.isArray(res.body.error.details)).toBe(true);
+  });
+
   it("sin token devuelve 401", async () => {
     const res = await request(app)
       .post("/api/people")
@@ -216,6 +246,28 @@ describe("GET /api/people", () => {
     expect(noJovenes.body.data.every((p) => p.isJoven === false)).toBe(true);
 
     const badValue = await authed(request(app).get("/api/people?isJoven=si"));
+    expect(badValue.status).toBe(400);
+  });
+
+  it("filtra por isAdultoMayor, independiente de category", async () => {
+    await createPersonDirect({ suffix: "AM Uno", fullName: `${NAME_PREFIX} AM Uno`, category: "INSTRUCTOR", isAdultoMayor: true });
+    await createPersonDirect({ suffix: "AM Dos", fullName: `${NAME_PREFIX} AM Dos`, category: "MINISTRO", isAdultoMayor: true });
+    await createPersonDirect({ suffix: "No AM", fullName: `${NAME_PREFIX} No AM`, category: "MINISTRO", isAdultoMayor: false });
+
+    const ams = await authed(
+      request(app).get(`/api/people?search=${encodeURIComponent(`${NAME_PREFIX} AM`)}&isAdultoMayor=true`),
+    );
+    expect(ams.status).toBe(200);
+    expect(ams.body.data.length).toBeGreaterThanOrEqual(2);
+    expect(ams.body.data.every((p) => p.isAdultoMayor === true)).toBe(true);
+
+    const noAms = await authed(
+      request(app).get(`/api/people?search=${encodeURIComponent(`${NAME_PREFIX} No AM`)}&isAdultoMayor=false`),
+    );
+    expect(noAms.status).toBe(200);
+    expect(noAms.body.data.every((p) => p.isAdultoMayor === false)).toBe(true);
+
+    const badValue = await authed(request(app).get("/api/people?isAdultoMayor=si"));
     expect(badValue.status).toBe(400);
   });
 
@@ -277,6 +329,55 @@ describe("PATCH /api/people/:id", () => {
   it("id inexistente devuelve 404", async () => {
     const res = await authed(request(app).patch("/api/people/no-existe-este-id")).send({ notes: "x" });
     expect(res.status).toBe(404);
+  });
+
+  it("PATCH con isJoven: true e isAdultoMayor: true a la vez -> 400 (mutuamente excluyentes)", async () => {
+    const person = await createPersonDirect({ suffix: "Patch Ambos True" });
+    const res = await authed(request(app).patch(`/api/people/${person.id}`)).send({
+      isJoven: true,
+      isAdultoMayor: true,
+    });
+    expect(res.status).toBe(400);
+    expect(Array.isArray(res.body.error.details)).toBe(true);
+  });
+
+  it("PATCH auto-limpieza real: marcar isAdultoMayor: true en alguien con isJoven: true lo desmarca solo, y viceversa", async () => {
+    const personJoven = await createPersonDirect({ suffix: "AutoLimpieza Joven", isJoven: true });
+    const toAdultoMayor = await authed(request(app).patch(`/api/people/${personJoven.id}`)).send({
+      isAdultoMayor: true,
+    });
+    expect(toAdultoMayor.status).toBe(200);
+    expect(toAdultoMayor.body.person.isAdultoMayor).toBe(true);
+    expect(toAdultoMayor.body.person.isJoven).toBe(false);
+
+    const personAdultoMayor = await createPersonDirect({ suffix: "AutoLimpieza AM", isAdultoMayor: true });
+    const toJoven = await authed(request(app).patch(`/api/people/${personAdultoMayor.id}`)).send({
+      isJoven: true,
+    });
+    expect(toJoven.status).toBe(200);
+    expect(toJoven.body.person.isJoven).toBe(true);
+    expect(toJoven.body.person.isAdultoMayor).toBe(false);
+  });
+
+  it("el CHECK constraint de la base rechaza isJoven e isAdultoMayor ambos true, incluso bypaseando la API/zod", async () => {
+    // Inserción cruda vía SQL, sin pasar por people.service.js ni por la
+    // validación zod de people.routes.js -- si esto se rechaza, la exclusión
+    // mutua está protegida de verdad a nivel de base, no solo en la capa de
+    // aplicación (persona_joven_adulto_mayor_exclusive, migración
+    // 20260822000000_add_adulto_mayor).
+    const rawId = `qacrud-check-${RUN_ID}`;
+    await expect(
+      prisma.$executeRawUnsafe(
+        `INSERT INTO "person" ("id", "full_name", "category", "is_joven", "is_adulto_mayor", "updated_at")
+         VALUES ($1, $2, 'MINISTRO', true, true, now())`,
+        rawId,
+        `${NAME_PREFIX} CHECK Constraint`
+      )
+    ).rejects.toThrow(/person_joven_adulto_mayor_exclusive/);
+
+    // Si por algún motivo el rechazo fallara, no debe quedar basura: limpieza
+    // defensiva (no debería ejecutar nada, la fila nunca se insertó).
+    await prisma.person.deleteMany({ where: { id: rawId } });
   });
 
   it("P19: dar de baja a alguien en un mes DRAFT/FINALIZED devuelve warning PERSONA_EN_EQUIPO_ACTIVO", async () => {

@@ -23,6 +23,7 @@ let docCounter = 0;
 let token;
 const createdPersonIds = [];
 const createdMonthCycleIds = [];
+const createdUniformIds = [];
 let preExistingActiveIds = [];
 
 beforeAll(async () => {
@@ -49,6 +50,7 @@ afterAll(async () => {
   await prisma.monthCycle.deleteMany({ where: { id: { in: createdMonthCycleIds } } });
   await prisma.person.deleteMany({ where: { id: { in: createdPersonIds } } });
   await prisma.person.deleteMany({ where: { fullName: { startsWith: NAME_PREFIX } } });
+  await prisma.uniform.deleteMany({ where: { id: { in: createdUniformIds } } });
 
   if (preExistingActiveIds.length > 0) {
     await prisma.person.updateMany({ where: { id: { in: preExistingActiveIds } }, data: { active: true } });
@@ -73,6 +75,27 @@ async function makePerson(category) {
   });
   createdPersonIds.push(person.id);
   return person;
+}
+
+async function makeUniform(suffix) {
+  const uniform = await prisma.uniform.create({
+    data: { name: `${NAME_PREFIX} Uniforme ${suffix} ${RUN_ID}`, colorHex: "#334455" },
+  });
+  createdUniformIds.push(uniform.id);
+  return uniform;
+}
+
+function midMonthDate(monthCycle) {
+  return `${monthCycle.year}-${String(monthCycle.month).padStart(2, "0")}-10`;
+}
+
+/** Asigna un uniforme "de relleno" a TODOS los slots del mes (atajo directo por
+ * prisma, no vía PATCH /api/slots/:id -- eso ya lo prueba slots.test.js). Lo
+ * necesitan los tests que finalizan un mes pero no son los que prueban
+ * específicamente la regla TURNOS_SIN_UNIFORME. */
+async function assignUniformToAllSlots(monthCycleId, suffix) {
+  const uniform = await makeUniform(suffix);
+  await prisma.serviceSlot.updateMany({ where: { monthCycleId }, data: { uniformId: uniform.id } });
 }
 
 async function createMonth(year, month, teamCount) {
@@ -100,6 +123,7 @@ describe("POST /api/months/:id/finalize", () => {
 
     const scheduleRes = await authed(request(app).post(`/api/months/${monthCycle.id}/generate-schedule`));
     expect(scheduleRes.status).toBe(200);
+    await assignUniformToAllSlots(monthCycle.id, "Basico");
 
     const res = await authed(request(app).post(`/api/months/${monthCycle.id}/finalize`));
     expect(res.status).toBe(200);
@@ -111,6 +135,7 @@ describe("POST /api/months/:id/finalize", () => {
     const monthCycle = await setupMonthWithTeams({ year: 2081, month: 2, teamCount: 1 });
     const scheduleRes = await authed(request(app).post(`/api/months/${monthCycle.id}/generate-schedule`));
     expect(scheduleRes.status).toBe(200);
+    await assignUniformToAllSlots(monthCycle.id, "YaFinalizado");
 
     const first = await authed(request(app).post(`/api/months/${monthCycle.id}/finalize`));
     expect(first.status).toBe(200);
@@ -138,6 +163,61 @@ describe("POST /api/months/:id/finalize", () => {
     expect(res.body.error.details.code).toBe("MES_INCOMPLETO");
     expect(res.body.error.details.hasTeams).toBe(true);
     expect(res.body.error.details.hasSchedule).toBe(false);
+  });
+
+  it("409 TURNOS_SIN_UNIFORME si algún turno no tiene uniforme asignado (ajustado 2026-08-22)", async () => {
+    const monthCycle = await setupMonthWithTeams({ year: 2081, month: 5, teamCount: 1 });
+    const scheduleRes = await authed(request(app).post(`/api/months/${monthCycle.id}/generate-schedule`));
+    expect(scheduleRes.status).toBe(200);
+    // Ningún slot tiene uniforme recién generado (Fase 4b: nacen sin default).
+
+    const res = await authed(request(app).post(`/api/months/${monthCycle.id}/finalize`));
+    expect(res.status).toBe(409);
+    expect(res.body.error.details.code).toBe("TURNOS_SIN_UNIFORME");
+    expect(res.body.error.details.slots.length).toBeGreaterThan(0);
+    expect(res.body.error.details.slots[0]).toHaveProperty("date");
+    expect(res.body.error.details.slots[0]).toHaveProperty("startTime");
+    expect(res.body.error.details.slots[0]).toHaveProperty("slotType");
+  });
+
+  it("200: finaliza si todos los turnos tienen uniforme asignado", async () => {
+    const monthCycle = await setupMonthWithTeams({ year: 2081, month: 6, teamCount: 1 });
+    const scheduleRes = await authed(request(app).post(`/api/months/${monthCycle.id}/generate-schedule`));
+    expect(scheduleRes.status).toBe(200);
+
+    const uniform = await makeUniform("Completo");
+    await prisma.serviceSlot.updateMany({ where: { monthCycleId: monthCycle.id }, data: { uniformId: uniform.id } });
+
+    const res = await authed(request(app).post(`/api/months/${monthCycle.id}/finalize`));
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("FINALIZED");
+  });
+
+  it("200: un evento EXTRAORDINARY cancelado sin uniforme no bloquea la finalización", async () => {
+    const monthCycle = await setupMonthWithTeams({ year: 2081, month: 7, teamCount: 1 });
+    const scheduleRes = await authed(request(app).post(`/api/months/${monthCycle.id}/generate-schedule`));
+    expect(scheduleRes.status).toBe(200);
+
+    // Asignar uniforme a todos los turnos ya generados (fijos + Servicio de jóvenes si lo hubiera).
+    const uniform = await makeUniform("ConCancelado");
+    await prisma.serviceSlot.updateMany({ where: { monthCycleId: monthCycle.id }, data: { uniformId: uniform.id } });
+
+    // Evento extraordinario nuevo, SIN uniforme, que se cancela antes de finalizar.
+    const created = await authed(request(app).post(`/api/months/${monthCycle.id}/events`)).send({
+      date: midMonthDate(monthCycle),
+      startTime: "20:00",
+      title: "QA Finalize Cancelado",
+      teamsNeeded: 1,
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.slot.uniform).toBeNull();
+
+    const cancelRes = await authed(request(app).post(`/api/events/${created.body.slot.id}/cancel`));
+    expect(cancelRes.status).toBe(200);
+
+    const res = await authed(request(app).post(`/api/months/${monthCycle.id}/finalize`));
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("FINALIZED");
   });
 
   it("404 si el mes no existe", async () => {

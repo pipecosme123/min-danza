@@ -66,14 +66,13 @@ Body (opcional): `{ "regenerate": false }`.
 
 ### Algoritmo (`scheduleGeneration.service.js`)
 
-1. `weekdaysIn(year, month, 3)` (miércoles) → por cada fecha, crear 2 `ServiceSlot` `FIXED`: `17:00` y `19:00`, `teamsNeeded: 1`, `uniformId` = `WeekdayUniform` de `WEDNESDAY` (puede ser `null` si no está configurado — no bloquea, ver warnings).
-2. `weekdaysIn(year, month, 0)` (domingo) → por cada fecha **que no sea** `lastSundayOf(year, month)`: 2 `ServiceSlot` `FIXED` (`08:00`, `10:30`), `teamsNeeded: 1`, `uniformId` = `WeekdayUniform` de `SUNDAY`. Para el **último domingo**: un solo `ServiceSlot` `FIXED` a las `08:00`, `teamsNeeded: 2`.
-3. Si el mes tiene un `Team` con `teamType: YOUTH`: un `ServiceSlot` `YOUTH_SERVICE` en `lastSaturdayOf(year, month)`, `18:50`, `title: "Servicio de jóvenes"`, `teamsNeeded: 1`, `countsTowardBalance: true`, `uniformId` = fila única de `YouthServiceUniform` (puede ser `null`).
-4. Persistir todos los `ServiceSlot` en una transacción.
-5. Ejecutar `recomputeBalance(monthCycleId)` (ver §3) dentro de la MISMA transacción para dejar el mes con equipos ya asignados, no solo los slots vacíos.
-6. Warnings (no bloquean, van en la respuesta):
-   - `UNIFORME_MIERCOLES_NO_CONFIGURADO` / `UNIFORME_DOMINGO_NO_CONFIGURADO` si `WeekdayUniform` no tiene fila para ese día.
-   - `UNIFORME_JOVENES_NO_CONFIGURADO` si se generó el slot `YOUTH_SERVICE` pero no hay `YouthServiceUniform` configurado.
+1. `weekdaysIn(year, month, 3)` (miércoles) → por cada fecha, crear 2 `ServiceSlot` `FIXED`: `17:00` y `19:00`, `teamsNeeded: 1`. (Nota: la mención original de `WeekdayUniform` acá está obsoleta — Fase 4b eliminó ese modelo por completo; todo `ServiceSlot` nace con `uniformId: null` siempre, sin ningún default automático, ver `phase4b-schedule-refinements-contract.md` §1.2).
+2. `weekdaysIn(year, month, 0)` (domingo) → por cada fecha **que no sea** `lastSundayOf(year, month)`: 2 `ServiceSlot` `FIXED` (`08:00`, `10:30`), `teamsNeeded: 1`. Para el **último domingo**: un solo `ServiceSlot` `FIXED` a las `08:00`, `teamsNeeded: 2`, `title: "Ayuno Congregacional"` (nombre fijo agregado 2026-08-22).
+3. `firstFridayOf(year, month)` (agregado 2026-08-22): un `ServiceSlot` `FIXED` en esa fecha, `19:00`, `teamsNeeded: 2`, `title: "Vigilia Unida - Comuna 21"` — mismo mecanismo que la excepción del último domingo (un solo slot con `teamsNeeded: 2`, sin turno "hermano" ese día), pero incondicional (se genera todos los meses, no depende de si hay equipo `YOUTH`).
+4. Si el mes tiene un `Team` con `teamType: YOUTH`: un `ServiceSlot` `YOUTH_SERVICE` en `lastSaturdayOf(year, month)`, `18:50`, `title: "Servicio de jóvenes"`, `teamsNeeded: 1`, `countsTowardBalance: true`, `uniformId: null`.
+5. Persistir todos los `ServiceSlot` en una transacción.
+6. Ejecutar `recomputeBalance(monthCycleId)` (ver §3) dentro de la MISMA transacción para dejar el mes con equipos ya asignados, no solo los slots vacíos.
+7. Sin warnings de uniforme: como ningún slot intenta un default automático (Fase 4b), no hay nada que advertir en este paso — los `UNIFORME_*_NO_CONFIGURADO` mencionados en una versión anterior de este contrato ya no existen.
 
 **200 →**
 ```json
@@ -86,7 +85,7 @@ Body (opcional): `{ "regenerate": false }`.
       "teamsNeeded": 1, "countsTowardBalance": true, "uniform": null,
       "teams": [ { "id": "clxTY", "label": "Servicio de jóvenes" } ] }
   ],
-  "warnings": [ { "code": "UNIFORME_JOVENES_NO_CONFIGURADO", "message": "…" } ]
+  "warnings": []
 }
 ```
 Orden: `date ASC, startTime ASC`. `teams` siempre presente (`[]` si por lo que sea no se pudo asignar, no debería pasar salvo el caso límite de 0 equipos regulares que ya está cubierto por `EQUIPOS_NO_GENERADOS`).

@@ -33,18 +33,20 @@ function buildMonthWeeks(year, month) {
 
 /**
  * Indicadores compactos de un turno para una celda del día: uno por equipo
- * asignado (`FIXED`/`YOUTH_SERVICE`), o uno solo con el título
- * (`EXTRAORDINARY`). El color del uniforme, si tiene, es solo un acento
- * visual (borde) — el texto siempre está presente, nunca es la única señal.
+ * asignado, o uno solo con el título cuando el turno tiene nombre propio
+ * (`EXTRAORDINARY`, o cualquier `FIXED`/`YOUTH_SERVICE` con `title` —
+ * ej. "Vigilia Unida - Comuna 21", "Ayuno Congregacional", "Servicio de
+ * jóvenes"). El color del uniforme, si tiene, es solo un acento visual
+ * (borde) — el texto siempre está presente, nunca es la única señal.
  *
  * `highlightTeamIds`, si se pasa (`Set<string>` no vacío), marca cada
- * indicador como resaltado cuando el equipo al que pertenece (o, para
- * `EXTRAORDINARY`, alguno de los equipos del turno) está en el set.
+ * indicador como resaltado cuando el equipo al que pertenece (o, para un
+ * turno con título, alguno de los equipos del turno) está en el set.
  */
 function slotIndicators(slot, highlightTeamIds) {
   const hasHighlightSet = Boolean(highlightTeamIds && highlightTeamIds.size > 0);
   const colorHex = slot.uniform?.colorHex || null;
-  if (slot.slotType === 'EXTRAORDINARY') {
+  if (slot.slotType === 'EXTRAORDINARY' || slot.title) {
     const highlighted = hasHighlightSet && (slot.teams || []).some((team) => highlightTeamIds.has(team.id));
     const cancelled = Boolean(slot.cancelledAt);
     return [{ key: slot.id, text: slot.title || 'Evento', colorHex, highlighted, cancelled }];

@@ -26,7 +26,7 @@ const CATEGORY_LABELS = {
   MINISTRO: 'Ministro',
 };
 
-const EMPTY_FORM = { fullName: '', documentId: '', category: '', isJoven: false, notes: '' };
+const EMPTY_FORM = { fullName: '', documentId: '', category: '', isJoven: false, isAdultoMayor: false, notes: '' };
 
 const INITIAL_LIST_PARAMS = { page: 1, pageSize: PAGE_SIZE, sort: 'fullName', active: true };
 
@@ -48,6 +48,8 @@ export function PeopleManager() {
   const [statusFilter, setStatusFilter] = useState('active');
   // 'all' (default) | 'yes' (solo jóvenes) | 'no' (solo no jóvenes).
   const [jovenFilter, setJovenFilter] = useState('all');
+  // 'all' (default) | 'yes' (solo adultos mayores) | 'no' (solo no adultos mayores).
+  const [adultoMayorFilter, setAdultoMayorFilter] = useState('all');
   const [page, setPage] = useState(1);
 
   function buildListParams() {
@@ -58,6 +60,8 @@ export function PeopleManager() {
     else if (statusFilter === 'inactive') params.active = false;
     if (jovenFilter === 'yes') params.isJoven = true;
     else if (jovenFilter === 'no') params.isJoven = false;
+    if (adultoMayorFilter === 'yes') params.isAdultoMayor = true;
+    else if (adultoMayorFilter === 'no') params.isAdultoMayor = false;
     return params;
   }
 
@@ -71,7 +75,7 @@ export function PeopleManager() {
     setPage(1);
     setSelectedIds(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, category, statusFilter, jovenFilter]);
+  }, [debouncedSearch, category, statusFilter, jovenFilter, adultoMayorFilter]);
 
   // La primera carga ya la hace `immediate: true` de arriba; este efecto
   // solo reacciona a cambios posteriores de filtros/página.
@@ -82,7 +86,7 @@ export function PeopleManager() {
     }
     execute(buildListParams()).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, debouncedSearch, category, statusFilter, jovenFilter]);
+  }, [page, debouncedSearch, category, statusFilter, jovenFilter, adultoMayorFilter]);
 
   // Si una baja/edición deja vacía la página actual (y no es la primera),
   // retrocede una página automáticamente en vez de mostrar un vacío confuso.
@@ -130,6 +134,7 @@ export function PeopleManager() {
         documentId: toNullableTrimmed(createForm.documentId),
         category: createForm.category,
         isJoven: createForm.isJoven,
+        isAdultoMayor: createForm.isAdultoMayor,
         notes: toNullableTrimmed(createForm.notes),
         ...(confirmDuplicateName ? { confirmDuplicateName: true } : {}),
       };
@@ -174,6 +179,7 @@ export function PeopleManager() {
       documentId: person.documentId || '',
       category: person.category,
       isJoven: Boolean(person.isJoven),
+      isAdultoMayor: Boolean(person.isAdultoMayor),
       notes: person.notes || '',
     });
     setEditError(null);
@@ -197,6 +203,7 @@ export function PeopleManager() {
     if (newDocument !== (editTarget.documentId ?? null)) changes.documentId = newDocument;
     if (editForm.category !== editTarget.category) changes.category = editForm.category;
     if (editForm.isJoven !== Boolean(editTarget.isJoven)) changes.isJoven = editForm.isJoven;
+    if (editForm.isAdultoMayor !== Boolean(editTarget.isAdultoMayor)) changes.isAdultoMayor = editForm.isAdultoMayor;
     const newNotes = toNullableTrimmed(editForm.notes);
     if (newNotes !== (editTarget.notes ?? null)) changes.notes = newNotes;
     return changes;
@@ -284,6 +291,8 @@ export function PeopleManager() {
   const [bulkStatusValue, setBulkStatusValue] = useState('active');
   const [bulkJovenOpen, setBulkJovenOpen] = useState(false);
   const [bulkJovenValue, setBulkJovenValue] = useState('true');
+  const [bulkAdultoMayorOpen, setBulkAdultoMayorOpen] = useState(false);
+  const [bulkAdultoMayorValue, setBulkAdultoMayorValue] = useState('true');
 
   function toggleSelectionMode() {
     setSelectionMode((prev) => !prev);
@@ -364,6 +373,18 @@ export function PeopleManager() {
     await runBulkAction(Array.from(selectedIds), (id) => updatePerson(id, { isJoven }));
   }
 
+  function openBulkAdultoMayorModal() {
+    setBulkAdultoMayorValue('true');
+    setBulkAdultoMayorOpen(true);
+  }
+
+  async function submitBulkAdultoMayor(event) {
+    event.preventDefault();
+    setBulkAdultoMayorOpen(false);
+    const isAdultoMayor = bulkAdultoMayorValue === 'true';
+    await runBulkAction(Array.from(selectedIds), (id) => updatePerson(id, { isAdultoMayor }));
+  }
+
   // ---- Import masivo ----
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState(null);
@@ -402,7 +423,8 @@ export function PeopleManager() {
   // ---- Tabla ----
   const people = data?.data ?? [];
   const pagination = data?.pagination ?? null;
-  const hasActiveFilters = Boolean(debouncedSearch.trim()) || Boolean(category) || jovenFilter !== 'all';
+  const hasActiveFilters =
+    Boolean(debouncedSearch.trim()) || Boolean(category) || jovenFilter !== 'all' || adultoMayorFilter !== 'all';
 
   const pageIds = people.map((p) => p.id);
   const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
@@ -466,6 +488,7 @@ export function PeopleManager() {
         <div className="people-manager__category-cell">
           <Badge variant="primary">{CATEGORY_LABELS[row.category] || row.category}</Badge>
           {row.isJoven ? <Badge variant="success">Joven</Badge> : null}
+          {row.isAdultoMayor ? <Badge variant="warning">Adulto mayor</Badge> : null}
         </div>
       ),
     },
@@ -560,6 +583,16 @@ export function PeopleManager() {
           <option value="yes">Solo jóvenes</option>
           <option value="no">Solo no jóvenes</option>
         </Field>
+        <Field
+          label="Adulto mayor"
+          as="select"
+          value={adultoMayorFilter}
+          onChange={(event) => setAdultoMayorFilter(event.target.value)}
+        >
+          <option value="all">Todas</option>
+          <option value="yes">Solo adultos mayores</option>
+          <option value="no">Solo no adultos mayores</option>
+        </Field>
       </div>
 
       {selectionMode && selectedIds.size > 0 ? (
@@ -576,6 +609,9 @@ export function PeopleManager() {
             </Button>
             <Button variant="secondary" size="sm" onClick={openBulkJovenModal} disabled={bulkSubmitting}>
               Cambiar Joven
+            </Button>
+            <Button variant="secondary" size="sm" onClick={openBulkAdultoMayorModal} disabled={bulkSubmitting}>
+              Cambiar Adulto mayor
             </Button>
             <Button variant="ghost" size="sm" onClick={clearSelection} disabled={bulkSubmitting}>
               Cancelar selección
@@ -651,7 +687,19 @@ export function PeopleManager() {
             label="Joven"
             hint="Elegible para el equipo de jóvenes. Es independiente de la categoría de arriba."
             checked={createForm.isJoven}
-            onChange={(checked) => updateCreateField('isJoven', checked)}
+            onChange={(checked) => {
+              updateCreateField('isJoven', checked);
+              if (checked) updateCreateField('isAdultoMayor', false);
+            }}
+          />
+          <Checkbox
+            label="Adulto mayor"
+            hint="Independiente de la categoría. No se puede marcar junto con Joven."
+            checked={createForm.isAdultoMayor}
+            onChange={(checked) => {
+              updateCreateField('isAdultoMayor', checked);
+              if (checked) updateCreateField('isJoven', false);
+            }}
           />
           <Field
             label="Notas (opcional)"
@@ -715,7 +763,19 @@ export function PeopleManager() {
               label="Joven"
               hint="Elegible para el equipo de jóvenes. Es independiente de la categoría de arriba."
               checked={editForm.isJoven}
-              onChange={(checked) => updateEditField('isJoven', checked)}
+              onChange={(checked) => {
+                updateEditField('isJoven', checked);
+                if (checked) updateEditField('isAdultoMayor', false);
+              }}
+            />
+            <Checkbox
+              label="Adulto mayor"
+              hint="Independiente de la categoría. No se puede marcar junto con Joven."
+              checked={editForm.isAdultoMayor}
+              onChange={(checked) => {
+                updateEditField('isAdultoMayor', checked);
+                if (checked) updateEditField('isJoven', false);
+              }}
             />
             <Field
               label="Notas (opcional)"
@@ -773,8 +833,8 @@ export function PeopleManager() {
           <>
             <p>
               Selecciona un archivo CSV o Excel (.xlsx) con las columnas nombre, documento (opcional), categoría y,
-              opcionalmente, si la persona es joven (columna «Joven», con «Sí» o «No»). El archivo no debe superar
-              2&nbsp;MB ni 2000 filas.
+              opcionalmente, si la persona es joven (columna «Joven», con «Sí» o «No») y/o adulto mayor (columna
+              «Adulto mayor», con «Sí» o «No»). El archivo no debe superar 2&nbsp;MB ni 2000 filas.
             </p>
             <FileUpload
               label="Elegir archivo"
@@ -876,6 +936,33 @@ export function PeopleManager() {
           </Field>
           <div className="people-manager__form-actions">
             <Button type="button" variant="secondary" onClick={() => setBulkJovenOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" loading={bulkSubmitting}>
+              Aplicar
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Cambiar Adulto mayor en lote */}
+      <Modal open={bulkAdultoMayorOpen} onClose={() => setBulkAdultoMayorOpen(false)} title="Cambiar Adulto mayor">
+        <form onSubmit={submitBulkAdultoMayor} noValidate>
+          <p>
+            Se va a cambiar la marca de Adulto mayor de {selectedIds.size} persona{selectedIds.size === 1 ? '' : 's'}{' '}
+            seleccionada{selectedIds.size === 1 ? '' : 's'}. Es independiente de la categoría de cada persona.
+          </p>
+          <Field
+            label="Marcar como"
+            as="select"
+            value={bulkAdultoMayorValue}
+            onChange={(event) => setBulkAdultoMayorValue(event.target.value)}
+          >
+            <option value="true">Adulto mayor</option>
+            <option value="false">No adulto mayor</option>
+          </Field>
+          <div className="people-manager__form-actions">
+            <Button type="button" variant="secondary" onClick={() => setBulkAdultoMayorOpen(false)}>
               Cancelar
             </Button>
             <Button type="submit" loading={bulkSubmitting}>

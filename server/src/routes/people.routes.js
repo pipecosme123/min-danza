@@ -87,26 +87,42 @@ const listQuerySchema = z.object({
     .enum(["true", "false"], { message: "isJoven debe ser 'true' o 'false'" })
     .optional()
     .transform((v) => (v === undefined ? undefined : v === "true")),
+  isAdultoMayor: z
+    .enum(["true", "false"], { message: "isAdultoMayor debe ser 'true' o 'false'" })
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === "true")),
   sort: z.enum(["fullName", "-fullName", "createdAt", "-createdAt"]).default("fullName"),
 });
 
-const createBodySchema = z.object({
-  fullName: fullNameSchema,
-  documentId: documentIdOptionalSchema,
-  category: categorySchema,
-  isJoven: z.boolean().optional().default(false),
-  notes: notesSchema,
-  confirmDuplicateName: z.boolean().optional().default(false),
-});
+const createBodySchema = z
+  .object({
+    fullName: fullNameSchema,
+    documentId: documentIdOptionalSchema,
+    category: categorySchema,
+    isJoven: z.boolean().optional().default(false),
+    isAdultoMayor: z.boolean().optional().default(false),
+    notes: notesSchema,
+    confirmDuplicateName: z.boolean().optional().default(false),
+  })
+  .refine((data) => !(data.isJoven && data.isAdultoMayor), {
+    message: "Una persona no puede ser joven y adulto mayor a la vez.",
+    path: ["isAdultoMayor"],
+  });
 
-const patchBodySchema = z.object({
-  fullName: fullNameSchema.optional(),
-  documentId: documentIdOptionalSchema,
-  category: categorySchema.optional(),
-  isJoven: z.boolean().optional(),
-  notes: notesSchema,
-  active: z.boolean().optional(),
-});
+const patchBodySchema = z
+  .object({
+    fullName: fullNameSchema.optional(),
+    documentId: documentIdOptionalSchema,
+    category: categorySchema.optional(),
+    isJoven: z.boolean().optional(),
+    isAdultoMayor: z.boolean().optional(),
+    notes: notesSchema,
+    active: z.boolean().optional(),
+  })
+  .refine((data) => !(data.isJoven === true && data.isAdultoMayor === true), {
+    message: "Una persona no puede ser joven y adulto mayor a la vez.",
+    path: ["isAdultoMayor"],
+  });
 
 const deleteQuerySchema = z.object({
   purge: z

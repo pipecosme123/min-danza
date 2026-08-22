@@ -44,6 +44,28 @@ describe("MonthOccupancyCalendar", () => {
     expect(screen.getByText("Vigilia de oración de toda la congregación")).toBeInTheDocument();
   });
 
+  it("un turno FIXED con título (ej. «Vigilia Unida - Comuna 21», «Ayuno Congregacional») muestra el título en vez de los equipos", () => {
+    const slots = [
+      {
+        id: "slot-vigilia",
+        date: "2026-08-07",
+        startTime: "19:00",
+        slotType: "FIXED",
+        title: "Vigilia Unida - Comuna 21",
+        uniform: null,
+        teams: [
+          { id: "team-1", label: "Equipo 1", assignmentId: "sa-1" },
+          { id: "team-2", label: "Equipo 2", assignmentId: "sa-2" },
+        ],
+      },
+    ];
+    render(<MonthOccupancyCalendar year={2026} month={8} slots={slots} />);
+
+    expect(screen.getByText("Vigilia Unida - Comuna 21")).toBeInTheDocument();
+    expect(screen.queryByText("Equipo 1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Equipo 2")).not.toBeInTheDocument();
+  });
+
   it("los días sin turnos no muestran ningún indicador", () => {
     render(<MonthOccupancyCalendar year={2026} month={8} slots={sampleSlots()} />);
 

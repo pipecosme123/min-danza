@@ -14,6 +14,7 @@
 
 /** 0=domingo … 6=sábado, igual que Date#getUTCDay(). */
 const SUNDAY = 0;
+const FRIDAY = 5;
 const SATURDAY = 6;
 
 function daysInMonth(year, month) {
@@ -65,6 +66,24 @@ export function weekdaysIn(year, month, weekday) {
     }
   }
   return result;
+}
+
+/**
+ * Primer viernes del mes (year, month 1-12). Reusa `weekdaysIn`, que ya
+ * devuelve las fechas en orden ascendente -- el primer viernes es
+ * simplemente su primer elemento.
+ */
+export function firstFridayOf(year, month) {
+  return weekdaysIn(year, month, FRIDAY)[0];
+}
+
+/**
+ * Diferencia en meses entre dos fechas civiles {year, month} (ignora el
+ * día). Positivo si `to` es posterior a `from`. Usado para acotar el
+ * historial público de meses finalizados (ver publicSchedule.service.js).
+ */
+export function monthsBetween(from, to) {
+  return (to.year - from.year) * 12 + (to.month - from.month);
 }
 
 /**

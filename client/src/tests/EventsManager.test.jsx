@@ -113,7 +113,7 @@ function youthSlot() {
     title: "Servicio de jóvenes",
     teamsNeeded: 1,
     countsTowardBalance: true,
-    uniform: null,
+    uniform: { id: "u-1", name: "Uniforme A", colorHex: "#1E40AF" },
     teams: [{ id: "team-youth", label: "Servicio de jóvenes", assignmentId: "sa-youth", locked: false }],
   };
 }
@@ -127,7 +127,7 @@ function extraordinarySlot() {
     title: "Vigilia",
     teamsNeeded: 1,
     countsTowardBalance: true,
-    uniform: null,
+    uniform: { id: "u-1", name: "Uniforme A", colorHex: "#1E40AF" },
     teams: [{ id: "team-2", label: "Equipo 2", assignmentId: "sa-extra", locked: false }],
   };
 }
@@ -550,6 +550,20 @@ describe("EventsManager", () => {
 
     await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Finalizar mes" })).toBeDisabled();
+  });
+
+  it("el botón «Finalizar mes» está deshabilitado si algún turno no tiene uniforme asignado (ajustado 2026-08-22)", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue(regularTeams());
+    getMonthSchedule.mockResolvedValue({
+      slots: [fixedSlot(), fixedSlot2(), { ...extraordinarySlot(), uniform: null }],
+      balance: fullSchedule().balance,
+    });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Vigilia")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Finalizar mes" })).toBeDisabled();
+    expect(screen.getByText("Hay 1 turno sin uniforme asignado.")).toBeInTheDocument();
   });
 
   it("habilitado con equipos y horario, pide confirmación y llama a finalizeMonth", async () => {
