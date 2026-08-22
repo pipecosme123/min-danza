@@ -59,9 +59,20 @@ const youthTeamSchema = z
 // existentes a POST generate-teams sin youthTeam (ni body en absoluto, como
 // en la mayoría de teamGeneration.test.js) no envían Content-Type json, así
 // que req.body llega `undefined` a este schema.
+//
+// teamCount (agregado 2026-08-22): opcional -- si no viene, se sortea con el
+// `teamCount` que el mes ya tenía (comportamiento histórico). Si viene,
+// permite elegir de nuevo cuántos equipos formar al (re)sortear, sin tener
+// que borrar el mes y crear uno nuevo -- mismo rango que al crear el mes.
 const generateTeamsBodySchema = z
   .object({
     youthTeam: youthTeamSchema.optional(),
+    teamCount: z.coerce
+      .number()
+      .int("teamCount debe ser un entero")
+      .min(1, "teamCount debe ser >= 1")
+      .max(50, "teamCount debe ser <= 50")
+      .optional(),
   })
   .default({});
 
@@ -91,7 +102,10 @@ router.post(
   validate({ params: monthIdParamSchema, body: generateTeamsBodySchema }),
   async (req, res, next) => {
     try {
-      const result = await generateTeams(req.params.id, { youthTeam: req.body.youthTeam });
+      const result = await generateTeams(req.params.id, {
+        youthTeam: req.body.youthTeam,
+        teamCount: req.body.teamCount,
+      });
       res.json(result);
     } catch (err) {
       next(err);

@@ -94,3 +94,14 @@ export function generateTeams(id, data = {}) {
 export function updateTeam(teamId, data) {
   return apiClient.patch(`/teams/${teamId}`, data);
 }
+
+/**
+ * Elimina un mes por completo (equipos, horario y asignaciones incluidos).
+ * Un mes DRAFT no tiene restricción; uno FINALIZED solo se puede eliminar si
+ * es el actual o uno futuro (409 MES_PASADO si ya pasó).
+ * @param {string} id
+ * @returns {Promise<{ deleted: true }>}
+ */
+export function deleteMonth(id) {
+  return apiClient.del(`/months/${id}`);
+}

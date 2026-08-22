@@ -235,6 +235,66 @@ describe("POST /api/months/:id/generate-teams", () => {
     await retire(instructors);
   });
 
+  it("re-sortear con un teamCount distinto arma esa cantidad de equipos y actualiza el MonthCycle (ajustado 2026-08-22)", async () => {
+    const instructors = await Promise.all(
+      Array.from({ length: 5 }, (_, i) => makePerson("INSTRUCTOR", `TeamCount Instr ${i + 1}`))
+    );
+    const ministros = await Promise.all(
+      Array.from({ length: 6 }, (_, i) => makePerson("MINISTRO", `TeamCount Min ${i + 1}`))
+    );
+    const month = await createMonth(2085, 1, 2);
+
+    const first = await authed(request(app).post(`/api/months/${month.id}/generate-teams`));
+    expect(first.status).toBe(200);
+    expect(first.body.teams).toHaveLength(2);
+
+    const second = await authed(request(app).post(`/api/months/${month.id}/generate-teams`)).send({ teamCount: 4 });
+    expect(second.status).toBe(200);
+    expect(second.body.teams).toHaveLength(4);
+
+    const monthAfter = await authed(request(app).get(`/api/months/${month.id}`));
+    expect(monthAfter.body.teamCount).toBe(4);
+
+    // Volver a achicar la cantidad también funciona: se re-sortea desde cero.
+    const third = await authed(request(app).post(`/api/months/${month.id}/generate-teams`)).send({ teamCount: 2 });
+    expect(third.status).toBe(200);
+    expect(third.body.teams).toHaveLength(2);
+
+    const monthAfterAgain = await authed(request(app).get(`/api/months/${month.id}`));
+    expect(monthAfterAgain.body.teamCount).toBe(2);
+
+    await retire([...instructors, ...ministros]);
+  });
+
+  it("409 POOL_INSTRUCTOR_INSUFICIENTE si el teamCount pedido en el re-sorteo supera el pool disponible", async () => {
+    const instructors = await Promise.all(
+      Array.from({ length: 2 }, (_, i) => makePerson("INSTRUCTOR", `TeamCount Insuf Instr ${i + 1}`))
+    );
+    const month = await createMonth(2085, 2, 2);
+
+    const first = await authed(request(app).post(`/api/months/${month.id}/generate-teams`));
+    expect(first.status).toBe(200);
+
+    const res = await authed(request(app).post(`/api/months/${month.id}/generate-teams`)).send({ teamCount: 5 });
+    expect(res.status).toBe(409);
+    expect(res.body.error.details.code).toBe("POOL_INSTRUCTOR_INSUFICIENTE");
+    expect(res.body.error.details.needed).toBe(5);
+    expect(res.body.error.details.available).toBe(2);
+
+    // El sorteo rechazado no debe haber dejado nada a medio camino: sigue
+    // con los 2 equipos del sorteo anterior, no con 5 a medio crear.
+    const listed = await authed(request(app).get(`/api/months/${month.id}/teams`));
+    expect(listed.body.teams).toHaveLength(2);
+
+    await retire(instructors);
+  });
+
+  it("400 si teamCount viene fuera de rango en el body", async () => {
+    const month = await createMonth(2085, 3, 1);
+    const res = await authed(request(app).post(`/api/months/${month.id}/generate-teams`)).send({ teamCount: 0 });
+    expect(res.status).toBe(400);
+  });
+
   it("404 si el mes no existe", async () => {
     const res = await authed(request(app).post("/api/months/no-existe-este-id/generate-teams"));
     expect(res.status).toBe(404);

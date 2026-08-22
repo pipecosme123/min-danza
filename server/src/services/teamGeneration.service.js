@@ -8,6 +8,7 @@ import { ConflictError, NotFoundError, ValidationError } from "../utils/errors.j
 import { shuffle } from "../utils/shuffle.js";
 import { invalidateByPrefix } from "../lib/cache.js";
 import { formatDbDate } from "../utils/dates.js";
+import { assertEditableConsideringFinalization } from "../utils/monthLifecycle.js";
 
 const MONTH_SELECT = {
   id: true,
@@ -209,6 +210,40 @@ export async function finalizeMonthCycle(id) {
   return updated;
 }
 
+// ---------------------------------------------------------------------------
+// DELETE /api/months/:id
+// ---------------------------------------------------------------------------
+
+/**
+ * Elimina un MonthCycle por completo -- equipos, horario y asignaciones
+ * caen en cascada a nivel de base de datos (onDelete: Cascade en
+ * schema.prisma), no hace falta borrado manual multi-tabla.
+ *
+ * - DRAFT: sin restricción, nunca se publicó en ningún lado.
+ * - FINALIZED: mismo criterio que agregar/cancelar eventos y cambiar
+ *   uniforme tras publicar -- solo el mes actual o uno futuro
+ *   (`assertEditableConsideringFinalization`), 409 MES_PASADO si ya pasó.
+ *   Protege el historial público de hasta 1 año (ver
+ *   docs/architecture/phase5-public-page-contract.md §0).
+ */
+export async function deleteMonthCycle(id) {
+  const month = await prisma.monthCycle.findUnique({
+    where: { id },
+    select: { id: true, year: true, month: true, status: true },
+  });
+  if (!month) throw new NotFoundError("Mes no encontrado.");
+
+  assertEditableConsideringFinalization(month);
+
+  await prisma.monthCycle.delete({ where: { id } });
+
+  // Defensivo, mismo patrón que finalizeMonthCycle: barato, evita servir
+  // desde caché un mes que ya no existe si estaba publicado.
+  invalidateByPrefix("schedule:");
+
+  return { deleted: true };
+}
+
 async function loadMonthOrThrow(tx, id) {
   const month = await tx.monthCycle.findUnique({ where: { id } });
   if (!month) throw new NotFoundError("Mes no encontrado.");
@@ -227,7 +262,7 @@ function assertDraft(month) {
 
 /**
  * @param {string} monthCycleId
- * @param {{ youthTeam?: { enabled: boolean, size?: number, leaderPersonId?: string } }} [options]
+ * @param {{ youthTeam?: { enabled: boolean, size?: number, leaderPersonId?: string }, teamCount?: number }} [options]
  */
 export async function generateTeams(monthCycleId, options = {}) {
   try {
@@ -257,7 +292,7 @@ export async function generateTeams(monthCycleId, options = {}) {
 }
 
 async function generateTeamsTransaction(monthCycleId, options = {}) {
-  const { youthTeam } = options;
+  const { youthTeam, teamCount: requestedTeamCount } = options;
 
   return prisma.$transaction(async (tx) => {
     const month = await loadMonthOrThrow(tx, monthCycleId);
@@ -272,7 +307,14 @@ async function generateTeamsTransaction(monthCycleId, options = {}) {
       select: { id: true, isAdultoMayor: true },
     });
 
-    const { teamCount } = month;
+    // Ajustado 2026-08-22: permite elegir de nuevo la cantidad de equipos al
+    // (re)sortear (`requestedTeamCount`), sin tener que borrar el mes y crear
+    // uno nuevo. Si no viene, se sortea con el `teamCount` que el mes ya
+    // tenía (comportamiento histórico). El re-sorteo ya borra y recrea TODOS
+    // los equipos (y el horario, si existía) sin importar si la cantidad
+    // cambió, así que no hace falta ningún manejo especial para achicar o
+    // agrandar la cantidad de equipos.
+    const teamCount = requestedTeamCount ?? month.teamCount;
 
     if (instructorPool.length < teamCount) {
       throw new ConflictError("No hay suficientes instructores activos para formar los equipos.", {
@@ -528,7 +570,8 @@ async function generateTeamsTransaction(monthCycleId, options = {}) {
       await tx.teamMember.createMany({ data: memberRows });
     }
 
-    // Persiste el último enabled/size pedidos como default para el próximo
+    // Persiste el teamCount efectivo (puede ser el nuevo, si vino en el
+    // body) y el último enabled/size pedidos como default para el próximo
     // form (ver comentario en MONTH_SELECT); no afecta al sorteo que ya
     // quedó fijado arriba. Si esta llamada vino con youthTeam.enabled false
     // (o ausente), se conserva el último tamaño conocido para no perder el
@@ -536,6 +579,7 @@ async function generateTeamsTransaction(monthCycleId, options = {}) {
     await tx.monthCycle.update({
       where: { id: monthCycleId },
       data: {
+        teamCount,
         youthTeamEnabled: youthEnabled,
         youthTeamSize: youthEnabled ? youthTeam.size ?? 10 : month.youthTeamSize,
       },

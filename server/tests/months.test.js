@@ -1,7 +1,7 @@
-// GET/POST /api/months, GET /api/months/:id. Contrato completo en
-// docs/architecture/phase3-teams-contract.md. Golpea la base Postgres real
-// de desarrollo (igual que people.crud.test.js); todo lo creado se limpia en
-// afterAll vía borrado físico directo con Prisma.
+// GET/POST /api/months, GET /api/months/:id, DELETE /api/months/:id.
+// Contrato completo en docs/architecture/phase3-teams-contract.md. Golpea la
+// base Postgres real de desarrollo (igual que people.crud.test.js); todo lo
+// creado se limpia en afterAll vía borrado físico directo con Prisma.
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
@@ -18,21 +18,96 @@ const REAL_PASSWORD = process.env.ADMIN_PASSWORD || "ChangeMe_DevOnly123!";
 const YEAR_A = 2071;
 const YEAR_B = 2072;
 
+// DELETE /api/months/:id: 2099 (futuro ficticio, mismo patrón que
+// phase4c-post-publish-edits.test.js) para "actual o futuro", 2019 (pasado
+// real, muy anterior a la existencia de esta app) para "ya pasó".
+const NAME_PREFIX = "QA MONTHS DELETE";
+const RUN_ID = Date.now().toString().slice(-6);
+const DOC_PREFIX = `QAMD${RUN_ID}`;
+let docCounter = 0;
+
 let token;
 const createdMonthCycleIds = [];
+const createdPersonIds = [];
+let preExistingActiveIds = [];
 
 beforeAll(async () => {
   const res = await request(app).post("/api/auth/login").send({ username: REAL_USERNAME, password: REAL_PASSWORD });
   token = res.body.token;
+
+  const preExisting = await prisma.person.findMany({
+    where: { active: true, category: { in: ["INSTRUCTOR", "MINISTRO"] } },
+    select: { id: true },
+  });
+  preExistingActiveIds = preExisting.map((p) => p.id);
+  if (preExistingActiveIds.length > 0) {
+    await prisma.person.updateMany({ where: { id: { in: preExistingActiveIds } }, data: { active: false } });
+  }
 });
 
 afterAll(async () => {
+  await prisma.slotAssignment.deleteMany({ where: { monthCycleId: { in: createdMonthCycleIds } } });
+  await prisma.serviceSlot.deleteMany({ where: { monthCycleId: { in: createdMonthCycleIds } } });
+  await prisma.teamMember.deleteMany({
+    where: { OR: [{ personId: { in: createdPersonIds } }, { monthCycleId: { in: createdMonthCycleIds } }] },
+  });
+  await prisma.team.deleteMany({ where: { monthCycleId: { in: createdMonthCycleIds } } });
   await prisma.monthCycle.deleteMany({ where: { id: { in: createdMonthCycleIds } } });
+  await prisma.person.deleteMany({ where: { id: { in: createdPersonIds } } });
+  await prisma.person.deleteMany({ where: { fullName: { startsWith: NAME_PREFIX } } });
+
+  if (preExistingActiveIds.length > 0) {
+    await prisma.person.updateMany({ where: { id: { in: preExistingActiveIds } }, data: { active: true } });
+  }
+
   await prisma.$disconnect();
 });
 
 function authed(req) {
   return req.set("Authorization", `Bearer ${token}`);
+}
+
+async function makePerson(category, suffix) {
+  docCounter += 1;
+  const person = await prisma.person.create({
+    data: { fullName: `${NAME_PREFIX} ${suffix}`, documentId: `${DOC_PREFIX}${docCounter}`, category, active: true },
+  });
+  createdPersonIds.push(person.id);
+  return person;
+}
+
+async function setupMonthWithSchedule(year, month, teamCount) {
+  await Promise.all(
+    Array.from({ length: teamCount + 1 }, (_, i) => makePerson("INSTRUCTOR", `${year}-${month} Instr ${i + 1}`))
+  );
+  await Promise.all(
+    Array.from({ length: teamCount * 2 }, (_, i) => makePerson("MINISTRO", `${year}-${month} Min ${i + 1}`))
+  );
+
+  const created = await authed(request(app).post("/api/months")).send({ year, month, teamCount });
+  expect(created.status).toBe(201);
+  createdMonthCycleIds.push(created.body.id);
+
+  const gen = await authed(request(app).post(`/api/months/${created.body.id}/generate-teams`));
+  expect(gen.status).toBe(200);
+
+  const sched = await authed(request(app).post(`/api/months/${created.body.id}/generate-schedule`));
+  expect(sched.status).toBe(200);
+
+  return created.body;
+}
+
+async function finalizeDirectly(monthCycleId) {
+  await prisma.monthCycle.update({ where: { id: monthCycleId }, data: { status: "FINALIZED", finalizedAt: new Date() } });
+}
+
+async function expectCascadeGone(monthCycleId) {
+  const [teamCount, slotCount] = await Promise.all([
+    prisma.team.count({ where: { monthCycleId } }),
+    prisma.serviceSlot.count({ where: { monthCycleId } }),
+  ]);
+  expect(teamCount).toBe(0);
+  expect(slotCount).toBe(0);
 }
 
 describe("POST /api/months", () => {
@@ -134,6 +209,61 @@ describe("GET /api/months/:id", () => {
 
   it("sin token devuelve 401", async () => {
     const res = await request(app).get("/api/months/cualquier-id");
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("DELETE /api/months/:id", () => {
+  it("200 borra un mes DRAFT con equipos y horario ya generados (cascada real)", async () => {
+    const monthCycle = await setupMonthWithSchedule(YEAR_A, 5, 2);
+
+    const res = await authed(request(app).delete(`/api/months/${monthCycle.id}`));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ deleted: true });
+
+    await expectCascadeGone(monthCycle.id);
+    const getRes = await authed(request(app).get(`/api/months/${monthCycle.id}`));
+    expect(getRes.status).toBe(404);
+  });
+
+  it("200 borra un mes FINALIZED actual o futuro y lo saca de la página pública", async () => {
+    const monthCycle = await setupMonthWithSchedule(2099, 5, 2);
+    await finalizeDirectly(monthCycle.id);
+
+    const publicBefore = await request(app).get(`/api/schedule/${monthCycle.year}/${monthCycle.month}`);
+    expect(publicBefore.status).toBe(200);
+
+    const res = await authed(request(app).delete(`/api/months/${monthCycle.id}`));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ deleted: true });
+
+    await expectCascadeGone(monthCycle.id);
+    const getRes = await authed(request(app).get(`/api/months/${monthCycle.id}`));
+    expect(getRes.status).toBe(404);
+
+    const publicAfter = await request(app).get(`/api/schedule/${monthCycle.year}/${monthCycle.month}`);
+    expect(publicAfter.status).toBe(404);
+  });
+
+  it("409 MES_PASADO si el mes FINALIZED ya pasó -- no se borra", async () => {
+    const monthCycle = await setupMonthWithSchedule(2019, 5, 2);
+    await finalizeDirectly(monthCycle.id);
+
+    const res = await authed(request(app).delete(`/api/months/${monthCycle.id}`));
+    expect(res.status).toBe(409);
+    expect(res.body.error.details.code).toBe("MES_PASADO");
+
+    const getRes = await authed(request(app).get(`/api/months/${monthCycle.id}`));
+    expect(getRes.status).toBe(200);
+  });
+
+  it("404 si el mes no existe", async () => {
+    const res = await authed(request(app).delete("/api/months/no-existe-este-id"));
+    expect(res.status).toBe(404);
+  });
+
+  it("sin token devuelve 401", async () => {
+    const res = await request(app).delete("/api/months/cualquier-id");
     expect(res.status).toBe(401);
   });
 });

@@ -58,19 +58,57 @@ No se generan `Team` ni `ServiceSlot` al crear el mes; eso es explícitamente un
 - **404** si no existe.
 - **200** → mismo DTO que arriba.
 
+## 3.1. `DELETE /api/months/:id` (agregado 2026-08-22)
+
+Elimina el `MonthCycle` por completo — `Team`, `TeamMember`, `ServiceSlot` y
+`SlotAssignment` de ese mes caen en cascada a nivel de base de datos
+(`onDelete: Cascade` en `schema.prisma`, ver `phase1-schema-design.md`), no
+hace falta ningún borrado manual multi-tabla en el servicio.
+
+- **404** si el mes no existe.
+- **409** `MES_PASADO` si el mes está `FINALIZED` **y** ya pasó (no es el mes
+  actual ni uno futuro según `currentCivilDate(env.APP_TIMEZONE)`) — mismo
+  criterio y misma función compartida
+  (`assertEditableConsideringFinalization`, `utils/monthLifecycle.js`) que ya
+  usan agregar/cancelar un evento extraordinario y cambiar el uniforme de un
+  turno tras publicar (ver `phase4c-post-publish-edits-contract.md` §0).
+  - Un mes `DRAFT` **no tiene esta restricción**: nunca se publicó en ningún
+    lado, así que se puede eliminar sin importar la fecha.
+  - Un mes `FINALIZED` actual o futuro sí se puede eliminar.
+- **200** → `{ "deleted": true }`.
+- Si el mes estaba `FINALIZED` (y por lo tanto cacheado bajo
+  `schedule:${year}:${month}`), se invalida el caché público
+  (`invalidateByPrefix("schedule:")`, mismo patrón defensivo que
+  `finalizeMonthCycle`) para que `GET /api/schedule/:year/:month` empiece a
+  devolver `404 MES_NO_PUBLICADO` de inmediato, y el mes deja de listarse en
+  `GET /api/schedule/history`.
+
+Esto es **distinto** de "des-finalizar" (`FINALIZED` -> `DRAFT` conservando
+los equipos/horario), que sigue sin existir (ver `CLAUDE.md`, "Explícitamente
+fuera de alcance"): acá el mes desaparece por completo, no vuelve a ser
+editable.
+
+Frontend: botón "Eliminar mes" en `EventsManager.jsx`, junto al selector de
+mes, con `ConfirmDialog` (irreversible). Deshabilitado (con el motivo
+visible) solo cuando el mes es `FINALIZED` y ya pasó — mismo `monthIsPast`
+que ya deshabilita agregar/cancelar eventos y el uniforme de un turno.
+
 ## 4. `POST /api/months/:id/generate-teams`
 
 Sortea (o re-sortea) líder/apoyo/ministros de todos los equipos del mes, y opcionalmente el equipo de jóvenes (`YOUTH`, ver §9). Idempotente en el sentido de que se puede volver a llamar mientras `status = DRAFT`: cada llamada **reemplaza por completo** el sorteo anterior (incluidas ediciones manuales previas — es una operación destructiva a propósito, "re-sortear" significa empezar de cero). El re-sorteo también borra y recrea el equipo `YOUTH` si existía.
 
 Body (todo opcional):
 ```json
-{ "youthTeam": { "enabled": true, "size": 10, "leaderPersonId": "clxLIDERJOVEN" } }
+{ "teamCount": 5, "youthTeam": { "enabled": true, "size": 10, "leaderPersonId": "clxLIDERJOVEN" } }
 ```
 `youthTeam` ausente, o `{ "enabled": false }`, no genera ningún equipo `YOUTH` ese mes (comportamiento por defecto, sin cambios respecto al diseño original).
 
+`teamCount` (agregado 2026-08-22): entero `1..50`, opcional. Permite elegir de nuevo cuántos equipos formar al (re)sortear, sin tener que borrar el mes y crear uno nuevo. Si no viene, se sortea con el `teamCount` que el mes ya tenía (comportamiento histórico, sin cambios). Si viene, se usa para ESE sorteo y además queda persistido como el nuevo `MonthCycle.teamCount` — no hace falta ningún manejo especial para achicar o agrandar la cantidad: el re-sorteo ya borra y recrea TODOS los equipos (y el horario, si existía) sin importar si la cantidad cambió.
+
 - **404** si el mes no existe.
 - **409** `MES_FINALIZADO` si `status !== "DRAFT"`.
-- **409** `POOL_INSTRUCTOR_INSUFICIENTE` si `count(Person activo, category=INSTRUCTOR) < teamCount` → `details: { available, needed }`. Sin instructores suficientes no hay forma de poner un líder por equipo; esto es un error duro, no un warning.
+- **409** `POOL_INSTRUCTOR_INSUFICIENTE` si `count(Person activo, category=INSTRUCTOR) < teamCount` (el `teamCount` efectivo: el del body si vino, si no el que el mes ya tenía) → `details: { available, needed }`. Sin instructores suficientes no hay forma de poner un líder por equipo; esto es un error duro, no un warning.
+- **400** validación zod estándar si `teamCount` viene fuera de `1..50` o no es un entero.
 - **409** `SORTEO_EN_CURSO` (ajustado 2026-08-08, hallazgo de auditoría QA Fase 7) — carrera: dos `POST .../generate-teams` concurrentes sobre el MISMO mes pueden pasar ambos el chequeo `status === "DRAFT"` antes de que el primero confirme; el segundo choca al escribir contra los índices únicos de `Team` (`@@unique([monthCycleId, orderIndex])` / `@@unique([monthCycleId, label])`) y se traduce a este 409 en vez de dejar pasar un P2002 crudo. Sin `details` adicionales — "esperá a que termine y volvé a intentar".
 - **400** validación zod de `youthTeam` (`enabled` obligatorio boolean si el objeto está presente; `leaderPersonId` obligatorio cuando `enabled: true`; `size` entero `>= 1`, default `10`).
 - Errores propios del equipo `YOUTH`: ver §9.

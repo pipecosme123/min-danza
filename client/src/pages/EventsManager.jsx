@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getMonthTeams } from '../api/months.js';
+import { getMonthTeams, deleteMonth } from '../api/months.js';
 import {
   generateSchedule,
   getMonthSchedule,
@@ -67,6 +67,14 @@ function describeEventError(info) {
     return `No se puede bajar la cantidad de equipos: ya hay ${locked} equipo${locked === 1 ? '' : 's'} bloqueado${
       locked === 1 ? '' : 's'
     } en este turno. Desbloqueá alguno primero.`;
+  }
+  return info.message;
+}
+
+/** Traduce los códigos de error de "Eliminar mes" a lenguaje llano. */
+function describeDeleteMonthError(info) {
+  if (info.code === 'MES_PASADO') {
+    return 'Este mes ya pasó, no se puede eliminar.';
   }
   return info.message;
 }
@@ -258,6 +266,34 @@ export function EventsManager() {
       showError(describeFinalizeError(describeApiError(err)));
     } finally {
       setFinalizeLoading(false);
+    }
+  }
+
+  // ---- Eliminar mes (borra equipos, horario y asignaciones por completo) ----
+  // DRAFT: sin restricción. FINALIZED: solo mes actual o futuro (mismo
+  // `monthIsPast` que ya deshabilita agregar/cancelar eventos y el uniforme
+  // tras publicar) -- 409 MES_PASADO si ya pasó. Ver
+  // docs/architecture/phase3-teams-contract.md.
+  const [deleteMonthOpen, setDeleteMonthOpen] = useState(false);
+  const [deleteMonthLoading, setDeleteMonthLoading] = useState(false);
+  const deleteMonthDisabledReason = monthIsPast ? 'Este mes ya pasó, no se puede eliminar.' : null;
+
+  async function handleDeleteMonthConfirm() {
+    if (!selectedMonthId) return;
+    setDeleteMonthLoading(true);
+    try {
+      await deleteMonth(selectedMonthId);
+      showSuccess('Se eliminó el mes.');
+      setDeleteMonthOpen(false);
+      // useMonthSelector solo reelige un mes cuando selectedMonthId está
+      // vacío; si se deja el id del mes ya borrado, la lista se refresca
+      // pero selectedMonth queda null con un id fantasma.
+      setSelectedMonthId('');
+      await fetchMonths();
+    } catch (err) {
+      showError(describeDeleteMonthError(describeApiError(err)));
+    } finally {
+      setDeleteMonthLoading(false);
     }
   }
 
@@ -537,6 +573,14 @@ export function EventsManager() {
                 </option>
               ))}
             </Field>
+            <Button
+              variant="danger"
+              onClick={() => setDeleteMonthOpen(true)}
+              disabled={Boolean(deleteMonthDisabledReason)}
+              title={deleteMonthDisabledReason || undefined}
+            >
+              Eliminar mes
+            </Button>
           </div>
 
           {monthFinalized ? (
@@ -701,6 +745,23 @@ export function EventsManager() {
         confirmLabel="Sí, finalizar mes"
         variant="danger"
         loading={finalizeLoading}
+      />
+
+      {/* Eliminar mes: borra equipos, horario y asignaciones por completo. DRAFT
+          sin restricción; FINALIZED solo si es el mes actual o uno futuro. */}
+      <ConfirmDialog
+        open={deleteMonthOpen}
+        onClose={() => setDeleteMonthOpen(false)}
+        onConfirm={handleDeleteMonthConfirm}
+        title="Eliminar el mes"
+        description={`Se eliminará ${
+          selectedMonth ? formatMonthYear(selectedMonth.year, selectedMonth.month) : 'este mes'
+        } por completo: sus equipos, su horario y todas las asignaciones. ${
+          monthFinalized ? 'Como ya estaba publicado, también desaparece de la página pública y de su historial. ' : ''
+        }Esta acción no se puede deshacer.`}
+        confirmLabel="Sí, eliminar mes"
+        variant="danger"
+        loading={deleteMonthLoading}
       />
 
       {/* Regenerar horario: solo turnos fijos y Servicio de jóvenes, los eventos extraordinarios se conservan */}
