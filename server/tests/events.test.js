@@ -207,7 +207,7 @@ describe("POST /api/months/:id/events", () => {
     expect(res.body.error.details.code).toBe("MES_PASADO");
   });
 
-  it("400 con teamsNeeded fuera de {1,2}", async () => {
+  it("400 TEAMSNEEDED_EXCEDE_EQUIPOS si teamsNeeded supera la cantidad de equipos REGULAR del mes", async () => {
     const { monthCycle } = await setupMonthWithSchedule({ year: 2095, month: 6, teamCount: 1 });
     const res = await authed(request(app).post(`/api/months/${monthCycle.id}/events`)).send({
       date: midMonthDate(monthCycle),
@@ -216,6 +216,37 @@ describe("POST /api/months/:id/events", () => {
       teamsNeeded: 3,
     });
     expect(res.status).toBe(400);
+    expect(res.body.error.details.code).toBe("TEAMSNEEDED_EXCEDE_EQUIPOS");
+    expect(res.body.error.details.teamsNeeded).toBe(3);
+    expect(res.body.error.details.regularTeamCount).toBe(1);
+  });
+
+  it("400 con teamsNeeded < 1", async () => {
+    const { monthCycle } = await setupMonthWithSchedule({ year: 2095, month: 5, teamCount: 1 });
+    const res = await authed(request(app).post(`/api/months/${monthCycle.id}/events`)).send({
+      date: midMonthDate(monthCycle),
+      startTime: "19:00",
+      title: "QA TeamsNeeded Menor A Uno",
+      teamsNeeded: 0,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  // Parte 1 (wise-noodling-hickey.md): teamsNeeded ya no está fijo a {1,2} --
+  // admite cualquier valor 1..cantidad de equipos REGULAR del mes.
+  it("201 con teamsNeeded igual a la cantidad total de equipos REGULAR del mes (más de 2)", async () => {
+    const { monthCycle } = await setupMonthWithSchedule({ year: 2096, month: 4, teamCount: 5 });
+    const res = await authed(request(app).post(`/api/months/${monthCycle.id}/events`)).send({
+      date: midMonthDate(monthCycle),
+      startTime: "19:00",
+      title: "QA TeamsNeeded Cinco",
+      teamsNeeded: 5,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.slot.teamsNeeded).toBe(5);
+    expect(res.body.slot.teams).toHaveLength(5);
+    const teamIds = res.body.slot.teams.map((t) => t.id);
+    expect(new Set(teamIds).size).toBe(5);
   });
 
   it("sin token devuelve 401", async () => {
@@ -278,7 +309,12 @@ describe("PATCH /api/events/:eventId", () => {
     expect(onFixed.body.error.details.code).toBe("EVENTO_NO_ENCONTRADO");
   });
 
-  it("409 MES_FINALIZADO si el mes no está DRAFT", async () => {
+  // Ajustado 2026-08-25: editar un evento por completo pasa a permitirse
+  // tras publicar, mismo criterio que agregar/cancelar/eliminar eventos
+  // (assertEditableConsideringFinalization) -- DRAFT sin restricción,
+  // FINALIZED solo si (year, month) es el mes actual o uno futuro (409
+  // MES_PASADO si no).
+  it("200 permite editar un evento por completo si el mes ya está FINALIZED pero es actual o futuro", async () => {
     const { monthCycle } = await setupMonthWithSchedule({ year: 2095, month: 12, teamCount: 1 });
 
     const created = await authed(request(app).post(`/api/months/${monthCycle.id}/events`)).send({
@@ -292,8 +328,26 @@ describe("PATCH /api/events/:eventId", () => {
     await prisma.monthCycle.update({ where: { id: monthCycle.id }, data: { status: "FINALIZED" } });
 
     const res = await authed(request(app).patch(`/api/events/${created.body.slot.id}`)).send({ title: "X" });
+    expect(res.status).toBe(200);
+    expect(res.body.slot.title).toBe("X");
+  });
+
+  it("409 MES_PASADO si el mes del evento ya está FINALIZED y ya pasó", async () => {
+    const { monthCycle } = await setupMonthWithSchedule({ year: 2019, month: 12, teamCount: 1 });
+
+    const created = await authed(request(app).post(`/api/months/${monthCycle.id}/events`)).send({
+      date: midMonthDate(monthCycle),
+      startTime: "19:00",
+      title: "QA Editar Pasado",
+      teamsNeeded: 1,
+    });
+    expect(created.status).toBe(201);
+
+    await prisma.monthCycle.update({ where: { id: monthCycle.id }, data: { status: "FINALIZED" } });
+
+    const res = await authed(request(app).patch(`/api/events/${created.body.slot.id}`)).send({ title: "X" });
     expect(res.status).toBe(409);
-    expect(res.body.error.details.code).toBe("MES_FINALIZADO");
+    expect(res.body.error.details.code).toBe("MES_PASADO");
   });
 
   it("400 FECHA_FUERA_DE_MES si la nueva fecha no cae en el año/mes del ciclo", async () => {

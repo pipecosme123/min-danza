@@ -6,8 +6,36 @@
 // que este archivo también aísla temporalmente a cualquier INSTRUCTOR/
 // MINISTRO activo preexistente.
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import request from "supertest";
+
+// Parte 3 (wise-noodling-hickey.md): los tests de casos límite de "últimos 8
+// días" necesitan controlar "hoy" de forma determinista. Faltear `Date`
+// globalmente (vi.useFakeTimers) rompe la verificación JWT de requireAuth
+// (jsonwebtoken calcula expiración con Date.now() real) -- en cambio, se
+// mockea SOLO currentCivilDate (utils/dates.js), que es la única función que
+// lee el reloj real en todo este archivo. Por defecto delega a la
+// implementación real (`delegateToReal`), así que el resto de los tests
+// (monthsAgo, etc.) no se ven afectados; cada test que necesita una fecha
+// fija la fija con mockReturnValue y la restaura en un finally.
+const { currentCivilDateMock, setRealCurrentCivilDate, delegateToReal } = vi.hoisted(() => {
+  let real = null;
+  const delegateToReal = (...args) => real(...args);
+  return {
+    currentCivilDateMock: vi.fn(delegateToReal),
+    setRealCurrentCivilDate: (fn) => {
+      real = fn;
+    },
+    delegateToReal,
+  };
+});
+
+vi.mock("../src/utils/dates.js", async (importOriginal) => {
+  const actual = await importOriginal();
+  setRealCurrentCivilDate(actual.currentCivilDate);
+  return { ...actual, currentCivilDate: currentCivilDateMock };
+});
+
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 import { currentCivilDate } from "../src/utils/dates.js";
@@ -277,27 +305,38 @@ describe("GET /api/schedule/latest", () => {
 });
 
 describe("GET /api/schedule/:year/:month", () => {
+  // Ajustado (Parte 3, wise-noodling-hickey.md): desde que getPublicScheduleFor
+  // exige isNextMonthEarlyRevealed para cualquier mes ESTRICTAMENTE futuro, ya
+  // no vale usar un año ficticio lejano (2083...) para estos fixtures -- caería
+  // bajo el bloqueo nuevo. Se usan meses PASADOS reales (monthsAgo), como el
+  // resto del archivo, con offsets propios (6-9) para no colisionar con los ya
+  // usados arriba.
+
   it("200 para un mes finalizado real", async () => {
-    const monthCycle = await setupMonthWithSchedule({ year: 2083, month: 2, teamCount: 1 });
+    const target = monthsAgo(6);
+    const monthCycle = await setupMonthWithSchedule({ year: target.year, month: target.month, teamCount: 1 });
     await finalize(monthCycle.id);
 
-    const res = await request(app).get("/api/schedule/2083/2");
+    const res = await request(app).get(`/api/schedule/${target.year}/${target.month}`);
     expect(res.status).toBe(200);
-    expect(res.body.month).toMatchObject({ year: 2083, month: 2 });
+    expect(res.body.month).toMatchObject({ year: target.year, month: target.month });
     expect(res.body.balance).toBeUndefined();
   });
 
   it("404 MES_NO_PUBLICADO para un mes que no existe", async () => {
-    const res = await request(app).get("/api/schedule/2083/9");
+    const target = monthsAgo(7);
+    const res = await request(app).get(`/api/schedule/${target.year}/${target.month}`);
     expect(res.status).toBe(404);
     expect(res.body.error.details.code).toBe("MES_NO_PUBLICADO");
   });
 
   it("404 MES_NO_PUBLICADO (mismo código) para un mes que existe pero sigue DRAFT — indistinguible de 'no existe'", async () => {
-    const draftMonth = await createMonth(2083, 3, 1);
+    const draftTarget = monthsAgo(8);
+    const missingTarget = monthsAgo(9);
+    const draftMonth = await createMonth(draftTarget.year, draftTarget.month, 1);
 
-    const draftRes = await request(app).get(`/api/schedule/2083/3`);
-    const missingRes = await request(app).get("/api/schedule/2083/10");
+    const draftRes = await request(app).get(`/api/schedule/${draftTarget.year}/${draftTarget.month}`);
+    const missingRes = await request(app).get(`/api/schedule/${missingTarget.year}/${missingTarget.month}`);
 
     expect(draftRes.status).toBe(404);
     expect(missingRes.status).toBe(404);
@@ -321,15 +360,85 @@ describe("GET /api/schedule/:year/:month", () => {
   });
 
   it("responde igual en llamadas consecutivas (caché)", async () => {
-    const first = await request(app).get("/api/schedule/2083/2");
-    const second = await request(app).get("/api/schedule/2083/2");
+    const target = monthsAgo(6);
+    const first = await request(app).get(`/api/schedule/${target.year}/${target.month}`);
+    const second = await request(app).get(`/api/schedule/${target.year}/${target.month}`);
     expect(first.status).toBe(200);
     expect(second.body).toEqual(first.body);
   });
 
   it("no requiere Authorization", async () => {
-    const res = await request(app).get("/api/schedule/2083/2");
+    const target = monthsAgo(6);
+    const res = await request(app).get(`/api/schedule/${target.year}/${target.month}`);
     expect(res.status).not.toBe(401);
+  });
+});
+
+describe("Parte 3 (wise-noodling-hickey.md): adelanto del mes siguiente en los últimos 8 días del mes civil actual", () => {
+  it("un mes 2+ meses en el futuro nunca se revela públicamente, aunque esté FINALIZED", async () => {
+    const twoMonthsAhead = monthsAgo(-2);
+    const monthCycle = await createMonth(twoMonthsAhead.year, twoMonthsAhead.month, 1);
+    await prisma.monthCycle.update({ where: { id: monthCycle.id }, data: { status: "FINALIZED" } });
+
+    const res = await request(app).get(`/api/schedule/${twoMonthsAhead.year}/${twoMonthsAhead.month}`);
+    expect(res.status).toBe(404);
+    expect(res.body.error.details.code).toBe("MES_NO_PUBLICADO");
+
+    const history = await request(app).get("/api/schedule/history");
+    expect(history.body.months).not.toContainEqual({ year: twoMonthsAhead.year, month: twoMonthsAhead.month });
+  });
+
+  // Casos límite deterministas: se fija "hoy" mockeando currentCivilDate (ver
+  // boilerplate al inicio del archivo) en vez de depender del día real en que
+  // corra la suite, que haría estos tests flakies (el resultado cambiaría
+  // según qué día del mes se ejecuten). Enero 2030 tiene 31 días: el límite
+  // "daysInMonth - 7" cae en el día 24.
+  it("se revela justo el día límite (daysInMonth - 7) del mes civil actual", async () => {
+    currentCivilDateMock.mockReturnValue({ year: 2030, month: 1, day: 24 });
+    try {
+      const monthCycle = await createMonth(2030, 2, 1);
+      await prisma.monthCycle.update({ where: { id: monthCycle.id }, data: { status: "FINALIZED" } });
+
+      const res = await request(app).get("/api/schedule/2030/2");
+      expect(res.status).toBe(200);
+      expect(res.body.month).toMatchObject({ year: 2030, month: 2 });
+
+      const history = await request(app).get("/api/schedule/history");
+      expect(history.body.months).toContainEqual({ year: 2030, month: 2 });
+    } finally {
+      currentCivilDateMock.mockImplementation(delegateToReal);
+    }
+  });
+
+  it("NO se revela un día antes del límite (daysInMonth - 8)", async () => {
+    currentCivilDateMock.mockReturnValue({ year: 2031, month: 1, day: 23 });
+    try {
+      const monthCycle = await createMonth(2031, 2, 1);
+      await prisma.monthCycle.update({ where: { id: monthCycle.id }, data: { status: "FINALIZED" } });
+
+      const res = await request(app).get("/api/schedule/2031/2");
+      expect(res.status).toBe(404);
+      expect(res.body.error.details.code).toBe("MES_NO_PUBLICADO");
+
+      const history = await request(app).get("/api/schedule/history");
+      expect(history.body.months).not.toContainEqual({ year: 2031, month: 2 });
+    } finally {
+      currentCivilDateMock.mockImplementation(delegateToReal);
+    }
+  });
+
+  it("un mes 2+ meses en el futuro nunca se revela sin importar el día, ni siquiera el último día del mes anterior", async () => {
+    currentCivilDateMock.mockReturnValue({ year: 2032, month: 1, day: 31 }); // último día del mes: dentro de la ventana de 8 días
+    try {
+      const monthCycle = await createMonth(2032, 3, 1); // 2032-03 es DOS meses adelante de enero, no el siguiente
+      await prisma.monthCycle.update({ where: { id: monthCycle.id }, data: { status: "FINALIZED" } });
+
+      const res = await request(app).get("/api/schedule/2032/3");
+      expect(res.status).toBe(404);
+      expect(res.body.error.details.code).toBe("MES_NO_PUBLICADO");
+    } finally {
+      currentCivilDateMock.mockImplementation(delegateToReal);
+    }
   });
 });
 

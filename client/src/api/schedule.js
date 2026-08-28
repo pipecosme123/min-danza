@@ -133,6 +133,21 @@ export function cancelEvent(eventId) {
 }
 
 /**
+ * Cancela el turno `YOUTH_SERVICE` del mes sin eliminar el equipo `YOUTH`:
+ * el turno queda registrado y visible (con `cancelledAt` no nulo), deja de
+ * necesitar equipo y de contar en el balance, pero el equipo `YOUTH` y sus
+ * integrantes se conservan (a diferencia de `deleteYouthTeam` en
+ * `api/months.js`, que sí los elimina). Mismos códigos de error que
+ * `cancelEvent` en su naturaleza (`MES_PASADO`), más
+ * `SERVICIO_JOVENES_NO_ENCONTRADO`/`SERVICIO_JOVENES_YA_CANCELADO`.
+ * @param {string} monthId
+ * @returns {Promise<{ slot: ServiceSlotDto }>}
+ */
+export function cancelYouthService(monthId) {
+  return apiClient.post(`/months/${monthId}/youth-team/cancel`);
+}
+
+/**
  * Finaliza el mes: pasa `status` a `FINALIZED` y fija `finalizedAt`. A partir
  * de ahí el mes queda visible en la página pública y se vuelve inmutable (ya
  * no admite sorteos, ediciones de equipos, cambios de horario ni eventos).

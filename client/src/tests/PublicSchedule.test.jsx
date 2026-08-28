@@ -348,4 +348,62 @@ describe("PublicSchedule (ruta pública, sin login)", () => {
     expect(screen.getByRole("link", { name: /acceso administrador/i })).toBeInTheDocument();
     expect(screen.queryByLabelText(/contraseña/i)).not.toBeInTheDocument();
   });
+
+  // Parte 4 (plan wise-noodling-hickey.md): Versículo del mes, mostrado en un
+  // bloque destacado cerca del encabezado del mes, antes de "Equipos".
+  it("muestra el versículo del mes cuando el mes publicado trae uno o más", async () => {
+    const payload = samplePayload();
+    payload.verses = [
+      {
+        id: "v-1",
+        book: "Juan",
+        chapter: 3,
+        verses: "16",
+        version: "RVR1960",
+        text: "Porque de tal manera amó Dios al mundo, que ha dado a su Hijo unigénito...",
+        reference: "Juan 3:16 (RVR1960)",
+      },
+    ];
+    getLatestPublicSchedule.mockResolvedValueOnce(payload);
+    renderPublicSchedule();
+
+    await waitFor(() => expect(screen.getByText("Agosto 2026")).toBeInTheDocument());
+    expect(
+      screen.getByText("Porque de tal manera amó Dios al mundo, que ha dado a su Hijo unigénito...", {
+        exact: false,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Juan 3:16 (RVR1960)")).toBeInTheDocument();
+  });
+
+  it("no muestra ningún bloque de versículo cuando el mes no trae ninguno", async () => {
+    getLatestPublicSchedule.mockResolvedValueOnce(samplePayload());
+    renderPublicSchedule();
+
+    await waitFor(() => expect(screen.getByText("Agosto 2026")).toBeInTheDocument());
+    expect(screen.queryByRole("heading", { name: "Versículo del mes" })).not.toBeInTheDocument();
+  });
+
+  // Parte 2: un turno de evento agrupado (Congreso) también muestra su badge
+  // en la vista pública, por consistencia con la administración.
+  it("muestra el badge del evento agrupado en un turno del horario público", async () => {
+    const payload = samplePayload();
+    payload.slots.push({
+      id: "slot-congreso",
+      date: "2026-08-12",
+      startTime: "09:00",
+      slotType: "EXTRAORDINARY",
+      title: "Congreso de danza",
+      teamsNeeded: 1,
+      countsTowardBalance: true,
+      uniform: null,
+      teams: [{ id: "team-1", label: "Equipo 1" }],
+      eventGroupId: "group-1",
+      eventGroupTitle: "Congreso de danza",
+    });
+    getLatestPublicSchedule.mockResolvedValueOnce(payload);
+    renderPublicSchedule();
+
+    await waitFor(() => expect(screen.getAllByText("Congreso de danza")).toHaveLength(2));
+  });
 });

@@ -32,8 +32,14 @@ posteriores hechos tras probar la app en el navegador:
   balance para no repetir equipo en la misma semana ISO, eventos extraordinarios editables
   sin borrar y recrear, paleta de colores para uniformes, vista de calendario mensual).
 - **Fase 4c** (después de publicar/finalizar un mes que sea el actual o uno futuro, sigue
-  permitido agregar, cancelar y eliminar eventos extraordinarios, y cambiar el uniforme de un
-  turno puntual — todo lo demás queda bloqueado).
+  permitido agregar, cancelar, eliminar y **editar por completo** eventos extraordinarios,
+  cambiar el uniforme de un turno puntual, **bloquear/desbloquear y reasignar a mano el equipo
+  de cualquier turno**, **editar la composición de un equipo**, y **cancelar/eliminar el
+  Servicio de jóvenes** — ventana ampliada el 2026-08-25, ver
+  [`CLAUDE.md`](./CLAUDE.md) y
+  [`docs/architecture/phase4c-post-publish-edits-contract.md`](./docs/architecture/phase4c-post-publish-edits-contract.md).
+  Lo único que sigue exigiendo el mes en `DRAFT` sin ninguna excepción es generar/regenerar el
+  horario y (re)sortear equipos).
 
 El **Servicio de jóvenes** reemplazó por completo al viejo "evento especial del último
 sábado": ya no es un roster manual aparte (no queda ningún `SpecialSaturdayManager` ni
@@ -60,12 +66,18 @@ documentación:
     último sábado si aplica; regenerar preserva los eventos extraordinarios ya creados),
     `GET /api/months/:id/schedule`.
   - Eventos extraordinarios: `POST /api/months/:id/events`, `PATCH /api/events/:eventId`
-    (edición completa, solo con el mes en `DRAFT`), `DELETE /api/events/:eventId`,
+    (edición completa), `DELETE /api/events/:eventId`,
     `POST /api/events/:eventId/cancel` (cancelar es distinto de eliminar: el evento queda
     visible, marcado como cancelado).
+  - `POST /api/months/:id/youth-team/cancel` y `DELETE /api/months/:id/youth-team` (agregados
+    2026-08-25) — cancelar o eliminar el Servicio de jóvenes sin re-sortear todo el mes;
+    cancelar deja el equipo `YOUTH` intacto, eliminar lo borra por completo.
   - `PATCH /api/assignments/:id` — bloquear/desbloquear o reasignar a mano una asignación.
   - `PATCH /api/slots/:id` — asignar o limpiar el uniforme de un turno puntual (cualquier
     tipo de turno).
+  - Todas las acciones de esta lista (menos `generate-teams`/`generate-schedule`) siguen
+    disponibles después de publicar un mes, si es el mes actual o uno futuro (`409 MES_PASADO`
+    si ya pasó) — ver "Fase 4c" arriba.
   - `/api/uniforms` — CRUD puro: `GET`, `POST`, `PATCH /:id`. Ya no expone ninguna
     "configuración automática" por día de semana ni para el Servicio de jóvenes (se eliminó
     en la Fase 4b).
@@ -91,7 +103,7 @@ Confirmado contra `server/src/routes/` (ningún router responde `501`) y contra 
 
 | Falta | Detalle |
 |---|---|
-| **Des-finalizar un mes** | No existe ninguna forma de volver un `MonthCycle` de `FINALIZED` a `DRAFT`. Si algo se publicó mal, hoy no hay manera de corregirlo salvo el margen limitado de edición post-publicación de la Fase 4c (agregar/cancelar/eliminar eventos y cambiar el uniforme de un turno, solo si el mes es el actual o uno futuro). Pendiente sin fase asignada todavía. |
+| **Des-finalizar un mes** | No existe ninguna forma de volver un `MonthCycle` de `FINALIZED` a `DRAFT`. Si algo se publicó mal, hoy no hay manera de corregirlo salvo el margen de edición post-publicación de la Fase 4c (agregar/cancelar/eliminar/editar eventos, cambiar el uniforme de un turno, bloquear/reasignar un turno, editar la composición de un equipo, cancelar/eliminar el Servicio de jóvenes — todo solo si el mes es el actual o uno futuro; generar/regenerar horario y (re)sortear equipos siguen bloqueados sin excepción). Pendiente sin fase asignada todavía. |
 | **Historial de meses en la página pública** | La página pública muestra únicamente el mes `FINALIZED` más reciente; no hay selector ni listado de meses anteriores. Decisión confirmada con el usuario, no es un bug. |
 | **Formulario de auto-inscripción de personas** | Las personas solo se cargan por el admin (CRUD o import masivo). Fuera de alcance por ahora. |
 | **Login de usuarios finales** | No hay cuentas para líderes/colaboradores; solo existe la página pública sin login y el login único de administrador. Fuera de alcance por ahora. |

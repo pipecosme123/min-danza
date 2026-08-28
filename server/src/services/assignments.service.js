@@ -1,10 +1,16 @@
 // PATCH /api/assignments/:id (lock/unlock, reasignar equipo a mano).
-// Contrato cerrado: docs/architecture/phase4-schedule-contract.md §6. El
-// router (routes/assignments.routes.js) solo parsea/valida/serializa; toda
-// regla vive acá.
+// Contrato cerrado: docs/architecture/phase4-schedule-contract.md §6,
+// relajado tras publicar por
+// docs/architecture/phase4c-post-publish-edits-contract.md §5 (permitido en
+// mes FINALIZED actual/futuro, sigue bloqueado en uno ya pasado). El router
+// (routes/assignments.routes.js) solo parsea/valida/serializa; toda regla
+// vive acá.
 
 import { prisma } from "../lib/prisma.js";
-import { ConflictError, NotFoundError, ValidationError } from "../utils/errors.js";
+import { NotFoundError, ValidationError } from "../utils/errors.js";
+import { assertEditableConsideringFinalization } from "../utils/monthLifecycle.js";
+import { invalidateCached } from "../lib/cache.js";
+import { cacheKeyFor } from "./publicSchedule.service.js";
 
 const ASSIGNMENT_SELECT = {
   id: true,
@@ -23,15 +29,19 @@ export async function updateAssignment(assignmentId, data) {
     const assignment = await tx.slotAssignment.findUnique({
       where: { id: assignmentId },
       include: {
-        serviceSlot: { select: { slotType: true, monthCycleId: true, monthCycle: { select: { status: true } } } },
+        serviceSlot: {
+          select: {
+            slotType: true,
+            monthCycleId: true,
+            monthCycle: { select: { year: true, month: true, status: true } },
+          },
+        },
       },
     });
     if (!assignment) {
       throw new NotFoundError("Asignación no encontrada.", { code: "ASIGNACION_NO_ENCONTRADA" });
     }
-    if (assignment.serviceSlot.monthCycle.status !== "DRAFT") {
-      throw new ConflictError("El mes ya está finalizado y no admite cambios.", { code: "MES_FINALIZADO" });
-    }
+    assertEditableConsideringFinalization(assignment.serviceSlot.monthCycle);
 
     const wantsTeamChange = data.teamId !== undefined;
 
@@ -66,6 +76,14 @@ export async function updateAssignment(assignmentId, data) {
       data: updateData,
       select: ASSIGNMENT_SELECT,
     });
+
+    // Fase 4c: este endpoint ahora puede mutar un mes FINALIZED
+    // (actual/futuro), que puede estar cacheado como página pública. Sin
+    // invalidar puntualmente esta clave, la reasignación/lock de un turno no
+    // se reflejaría en la vista pública hasta que expire el TTL de defensa
+    // en profundidad (ver publicSchedule.service.js).
+    const { year, month } = assignment.serviceSlot.monthCycle;
+    invalidateCached(cacheKeyFor(year, month));
 
     return { assignment: updated };
   });

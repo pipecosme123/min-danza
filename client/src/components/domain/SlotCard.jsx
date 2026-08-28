@@ -1,4 +1,5 @@
 import { formatTimeLabel } from '../../utils/dates.js';
+import { getSlotEventGroup } from '../../utils/schedule.js';
 import { UniformBadge } from './UniformBadge.jsx';
 import { Badge } from '../ui/Badge.jsx';
 import './SlotCard.css';
@@ -27,6 +28,7 @@ const SLOT_TYPE_LABELS = {
  */
 export function SlotCard({ slot }) {
   const isCancelled = Boolean(slot.cancelledAt);
+  const eventGroup = getSlotEventGroup(slot);
 
   return (
     <article className="slot-card">
@@ -52,6 +54,7 @@ export function SlotCard({ slot }) {
         {SLOT_TYPE_LABELS[slot.slotType] ? (
           <span className="slot-card__type">{SLOT_TYPE_LABELS[slot.slotType]}</span>
         ) : null}
+        {eventGroup ? <Badge variant="primary">{eventGroup.title || 'Evento agrupado'}</Badge> : null}
         {isCancelled ? <Badge variant="danger">Cancelado</Badge> : null}
       </header>
 

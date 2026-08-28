@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { createMonth, generateTeams, getMonths, getMonthTeams, updateTeam } from '../api/months.js';
+import { createMonth, deleteYouthTeam, generateTeams, getMonths, getMonthTeams, updateTeam } from '../api/months.js';
 import { getPeople } from '../api/people.js';
 import { describeApiError } from '../utils/apiError.js';
-import { formatMonthYear, MONTH_LABELS } from '../utils/dates.js';
+import { formatMonthYear, isMonthCurrentOrFuture, MONTH_LABELS } from '../utils/dates.js';
 import { useApi } from '../hooks/useApi.js';
 import { useToast } from '../hooks/useToast.js';
 import { Button } from '../components/ui/Button.jsx';
@@ -11,6 +11,7 @@ import { Spinner } from '../components/ui/Spinner.jsx';
 import { ErrorMessage } from '../components/ui/ErrorMessage.jsx';
 import { EmptyState } from '../components/ui/EmptyState.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog.jsx';
 import { Field } from '../components/ui/Field.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
 import { TeamCard } from '../components/domain/TeamCard.jsx';
@@ -54,6 +55,17 @@ function describeGenerateError(info) {
   return info.message;
 }
 
+/** Traduce los códigos de error de "Eliminar equipo de jóvenes" a lenguaje llano. */
+function describeDeleteYouthTeamError(info) {
+  if (info.code === 'EQUIPO_JOVENES_NO_ENCONTRADO') {
+    return 'Este mes ya no tiene equipo de jóvenes.';
+  }
+  if (info.code === 'MES_PASADO') {
+    return 'Este mes ya pasó, no se puede eliminar el equipo de jóvenes.';
+  }
+  return info.message;
+}
+
 const now = new Date();
 const EMPTY_MONTH_FORM = {
   year: String(now.getFullYear()),
@@ -68,7 +80,7 @@ const EMPTY_MONTH_FORM = {
  * contrato exacto de la API que consume.
  */
 export function TeamGenerator() {
-  const { showSuccess, showWarning } = useToast();
+  const { showSuccess, showWarning, showError } = useToast();
 
   // ---- Meses ----
   const {
@@ -353,6 +365,33 @@ export function TeamGenerator() {
   const editRoleOptions = editTeam?.teamType === 'YOUTH' ? YOUTH_ROLE_OPTIONS : ROLE_OPTIONS;
 
   const monthFinalized = selectedMonth?.status === 'FINALIZED';
+  // Igual que `monthIsPast` en `EventsManager.jsx`: un mes finalizado que
+  // todavía es el actual o uno futuro sigue admitiendo edición manual
+  // (integrantes, eliminar el equipo de jóvenes) — solo (re)sortear equipos
+  // y "Crear mes nuevo" exigen `DRAFT` sin excepción.
+  const monthIsPast =
+    monthFinalized && Boolean(selectedMonth) && !isMonthCurrentOrFuture(selectedMonth.year, selectedMonth.month);
+
+  // ---- Eliminar equipo de jóvenes (integrantes + turno YOUTH_SERVICE, sin tocar los equipos regulares) ----
+  const [deleteYouthOpen, setDeleteYouthOpen] = useState(false);
+  const [deleteYouthLoading, setDeleteYouthLoading] = useState(false);
+  const deleteYouthDisabledReason = monthIsPast ? 'Este mes ya pasó, no se puede eliminar el equipo de jóvenes.' : null;
+
+  async function handleDeleteYouthConfirm() {
+    if (!effectiveMonthId) return;
+    setDeleteYouthLoading(true);
+    try {
+      await deleteYouthTeam(effectiveMonthId);
+      showSuccess('Se eliminó el equipo de jóvenes.');
+      setDeleteYouthOpen(false);
+      refetchTeams();
+      await fetchMonths(); // youthTeamEnabled cambió, refresca el default precargado del próximo sorteo
+    } catch (err) {
+      showError(describeDeleteYouthTeamError(describeApiError(err)));
+    } finally {
+      setDeleteYouthLoading(false);
+    }
+  }
 
   return (
     <div>
@@ -401,7 +440,9 @@ export function TeamGenerator() {
 
           {monthFinalized ? (
             <p className="team-generator__finalized-notice" role="status">
-              Este mes está finalizado: ya no admite sorteos ni ediciones.
+              {monthIsPast
+                ? 'Este mes ya pasó y está finalizado: no admite ningún cambio.'
+                : 'Este mes está finalizado: ya no admite (re)sortear equipos. Mientras sea el mes actual o uno futuro, todavía podés editar la composición de cada equipo y eliminar el equipo de jóvenes.'}
             </p>
           ) : null}
 
@@ -437,14 +478,27 @@ export function TeamGenerator() {
                   team={team}
                   className={team.teamType === 'YOUTH' ? 'team-card--youth' : ''}
                   actions={
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => openEditModal(team)}
-                      disabled={monthFinalized}
-                    >
-                      Editar integrantes
-                    </Button>
+                    <>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => openEditModal(team)}
+                        disabled={monthIsPast}
+                      >
+                        Editar integrantes
+                      </Button>
+                      {team.teamType === 'YOUTH' ? (
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={() => setDeleteYouthOpen(true)}
+                          disabled={Boolean(deleteYouthDisabledReason)}
+                          title={deleteYouthDisabledReason || undefined}
+                        >
+                          Eliminar equipo de jóvenes
+                        </Button>
+                      ) : null}
+                    </>
                   }
                 />
               ))}
@@ -625,6 +679,20 @@ export function TeamGenerator() {
           </div>
         </form>
       </Modal>
+
+      {/* Eliminar equipo de jóvenes: a diferencia de cancelar su turno (que se hace
+          desde «Horario y eventos»), acá desaparecen el equipo, sus integrantes y
+          su turno YOUTH_SERVICE por completo. */}
+      <ConfirmDialog
+        open={deleteYouthOpen}
+        onClose={() => setDeleteYouthOpen(false)}
+        onConfirm={handleDeleteYouthConfirm}
+        title="Eliminar equipo de jóvenes"
+        description="Se eliminará el equipo de jóvenes por completo: sus integrantes y su turno de Servicio de jóvenes. Los equipos regulares del mes no se ven afectados. Esta acción no se puede deshacer."
+        confirmLabel="Sí, eliminar equipo de jóvenes"
+        variant="danger"
+        loading={deleteYouthLoading}
+      />
 
       {/* Editar integrantes de un equipo */}
       <Modal

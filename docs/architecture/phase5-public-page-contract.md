@@ -8,6 +8,8 @@ Decisión original de Fase 5 (2026-08-08): la página pública muestra solo el m
 
 Además, el mismo día se ajustó qué significa "el mes por defecto" (`GET /latest`): ya no es literalmente "el `FINALIZED` con `(year, month)` más grande" — es el mes civil actual si está publicado, o si no, el más reciente hacia atrás. **Nunca** un mes con fecha posterior a hoy, aunque exista uno ya finalizado por anticipado (ej. el admin publicó el mes siguiente antes de tiempo) — quien visita la página hoy debe ver "lo que corresponde a hoy", no adelantarse.
 
+**Ampliación 2026-08-27** (plan `wise-noodling-hickey.md` Parte 3): `getLatestPublicSchedule` (el default de arriba, §2 más abajo) **no cambió**. Pero se detectó que `getPublicScheduleFor(year, month)` y `listPublicScheduleHistory()` — la consulta manual vía "Ver otro mes" — nunca habían tenido ninguna restricción hacia un mes futuro (`isWithinHistoryWindow` solo limita hacia atrás), a diferencia de la intención original de este documento. Se agregó `isNextMonthEarlyRevealed(year, month)` en `services/publicSchedule.service.js`: un mes estrictamente futuro solo se revela vía consulta manual si es EXACTAMENTE el mes civil siguiente al de hoy Y `hoy.day >= daysInMonth(hoy.year, hoy.month) - 7` (últimos 8 días del mes actual, inclusive). Cualquier mes 2 o más meses en el futuro nunca se revela, sin importar el día. Aplicado en ambas funciones con el mismo `404 MES_NO_PUBLICADO` genérico si no se cumple (mismo principio de privacidad del resto de este documento: nunca se distingue el motivo). Detalle completo en `docs/architecture/phase8-congreso-and-verses-contract.md` §3, junto con el resto de la ronda 2026-08-27; se documenta acá con un pointer para no duplicar la misma información en dos lugares.
+
 Fuentes: `CLAUDE.md` §Acceso, `docs/architecture/phase1-schema-design.md` (comentario de `schedule.routes.js`, `lib/cache.js` ya escrito de antemano para esto), `docs/architecture/phase3-teams-contract.md` (`TEAM_SELECT`/`serializeTeam`), `docs/architecture/phase4-schedule-contract.md` (`SLOT_SELECT`/`serializeSlot`).
 
 ---
@@ -48,7 +50,8 @@ Ambos endpoints públicos devuelven el mismo shape:
 {
   "month": { "year": 2026, "month": 8, "finalizedAt": "2026-08-08T20:00:00.000Z" },
   "teams": [ /* mismo shape que GET /api/months/:id/teams -> teams[] (label, orderIndex, teamType, members[]) */ ],
-  "slots": [ /* mismo shape que GET /api/months/:id/schedule -> slots[] (date, startTime, slotType, title, teamsNeeded, uniform, teams[]) */ ]
+  "slots": [ /* mismo shape que GET /api/months/:id/schedule -> slots[] (date, startTime, slotType, title, teamsNeeded, uniform, teams[]) */ ],
+  "verses": [ /* agregado 2026-08-27, ver docs/architecture/phase8-congreso-and-verses-contract.md §4.6 -- [] si el mes no tiene ningún versículo agregado */ ]
 }
 ```
 
@@ -64,9 +67,10 @@ Nuevo `server/src/services/publicSchedule.service.js`:
 
 Sin `requireAuth`, bajo `publicLimiter` (ya está montado en el archivo actual, no tocar eso).
 
-- `GET /api/schedule/latest` → `getLatestPublicSchedule()`. **404** `MES_NO_PUBLICADO` si todavía no hay ningún mes finalizado con fecha `<= hoy` (`details: {}`). Nunca elige un mes futuro (ajustado 2026-08-22).
-- `GET /api/schedule/history` (agregado 2026-08-22) → `listPublicScheduleHistory()`. Devuelve `{ months: [{ year, month }, ...] }`, solo meses `FINALIZED` dentro de la ventana de 1 año (`year desc, month desc`). Nunca incluye `DRAFT` — no revela su existencia. Registrada ANTES de `/:year/:month` para no competir con esa ruta dinámica.
-- `GET /api/schedule/:year/:month` → valida `year`/`month` como enteros en rango razonable (mismas reglas que ya usa `createBodySchema` de `months.routes.js`: year 2000-2100, month 1-12; **400** si no cumplen). Si cumplen, `getPublicScheduleFor(year, month)`. **404** `MES_NO_PUBLICADO` si no existe, no está finalizado, **o quedó fuera de la ventana de 1 año hacia atrás** (agregado 2026-08-22) — mismo código/mensaje en los tres casos, a propósito, para no distinguir el motivo.
+- `GET /api/schedule/latest` → `getLatestPublicSchedule()`. **404** `MES_NO_PUBLICADO` si todavía no hay ningún mes finalizado con fecha `<= hoy` (`details: {}`). Nunca elige un mes futuro (ajustado 2026-08-22, sin cambios en 2026-08-27).
+- `GET /api/schedule/history` (agregado 2026-08-22) → `listPublicScheduleHistory()`. Devuelve `{ months: [{ year, month }, ...] }`, solo meses `FINALIZED` dentro de la ventana de 1 año (`year desc, month desc`). Nunca incluye `DRAFT` — no revela su existencia. Registrada ANTES de `/:year/:month` para no competir con esa ruta dinámica. Desde 2026-08-27, un mes estrictamente futuro solo entra a la lista si `isNextMonthEarlyRevealed` (ver ampliación arriba) — antes de este ajuste, cualquier mes futuro `FINALIZED` aparecía sin restricción.
+- `GET /api/schedule/:year/:month` → valida `year`/`month` como enteros en rango razonable (mismas reglas que ya usa `createBodySchema` de `months.routes.js`: year 2000-2100, month 1-12; **400** si no cumplen). Si cumplen, `getPublicScheduleFor(year, month)`. **404** `MES_NO_PUBLICADO` si no existe, no está finalizado, **o quedó fuera de la ventana de 1 año hacia atrás** (agregado 2026-08-22), **o es un mes estrictamente futuro que todavía no se adelantó** (agregado 2026-08-27, ver `isNextMonthEarlyRevealed` arriba) — mismo código/mensaje en los cuatro casos, a propósito, para no distinguir el motivo.
+- El payload de los tres endpoints suma un campo `verses` desde 2026-08-27 (ver `docs/architecture/phase8-congreso-and-verses-contract.md` §4.6 para el shape completo) — un array, vacío si el mes no tiene ningún versículo agregado.
 
 ---
 

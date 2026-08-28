@@ -3,8 +3,35 @@
 // base Postgres real de desarrollo (igual que people.crud.test.js); todo lo
 // creado se limpia en afterAll vía borrado físico directo con Prisma.
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import request from "supertest";
+
+// Parte 3 (wise-noodling-hickey.md) rompió la premisa de usar un año futuro
+// ficticio (2099) para las lecturas públicas: GET /schedule/:year/:month
+// ahora exige isNextMonthEarlyRevealed para cualquier mes estrictamente
+// futuro. Faltear Date globalmente (vi.useFakeTimers) rompería la
+// verificación JWT de requireAuth (jsonwebtoken usa Date.now() real) -- en
+// cambio se mockea SOLO currentCivilDate (utils/dates.js), la única función
+// de este archivo que lee el reloj real. Por defecto delega a la
+// implementación real. Mismo patrón que tests/publicSchedule.test.js.
+const { currentCivilDateMock, setRealCurrentCivilDate, delegateToReal } = vi.hoisted(() => {
+  let real = null;
+  const delegateToReal = (...args) => real(...args);
+  return {
+    currentCivilDateMock: vi.fn(delegateToReal),
+    setRealCurrentCivilDate: (fn) => {
+      real = fn;
+    },
+    delegateToReal,
+  };
+});
+
+vi.mock("../src/utils/dates.js", async (importOriginal) => {
+  const actual = await importOriginal();
+  setRealCurrentCivilDate(actual.currentCivilDate);
+  return { ...actual, currentCivilDate: currentCivilDateMock };
+});
+
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 
@@ -230,19 +257,30 @@ describe("DELETE /api/months/:id", () => {
     const monthCycle = await setupMonthWithSchedule(2099, 5, 2);
     await finalizeDirectly(monthCycle.id);
 
-    const publicBefore = await request(app).get(`/api/schedule/${monthCycle.year}/${monthCycle.month}`);
-    expect(publicBefore.status).toBe(200);
+    // Parte 3 (wise-noodling-hickey.md): GET /schedule/:year/:month ahora
+    // exige que un mes ESTRICTAMENTE futuro pase isNextMonthEarlyRevealed --
+    // 2099 es décadas en el futuro respecto al reloj real, así que sin fijar
+    // "hoy" dentro del mismo mes (haciéndolo el mes ACTUAL, no futuro) la
+    // llamada pública de abajo daría 404 en vez de 200 (ver boilerplate al
+    // inicio del archivo).
+    currentCivilDateMock.mockReturnValue({ year: 2099, month: 5, day: 15 });
+    try {
+      const publicBefore = await request(app).get(`/api/schedule/${monthCycle.year}/${monthCycle.month}`);
+      expect(publicBefore.status).toBe(200);
 
-    const res = await authed(request(app).delete(`/api/months/${monthCycle.id}`));
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ deleted: true });
+      const res = await authed(request(app).delete(`/api/months/${monthCycle.id}`));
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ deleted: true });
 
-    await expectCascadeGone(monthCycle.id);
-    const getRes = await authed(request(app).get(`/api/months/${monthCycle.id}`));
-    expect(getRes.status).toBe(404);
+      await expectCascadeGone(monthCycle.id);
+      const getRes = await authed(request(app).get(`/api/months/${monthCycle.id}`));
+      expect(getRes.status).toBe(404);
 
-    const publicAfter = await request(app).get(`/api/schedule/${monthCycle.year}/${monthCycle.month}`);
-    expect(publicAfter.status).toBe(404);
+      const publicAfter = await request(app).get(`/api/schedule/${monthCycle.year}/${monthCycle.month}`);
+      expect(publicAfter.status).toBe(404);
+    } finally {
+      currentCivilDateMock.mockImplementation(delegateToReal);
+    }
   });
 
   it("409 MES_PASADO si el mes FINALIZED ya pasó -- no se borra", async () => {

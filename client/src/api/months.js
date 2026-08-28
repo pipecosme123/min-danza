@@ -105,3 +105,17 @@ export function updateTeam(teamId, data) {
 export function deleteMonth(id) {
   return apiClient.del(`/months/${id}`);
 }
+
+/**
+ * Elimina el equipo de jóvenes (`teamType: 'YOUTH'`) por completo: sus
+ * integrantes y su turno `YOUTH_SERVICE` desaparecen del todo (a diferencia
+ * de `cancelYouthService` en `api/schedule.js`, que solo cancela el turno y
+ * conserva el equipo). Un mes DRAFT no tiene restricción; uno FINALIZED
+ * solo se puede aplicar si es el actual o uno futuro (409 MES_PASADO si ya
+ * pasó).
+ * @param {string} id `MonthCycle.id`
+ * @returns {Promise<{ deleted: true }>}
+ */
+export function deleteYouthTeam(id) {
+  return apiClient.del(`/months/${id}/youth-team`);
+}

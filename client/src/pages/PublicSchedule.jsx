@@ -172,6 +172,20 @@ export function PublicSchedule() {
               ) : null}
             </div>
 
+            {data.verses && data.verses.length > 0 ? (
+              <section aria-labelledby="public-schedule-verses-heading" className="public-schedule__verses">
+                <h2 id="public-schedule-verses-heading" className="visually-hidden">
+                  Versículo del mes
+                </h2>
+                {data.verses.map((verse) => (
+                  <blockquote key={verse.id} className="public-schedule__verse">
+                    <p className="public-schedule__verse-text">&ldquo;{verse.text}&rdquo;</p>
+                    <cite className="public-schedule__verse-reference">{verse.reference}</cite>
+                  </blockquote>
+                ))}
+              </section>
+            ) : null}
+
             {personOptions.length > 0 ? (
               <div className="public-schedule__filter">
                 <SearchableSelect

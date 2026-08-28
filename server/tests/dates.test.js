@@ -12,6 +12,7 @@ import {
   isSameCivilDate,
   formatCivilDate,
   currentCivilDate,
+  daysInMonth,
 } from "../src/utils/dates.js";
 
 describe("lastSundayOf — el último día del mes cae exactamente en domingo", () => {
@@ -91,6 +92,15 @@ describe("isSameCivilDate / formatCivilDate — sanity checks de apoyo", () => {
   it("isSameCivilDate distingue correctamente fechas iguales y distintas", () => {
     expect(isSameCivilDate({ year: 2096, month: 2, day: 29 }, { year: 2096, month: 2, day: 29 })).toBe(true);
     expect(isSameCivilDate({ year: 2096, month: 2, day: 29 }, { year: 2096, month: 2, day: 28 })).toBe(false);
+  });
+});
+
+describe("daysInMonth — exportada (Parte 3, wise-noodling-hickey.md)", () => {
+  it("devuelve la cantidad correcta de días para meses de 28/29/30/31 días", () => {
+    expect(daysInMonth(2094, 2)).toBe(28); // no bisiesto
+    expect(daysInMonth(2096, 2)).toBe(29); // bisiesto
+    expect(daysInMonth(2093, 4)).toBe(30);
+    expect(daysInMonth(2093, 5)).toBe(31);
   });
 });
 

@@ -163,6 +163,8 @@ model MonthCycle {
 
   teams        Team[]
   serviceSlots ServiceSlot[]
+  eventGroups  EventGroup[]
+  versePassages VersePassage[]
 
   @@unique([year, month])
   @@index([status])
@@ -290,18 +292,27 @@ model ServiceSlot {
   countsTowardBalance Boolean   @default(true) @map("counts_toward_balance")
   uniformId           String?   @map("uniform_id")
   notes               String?
-  /// No nulo únicamente cuando el admin canceló un evento EXTRAORDINARY
-  /// después de publicado (o antes, no hay restricción). El slot queda, se
-  /// ve, pero deja de necesitar equipo: se le limpian sus SlotAssignment y
-  /// se le pone countsTowardBalance = false (mismo mecanismo que ya usaba
-  /// SPECIAL/YOUTH_SERVICE para "no cuenta al balance", reutilizado tal
-  /// cual). Ver docs/architecture/phase4c-post-publish-edits-contract.md §1.
+  /// No nulo únicamente cuando el admin canceló un evento EXTRAORDINARY o el
+  /// turno YOUTH_SERVICE (agregado 2026-08-25, ver youthTeam.service.js#
+  /// cancelYouthService) después de publicado (o antes, no hay restricción).
+  /// El slot queda, se ve, pero deja de necesitar equipo: se le limpian sus
+  /// SlotAssignment y se le pone countsTowardBalance = false. Los FIXED no
+  /// tienen este concepto (protegido por el CHECK
+  /// service_slot_cancelled_only_cancellable_types a nivel de base). Ver
+  /// docs/architecture/phase4c-post-publish-edits-contract.md §1.
   cancelledAt         DateTime? @map("cancelled_at")
+  /// No nulo únicamente cuando este slot es un "turno" de un evento agrupado
+  /// (Congreso, ver EventGroup más abajo, agregado Parte 2 de
+  /// wise-noodling-hickey.md). El slot en sí sigue siendo un ServiceSlot
+  /// EXTRAORDINARY normal -- este campo solo lo liga visualmente a su grupo,
+  /// no cambia ninguna otra regla (uniforme, cancelledAt, balance).
+  eventGroupId        String?   @map("event_group_id")
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
   monthCycle  MonthCycle       @relation(fields: [monthCycleId], references: [id], onDelete: Cascade)
   uniform     Uniform?         @relation(fields: [uniformId], references: [id], onDelete: SetNull)
+  eventGroup  EventGroup?      @relation(fields: [eventGroupId], references: [id], onDelete: Cascade)
   assignments SlotAssignment[]
 
   /// Hace idempotente la generación de slots fijos del mes: re-ejecutarla no
@@ -315,7 +326,31 @@ model ServiceSlot {
   @@index([monthCycleId, date, startTime])
   @@index([monthCycleId, slotType])
   @@index([monthCycleId, countsTowardBalance])
+  @@index([eventGroupId])
   @@map("service_slot")
+}
+
+/// Evento agrupado ("Congreso" es el ejemplo, no un tipo especial
+/// hardcodeado -- cualquier título): 2+ fechas, cada fecha con 1+ turnos.
+/// Cada "turno" es, por dentro, un ServiceSlot EXTRAORDINARY normal con
+/// eventGroupId apuntando acá -- se reutiliza TODA la maquinaria existente
+/// de ServiceSlot (uniforme, cancelledAt, SlotAssignment, balance) sin
+/// duplicar nada. Diferencia clave con un evento suelto: los equipos de un
+/// turno de Congreso los elige el admin A MANO (SlotAssignment locked: true
+/// directo), nunca pasan por recomputeBalance. Parte 2,
+/// wise-noodling-hickey.md.
+model EventGroup {
+  id           String   @id @default(cuid())
+  monthCycleId String   @map("month_cycle_id")
+  title        String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  monthCycle MonthCycle    @relation(fields: [monthCycleId], references: [id], onDelete: Cascade)
+  slots      ServiceSlot[]
+
+  @@index([monthCycleId])
+  @@map("event_group")
 }
 
 /// Un equipo asignado a un slot. Tabla puente con id propio (no PK compuesta)
@@ -344,4 +379,36 @@ model SlotAssignment {
   @@index([teamId])
   @@index([monthCycleId, teamId])
   @@map("slot_assignment")
+}
+
+// --------------------------- VERSÍCULO DEL MES -----------------------------
+
+/// Uno o más pasajes bíblicos elegidos por el admin para mostrar en la
+/// página pública del mes (mismo libro/capítulo, versión fija RVR1960 por
+/// ahora). El texto se resuelve UNA VEZ, vía bibleSource.service.js (scraping
+/// a BibleGateway), en el momento de agregar/editar el pasaje, y se persiste
+/// acá -- la página pública nunca vuelve a llamar a la fuente externa. Parte
+/// 4, wise-noodling-hickey.md.
+model VersePassage {
+  id           String   @id @default(cuid())
+  monthCycleId String   @map("month_cycle_id")
+  book         String
+  chapter      Int
+  /// Rango tal como lo escribió el admin, ej. "16-18" o "16,18,20".
+  verses       String
+  /// Fijo por ahora; campo explícito para no cerrar la puerta a otra versión
+  /// a futuro.
+  version      String   @default("RVR1960")
+  /// Texto resuelto por bibleSource.service.js, cacheado en el momento de
+  /// agregarlo/editarlo.
+  text         String   @db.Text
+  /// Texto de referencia legible, ej. "Juan 3:16-18 (RVR1960)".
+  reference    String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  monthCycle MonthCycle @relation(fields: [monthCycleId], references: [id], onDelete: Cascade)
+
+  @@index([monthCycleId])
+  @@map("verse_passage")
 }

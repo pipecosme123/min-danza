@@ -17,7 +17,13 @@ const SUNDAY = 0;
 const FRIDAY = 5;
 const SATURDAY = 6;
 
-function daysInMonth(year, month) {
+/**
+ * Cantidad de días del mes (year, month 1-12). Exportada (Parte 3,
+ * wise-noodling-hickey.md) porque publicSchedule.service.js la necesita para
+ * calcular "los últimos 8 días del mes civil actual" -- antes era interna,
+ * solo usada por lastWeekdayOf.
+ */
+export function daysInMonth(year, month) {
   // month: 1-12. Día 0 del mes siguiente = último día del mes actual.
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }

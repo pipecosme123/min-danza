@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
@@ -17,13 +17,14 @@ vi.mock("../api/months.js", () => ({
   getMonthTeams: vi.fn(),
   generateTeams: vi.fn(),
   updateTeam: vi.fn(),
+  deleteYouthTeam: vi.fn(),
 }));
 
 vi.mock("../api/people.js", () => ({
   getPeople: vi.fn(),
 }));
 
-import { createMonth, generateTeams, getMonths, getMonthTeams, updateTeam } from "../api/months.js";
+import { createMonth, deleteYouthTeam, generateTeams, getMonths, getMonthTeams, updateTeam } from "../api/months.js";
 import { getPeople } from "../api/people.js";
 import { ApiError } from "../api/client.js";
 
@@ -130,7 +131,12 @@ describe("TeamGenerator", () => {
     getMonthTeams.mockReset();
     generateTeams.mockReset();
     updateTeam.mockReset();
+    deleteYouthTeam.mockReset();
     getPeople.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("muestra un estado vacío entendible y permite crear el primer mes", async () => {
@@ -547,5 +553,97 @@ describe("TeamGenerator", () => {
     roleSelects.forEach((select) => {
       expect(within(select).queryByRole("option", { name: "Apoyo" })).not.toBeInTheDocument();
     });
+  });
+
+  // Nuevo: eliminar el equipo de jóvenes por completo (distinto de cancelar su
+  // turno, que se hace desde «Horario y eventos»). Reutiliza el mismo criterio
+  // de "mes actual/futuro" que ya rige "Eliminar mes"/eventos post-publicación.
+  it("elimina el equipo de jóvenes tras confirmar y refresca equipos y meses", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue({ teams: [...sampleTeams().teams, sampleYouthTeam()] });
+    deleteYouthTeam.mockResolvedValueOnce({ deleted: true });
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Servicio de jóvenes")).toBeInTheDocument());
+
+    const youthCard = screen.getByText("Servicio de jóvenes").closest("article");
+    const deleteButton = within(youthCard).getByRole("button", { name: "Eliminar equipo de jóvenes" });
+    expect(deleteButton).not.toBeDisabled();
+
+    await user.click(deleteButton);
+    expect(screen.getByRole("heading", { name: "Eliminar equipo de jóvenes" })).toBeInTheDocument();
+    expect(deleteYouthTeam).not.toHaveBeenCalled();
+
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Sí, eliminar equipo de jóvenes" }));
+
+    await waitFor(() => expect(deleteYouthTeam).toHaveBeenCalledWith("month-1"));
+    await waitFor(() => expect(screen.getByText("Se eliminó el equipo de jóvenes.")).toBeInTheDocument());
+  });
+
+  it("«Eliminar equipo de jóvenes» y «Editar integrantes» están deshabilitados con el motivo visible cuando el mes finalizado ya pasó", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 8, 8)); // 8 de setiembre de 2026: sampleMonth() (agosto 2026) ya pasó.
+
+    getMonths.mockResolvedValue({
+      data: [sampleMonth({ status: "FINALIZED", finalizedAt: "2026-08-01T00:00:00.000Z" })],
+    });
+    getMonthTeams.mockResolvedValue({ teams: [...sampleTeams().teams, sampleYouthTeam()] });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Servicio de jóvenes")).toBeInTheDocument());
+
+    const youthCard = screen.getByText("Servicio de jóvenes").closest("article");
+    const deleteButton = within(youthCard).getByRole("button", { name: "Eliminar equipo de jóvenes" });
+    expect(deleteButton).toBeDisabled();
+    expect(deleteButton).toHaveAttribute("title", "Este mes ya pasó, no se puede eliminar el equipo de jóvenes.");
+    expect(within(youthCard).getByRole("button", { name: "Editar integrantes" })).toBeDisabled();
+  });
+
+  it("en un mes finalizado actual, «Editar integrantes» y «Eliminar equipo de jóvenes» siguen habilitados, pero «Re-sortear equipos» sigue deshabilitado", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 8)); // 8 de agosto de 2026: mismo mes/año que sampleMonth(), mes actual.
+
+    getMonths.mockResolvedValue({
+      data: [sampleMonth({ status: "FINALIZED", finalizedAt: "2026-08-01T00:00:00.000Z" })],
+    });
+    getMonthTeams.mockResolvedValue({ teams: [...sampleTeams().teams, sampleYouthTeam()] });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Servicio de jóvenes")).toBeInTheDocument());
+
+    expect(screen.getByRole("button", { name: "Re-sortear equipos" })).toBeDisabled();
+
+    const youthCard = screen.getByText("Servicio de jóvenes").closest("article");
+    expect(within(youthCard).getByRole("button", { name: "Editar integrantes" })).not.toBeDisabled();
+    expect(within(youthCard).getByRole("button", { name: "Eliminar equipo de jóvenes" })).not.toBeDisabled();
+
+    const teamOneCard = screen.getByText("Equipo 1").closest("article");
+    expect(within(teamOneCard).getByRole("button", { name: "Editar integrantes" })).not.toBeDisabled();
+    // Los equipos regulares no ofrecen "Eliminar equipo de jóvenes".
+    expect(within(teamOneCard).queryByRole("button", { name: "Eliminar equipo de jóvenes" })).not.toBeInTheDocument();
+  });
+
+  it("mapea MES_PASADO a un mensaje claro (eliminar equipo de jóvenes)", async () => {
+    getMonths.mockResolvedValue({ data: [sampleMonth()] });
+    getMonthTeams.mockResolvedValue({ teams: [...sampleTeams().teams, sampleYouthTeam()] });
+    deleteYouthTeam.mockRejectedValueOnce(
+      new ApiError("Conflicto.", { status: 409, details: { code: "MES_PASADO" } }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Servicio de jóvenes")).toBeInTheDocument());
+    const youthCard = screen.getByText("Servicio de jóvenes").closest("article");
+    await user.click(within(youthCard).getByRole("button", { name: "Eliminar equipo de jóvenes" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Sí, eliminar equipo de jóvenes" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Este mes ya pasó, no se puede eliminar el equipo de jóvenes."),
+      ).toBeInTheDocument(),
+    );
   });
 });

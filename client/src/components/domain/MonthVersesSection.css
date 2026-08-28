@@ -1,0 +1,66 @@
+.month-verses {
+  margin-bottom: var(--space-5);
+  padding: var(--space-4);
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.month-verses__hint {
+  margin: var(--space-1) 0 var(--space-4);
+  color: var(--color-text-secondary);
+}
+
+.month-verses__list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.month-verses__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-4);
+  background-color: var(--color-surface);
+  border-left: 4px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+}
+
+.month-verses__quote {
+  margin: 0;
+}
+
+.month-verses__text {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-lg);
+  font-style: italic;
+}
+
+.month-verses__reference {
+  font-style: normal;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.month-verses__form-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-2);
+}
+
+@media (min-width: 640px) {
+  .month-verses__item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .month-verses__form-fields {
+    grid-template-columns: 2fr 1fr 1fr;
+  }
+}
