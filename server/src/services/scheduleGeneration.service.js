@@ -27,6 +27,10 @@ export const SLOT_SELECT = {
     orderBy: { slotIndex: "asc" },
     select: { id: true, locked: true, team: { select: { id: true, label: true } } },
   },
+  // Parte 2 (wise-noodling-hickey.md): a qué EventGroup ("Congreso") pertenece
+  // este turno, si a alguno -- para que administración y página pública
+  // puedan agrupar visualmente los turnos de un mismo evento agrupado.
+  eventGroup: { select: { id: true, title: true } },
 };
 
 // NOTA (ambigüedad resuelta, no explícita en el contrato de Fase 4 §2/§8):
@@ -53,6 +57,7 @@ export function serializeSlot(slot) {
       assignmentId: a.id,
       locked: a.locked,
     })),
+    eventGroup: slot.eventGroup ? { id: slot.eventGroup.id, title: slot.eventGroup.title } : null,
   };
 }
 

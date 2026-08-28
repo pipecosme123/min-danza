@@ -60,6 +60,17 @@ export async function createEvent(monthCycleId, data) {
       }
     }
 
+    // Parte 1 (wise-noodling-hickey.md): teamsNeeded admite desde 1 hasta la
+    // cantidad de equipos REGULAR del mes -- ya no está fijo a {1,2}.
+    const regularTeamCount = await tx.team.count({ where: { monthCycleId, teamType: "REGULAR" } });
+    if (data.teamsNeeded > regularTeamCount) {
+      throw new ValidationError("No podés pedir más equipos de los que tiene el mes.", {
+        code: "TEAMSNEEDED_EXCEDE_EQUIPOS",
+        teamsNeeded: data.teamsNeeded,
+        regularTeamCount,
+      });
+    }
+
     const created = await tx.serviceSlot.create({
       data: {
         monthCycleId,
@@ -105,9 +116,7 @@ export async function updateEvent(eventId, data) {
     if (!slot || slot.slotType !== "EXTRAORDINARY") {
       throw new NotFoundError("Evento no encontrado.", { code: "EVENTO_NO_ENCONTRADO" });
     }
-    if (slot.monthCycle.status !== "DRAFT") {
-      throw new ConflictError("El mes ya está finalizado y no admite cambios.", { code: "MES_FINALIZADO" });
-    }
+    assertEditableConsideringFinalization(slot.monthCycle);
 
     if (data.date !== undefined) {
       const [year, monthNum] = data.date.split("-").map(Number);
@@ -133,6 +142,16 @@ export async function updateEvent(eventId, data) {
           { code: "EQUIPOS_BLOQUEADOS_EXCEDEN_CUPO", locked: lockedCount, teamsNeeded: data.teamsNeeded }
         );
       }
+
+      // Parte 1 (wise-noodling-hickey.md): mismo tope que createEvent.
+      const regularTeamCount = await tx.team.count({ where: { monthCycleId: slot.monthCycleId, teamType: "REGULAR" } });
+      if (data.teamsNeeded > regularTeamCount) {
+        throw new ValidationError("No podés pedir más equipos de los que tiene el mes.", {
+          code: "TEAMSNEEDED_EXCEDE_EQUIPOS",
+          teamsNeeded: data.teamsNeeded,
+          regularTeamCount,
+        });
+      }
     }
 
     const updateData = {};
@@ -144,9 +163,18 @@ export async function updateEvent(eventId, data) {
 
     await tx.serviceSlot.update({ where: { id: eventId }, data: updateData });
 
-    await recomputeBalance(tx, slot.monthCycleId);
+    // Mes DRAFT: recompute completo, sin cambios respecto al comportamiento
+    // histórico. Mes FINALIZED (ya validado actual/futuro arriba): modo
+    // acotado, decide equipo(s) SOLO para este evento, sin reordenar nada de
+    // lo ya publicado (mismo patrón que createEvent, contrato Fase 4c §4).
+    if (slot.monthCycle.status === "DRAFT") {
+      await recomputeBalance(tx, slot.monthCycleId);
+    } else {
+      await recomputeBalance(tx, slot.monthCycleId, { onlySlotIds: [eventId] });
+    }
 
     const updated = await tx.serviceSlot.findUnique({ where: { id: eventId }, select: SLOT_SELECT });
+    invalidatePublicCache(slot.monthCycle.year, slot.monthCycle.month);
     return { slot: serializeSlot(updated) };
   });
 }

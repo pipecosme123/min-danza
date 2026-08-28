@@ -1,0 +1,164 @@
+.event-groups {
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+}
+
+.event-groups__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.event-groups__hint {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+}
+
+.event-groups__list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.event-groups__card {
+  padding: var(--space-4);
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.event-groups__card-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.event-groups__card-header > div:first-child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.event-groups__card-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+
+.event-groups__card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.event-groups__turno-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.event-groups__turno-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.event-groups__turno-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.event-groups__turno-date {
+  font-weight: var(--font-weight-medium);
+}
+
+.event-groups__turno-teams {
+  color: var(--color-text-secondary);
+}
+
+.event-groups__turno-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.event-groups__team-fieldset {
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  border: none;
+}
+
+.event-groups__team-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.event-groups__team-empty {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.event-groups__form-hint {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-secondary);
+}
+
+.event-groups__date-block {
+  margin: 0 0 var(--space-5);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.event-groups__turno-fields {
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.event-groups__turno-label {
+  margin: 0 0 var(--space-2);
+  font-weight: var(--font-weight-medium);
+}
+
+.event-groups__block-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+@media (min-width: 640px) {
+  .event-groups__header {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .event-groups__card-header {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .event-groups__turno-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}

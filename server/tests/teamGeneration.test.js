@@ -783,7 +783,12 @@ describe("PATCH /api/teams/:teamId", () => {
     expect(res.body.error.details?.code).toBe("EQUIPO_NO_ENCONTRADO");
   });
 
-  it("409 MES_FINALIZADO si el mes del equipo ya no está DRAFT", async () => {
+  // Ajustado 2026-08-25: editar la composición de un equipo pasa a
+  // permitirse tras publicar, mismo criterio que agregar/cancelar/eliminar
+  // eventos (assertEditableConsideringFinalization) -- DRAFT sin
+  // restricción, FINALIZED solo si (year, month) es el mes actual o uno
+  // futuro (409 MES_PASADO si no).
+  it("200 permite editar la composición de un equipo si el mes ya está FINALIZED pero es actual o futuro", async () => {
     const { monthCycle, teamX, leaderA, leaderB, collabA, collabB } = await setupTwoTeamMonth([2079, 5]);
     await prisma.monthCycle.update({ where: { id: monthCycle.id }, data: { status: "FINALIZED" } });
 
@@ -791,8 +796,22 @@ describe("PATCH /api/teams/:teamId", () => {
     const res = await authed(request(app).patch(`/api/teams/${teamX.id}`)).send({
       members: [{ personId: teamXLeaderId, role: "LEADER" }],
     });
+    expect(res.status).toBe(200);
+    expect(res.body.team.members.map((m) => m.personId)).toEqual([teamXLeaderId]);
+
+    await retire([leaderA, leaderB, collabA, collabB]);
+  });
+
+  it("409 MES_PASADO si el mes del equipo ya está FINALIZED y ya pasó", async () => {
+    const { monthCycle, teamX, leaderA, leaderB, collabA, collabB } = await setupTwoTeamMonth([2019, 5]);
+    await prisma.monthCycle.update({ where: { id: monthCycle.id }, data: { status: "FINALIZED" } });
+
+    const teamXLeaderId = teamX.members.find((m) => m.role === "LEADER").personId;
+    const res = await authed(request(app).patch(`/api/teams/${teamX.id}`)).send({
+      members: [{ personId: teamXLeaderId, role: "LEADER" }],
+    });
     expect(res.status).toBe(409);
-    expect(res.body.error.details.code).toBe("MES_FINALIZADO");
+    expect(res.body.error.details.code).toBe("MES_PASADO");
 
     await retire([leaderA, leaderB, collabA, collabB]);
   });

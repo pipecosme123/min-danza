@@ -19,6 +19,7 @@ import { validate } from "../middleware/validate.js";
 import { requireAuth } from "../middleware/auth.js";
 import { adminLimiter } from "../middleware/rateLimit.js";
 import { generateTeams, listTeamsForMonth, updateTeam } from "../services/teamGeneration.service.js";
+import { cancelYouthService, deleteYouthTeam } from "../services/youthTeam.service.js";
 
 const router = Router();
 
@@ -130,6 +131,36 @@ router.patch(
   async (req, res, next) => {
     try {
       const result = await updateTeam(req.params.teamId, req.body.members);
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.post(
+  "/months/:id/youth-team/cancel",
+  adminLimiter,
+  requireAuth,
+  validate({ params: monthIdParamSchema }),
+  async (req, res, next) => {
+    try {
+      const result = await cancelYouthService(req.params.id);
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.delete(
+  "/months/:id/youth-team",
+  adminLimiter,
+  requireAuth,
+  validate({ params: monthIdParamSchema }),
+  async (req, res, next) => {
+    try {
+      const result = await deleteYouthTeam(req.params.id);
       res.json(result);
     } catch (err) {
       next(err);

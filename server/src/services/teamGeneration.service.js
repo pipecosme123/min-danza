@@ -644,12 +644,10 @@ async function updateTeamTransaction(teamId, members) {
   return prisma.$transaction(async (tx) => {
     const team = await tx.team.findUnique({
       where: { id: teamId },
-      include: { monthCycle: { select: { id: true, status: true } } },
+      include: { monthCycle: { select: { id: true, year: true, month: true, status: true } } },
     });
     if (!team) throw new NotFoundError("Equipo no encontrado.", { code: "EQUIPO_NO_ENCONTRADO" });
-    if (team.monthCycle.status !== "DRAFT") {
-      throw new ConflictError("El mes ya está finalizado y no admite cambios.", { code: "MES_FINALIZADO" });
-    }
+    assertEditableConsideringFinalization(team.monthCycle);
 
     const monthCycleId = team.monthCycleId;
 
@@ -770,6 +768,16 @@ async function updateTeamTransaction(teamId, members) {
       where: { id: teamId },
       select: TEAM_SELECT,
     });
+
+    // Fase 4c: este endpoint ahora puede mutar un mes FINALIZED
+    // (actual/futuro), que puede estar cacheado como página pública. Este
+    // archivo no puede importar cacheKeyFor de publicSchedule.service.js sin
+    // cerrar un ciclo de imports (publicSchedule.service.js ya importa
+    // TEAM_SELECT/serializeTeam de acá) -- se usa invalidateByPrefix, ya
+    // importado en este mismo archivo para deleteMonthCycle/finalizeMonthCycle,
+    // un poco más ancho que la clave puntual pero sin tocar la arquitectura
+    // de módulos existente.
+    invalidateByPrefix("schedule:");
 
     return { team: serializeTeam(updated) };
   });

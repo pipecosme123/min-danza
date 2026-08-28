@@ -8,12 +8,14 @@ import {
   updateEvent,
   deleteEvent,
   cancelEvent,
+  cancelYouthService,
   updateAssignment,
   updateSlotUniform,
   finalizeMonth,
 } from '../api/schedule.js';
 import { getUniforms } from '../api/uniforms.js';
 import { describeApiError } from '../utils/apiError.js';
+import { describeEventError } from '../utils/eventErrors.js';
 import { formatMonthYear, formatCivilDate, formatTimeLabel, isMonthCurrentOrFuture } from '../utils/dates.js';
 import { groupSlotsByDate } from '../utils/schedule.js';
 import { useApi } from '../hooks/useApi.js';
@@ -30,46 +32,11 @@ import { CalendarGrid } from '../components/domain/CalendarGrid.jsx';
 import { ScheduleSlotCard } from '../components/domain/ScheduleSlotCard.jsx';
 import { MonthOccupancyCalendar } from '../components/domain/MonthOccupancyCalendar.jsx';
 import { BalanceSummary } from '../components/domain/BalanceSummary.jsx';
+import { EventGroupsSection } from '../components/domain/EventGroupsSection.jsx';
+import { MonthVersesSection } from '../components/domain/MonthVersesSection.jsx';
 import './EventsManager.css';
 
 const EMPTY_EVENT_FORM = { date: '', startTime: '', title: '', teamsNeeded: '1', uniformId: '' };
-
-/**
- * Traduce los códigos de error de las acciones sobre el horario/eventos a
- * lenguaje llano: crear/editar/eliminar/cancelar un evento, y cambiar el
- * uniforme de un turno. Contrato de `MES_PASADO`/`EVENTO_YA_CANCELADO`:
- * `docs/architecture/phase4c-post-publish-edits-contract.md` §0/§8.
- */
-function describeEventError(info) {
-  if (info.code === 'FECHA_FUERA_DE_MES') {
-    return 'La fecha del evento debe caer dentro del mes elegido.';
-  }
-  if (info.code === 'UNIFORME_NO_VALIDO') {
-    return 'El uniforme elegido no existe o está inactivo. Elige otro.';
-  }
-  if (info.code === 'HORARIO_NO_GENERADO') {
-    return 'Todavía no se generó el horario base de este mes. Generalo antes de agregar eventos.';
-  }
-  if (info.code === 'MES_FINALIZADO') {
-    return 'Este mes ya está finalizado y no admite cambios.';
-  }
-  if (info.code === 'MES_PASADO') {
-    return 'Este mes ya pasó, no se puede modificar.';
-  }
-  if (info.code === 'EVENTO_NO_ENCONTRADO') {
-    return 'Este evento ya no existe. Es posible que se haya eliminado o que el horario se haya regenerado.';
-  }
-  if (info.code === 'EVENTO_YA_CANCELADO') {
-    return 'Este evento ya está cancelado.';
-  }
-  if (info.code === 'EQUIPOS_BLOQUEADOS_EXCEDEN_CUPO') {
-    const locked = info.details?.locked ?? 0;
-    return `No se puede bajar la cantidad de equipos: ya hay ${locked} equipo${locked === 1 ? '' : 's'} bloqueado${
-      locked === 1 ? '' : 's'
-    } en este turno. Desbloqueá alguno primero.`;
-  }
-  return info.message;
-}
 
 /** Traduce los códigos de error de "Eliminar mes" a lenguaje llano. */
 function describeDeleteMonthError(info) {
@@ -109,9 +76,15 @@ function describeFinalizeError(info) {
  * "Editar evento" para no duplicar el JSX. Contrato:
  * `docs/architecture/phase4b-schedule-refinements-contract.md` §5.1.
  *
- * @param {{ form: Object, onFieldChange: (key: string, value: string) => void, uniforms: Array }} props
+ * @param {{ form: Object, onFieldChange: (key: string, value: string) => void, uniforms: Array, maxTeams: number }} props
  */
-function EventFormFields({ form, onFieldChange, uniforms }) {
+function EventFormFields({ form, onFieldChange, uniforms, maxTeams }) {
+  // Desde 1 hasta la cantidad de equipos REGULAR del mes (antes fijo en 1/2):
+  // un mes puede tener más de 2 equipos, y el admin debe poder pedirlos todos
+  // para un evento puntual. Si por algún motivo todavía no hay equipos
+  // cargados, se deja al menos la opción "1" para no dejar el select vacío.
+  const teamOptions = Array.from({ length: Math.max(maxTeams || 1, 1) }, (_, index) => index + 1);
+
   return (
     <>
       <Field
@@ -141,8 +114,11 @@ function EventFormFields({ form, onFieldChange, uniforms }) {
         value={form.teamsNeeded}
         onChange={(event) => onFieldChange('teamsNeeded', event.target.value)}
       >
-        <option value="1">1 equipo</option>
-        <option value="2">2 equipos</option>
+        {teamOptions.map((count) => (
+          <option key={count} value={String(count)}>
+            {count} equipo{count === 1 ? '' : 's'}
+          </option>
+        ))}
       </Field>
       <Field
         as="select"
@@ -213,12 +189,14 @@ export function EventsManager() {
 
   const monthFinalized = selectedMonth?.status === 'FINALIZED';
 
-  // Grupo nuevo de acciones (agregar/cancelar/eliminar evento, uniforme por
-  // turno): se deshabilita solo cuando el mes finalizado ya pasó, no cuando
-  // está finalizado pero es el mes actual o uno futuro. El resto de las
-  // acciones (generar/regenerar horario, bloquear/reasignar, "Editar
-  // evento" completo) sigue atado únicamente a `monthFinalized`, sin
-  // cambios. Ver `docs/architecture/phase4c-post-publish-edits-contract.md` §0/§8.
+  // `monthIsPast` gobierna casi todo lo que sigue permitido tras publicar un
+  // mes: agregar/cancelar/eliminar evento (o el Servicio de jóvenes),
+  // cambiar el uniforme de un turno, bloquear/reasignar una asignación y
+  // "Editar evento" completo — todo se deshabilita solo cuando el mes
+  // finalizado ya pasó, no cuando está finalizado pero es el mes actual o
+  // uno futuro. Lo único que sigue exigiendo `DRAFT` sin excepción es
+  // (re)sortear equipos y generar/regenerar el horario base. Ver
+  // `docs/architecture/phase4c-post-publish-edits-contract.md` §0/§8.
   const monthIsPast =
     monthFinalized && Boolean(selectedMonth) && !isMonthCurrentOrFuture(selectedMonth.year, selectedMonth.month);
   const eventActionsDisabled = monthIsPast;
@@ -429,17 +407,25 @@ export function EventsManager() {
     }
   }
 
-  // ---- Cancelar evento extraordinario (distinto de eliminar: el evento
-  // queda registrado y visible, marcado como cancelado) ----
+  // ---- Cancelar evento extraordinario o Servicio de jóvenes (distinto de
+  // eliminar: el turno queda registrado y visible, marcado como cancelado).
+  // `cancelTarget` puede ser un slot EXTRAORDINARY o el YOUTH_SERVICE; se
+  // ramifica al endpoint correcto según su `slotType`. ----
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const cancelTargetIsYouth = cancelTarget?.slotType === 'YOUTH_SERVICE';
 
   async function handleCancelConfirm() {
-    if (!cancelTarget) return;
+    if (!cancelTarget || !selectedMonthId) return;
     setCancelLoading(true);
     try {
-      await cancelEvent(cancelTarget.id);
-      showSuccess('Se canceló el evento.');
+      if (cancelTargetIsYouth) {
+        await cancelYouthService(selectedMonthId);
+        showSuccess('Se canceló el Servicio de jóvenes.');
+      } else {
+        await cancelEvent(cancelTarget.id);
+        showSuccess('Se canceló el evento.');
+      }
       setCancelTarget(null);
       refetchSchedule();
     } catch (err) {
@@ -587,7 +573,7 @@ export function EventsManager() {
             <p className="events-manager__finalized-notice" role="status">
               {monthIsPast
                 ? 'Este mes ya pasó y está finalizado: no admite ningún cambio.'
-                : 'Este mes está finalizado: no se puede volver a sortear equipos, regenerar el horario, bloquear/reasignar turnos ni editar eventos por completo. Todavía podés agregar, cancelar o eliminar eventos extraordinarios, y cambiar el uniforme de un turno puntual.'}
+                : 'Este mes está finalizado: no se puede volver a sortear equipos ni regenerar el horario. Mientras sea el mes actual o uno futuro, todavía podés bloquear/reasignar turnos, editar, agregar, cancelar o eliminar eventos, cambiar el uniforme de un turno puntual, y editar la composición de los equipos desde «Equipos».'}
             </p>
           ) : null}
 
@@ -611,6 +597,8 @@ export function EventsManager() {
               Finalizar mes
             </Button>
           </div>
+
+          <MonthVersesSection monthId={selectedMonthId} disabled={eventActionsDisabled} />
 
           {uniformsError ? (
             <ErrorMessage
@@ -707,7 +695,7 @@ export function EventsManager() {
                             slot={slot}
                             regularTeams={regularTeamOptions}
                             uniforms={activeUniforms}
-                            disabled={monthFinalized}
+                            disabled={monthIsPast}
                             eventActionsDisabled={eventActionsDisabled}
                             busyAssignmentId={busyAssignmentId}
                             uniformBusy={uniformBusySlotIds.has(slot.id)}
@@ -726,6 +714,14 @@ export function EventsManager() {
                       <MonthOccupancyCalendar year={selectedMonth.year} month={selectedMonth.month} slots={slots} />
                     </div>
                   )}
+
+                  <EventGroupsSection
+                    monthId={selectedMonthId}
+                    regularTeamOptions={regularTeamOptions}
+                    uniforms={activeUniforms}
+                    disabled={eventActionsDisabled}
+                    onChanged={refetchSchedule}
+                  />
                 </>
               ) : null}
             </>
@@ -741,7 +737,7 @@ export function EventsManager() {
         title="Finalizar el mes"
         description={`Se publicará ${
           selectedMonth ? formatMonthYear(selectedMonth.year, selectedMonth.month) : 'este mes'
-        } en la página pública, con los equipos y el horario tal como están ahora mismo. A partir de ese momento el mes queda bloqueado: no vas a poder volver a sortear equipos, editar el horario ni agregar o quitar eventos. Hoy no existe una forma de deshacer esta acción.`}
+        } en la página pública, con los equipos y el horario tal como están ahora mismo. A partir de ese momento no vas a poder volver a sortear equipos ni regenerar el horario; mientras el mes siga siendo el actual o uno futuro vas a poder seguir ajustando turnos y eventos puntuales. Hoy no existe una forma de deshacer esta acción.`}
         confirmLabel="Sí, finalizar mes"
         variant="danger"
         loading={finalizeLoading}
@@ -792,19 +788,22 @@ export function EventsManager() {
         loading={deleteLoading}
       />
 
-      {/* Cancelar evento extraordinario: a diferencia de eliminar, el evento queda
-          registrado y visible, marcado como cancelado. No hay forma de "descancelarlo". */}
+      {/* Cancelar evento extraordinario o Servicio de jóvenes: a diferencia de
+          eliminar, el turno queda registrado y visible, marcado como cancelado.
+          No hay forma de "descancelarlo". */}
       <ConfirmDialog
         open={Boolean(cancelTarget)}
         onClose={() => setCancelTarget(null)}
         onConfirm={handleCancelConfirm}
-        title="Cancelar evento"
+        title={cancelTargetIsYouth ? 'Cancelar Servicio de jóvenes' : 'Cancelar evento'}
         description={
           cancelTarget
-            ? `Se marcará "${cancelTarget.title}" del ${formatCivilDate(cancelTarget.date)} como cancelado. El evento queda registrado y visible (ya no necesita equipo asignado). Hoy no existe una forma de deshacer esto: si te equivocás, hay que crear un evento nuevo.`
+            ? cancelTargetIsYouth
+              ? `Se marcará el Servicio de jóvenes del ${formatCivilDate(cancelTarget.date)} como cancelado. El turno queda registrado y visible (ya no necesita equipo asignado ni cuenta en el balance), pero el equipo de jóvenes y sus integrantes se conservan. Hoy no existe una forma de deshacer esto.`
+              : `Se marcará "${cancelTarget.title}" del ${formatCivilDate(cancelTarget.date)} como cancelado. El evento queda registrado y visible (ya no necesita equipo asignado). Hoy no existe una forma de deshacer esto: si te equivocás, hay que crear un evento nuevo.`
             : ''
         }
-        confirmLabel="Sí, cancelar evento"
+        confirmLabel={cancelTargetIsYouth ? 'Sí, cancelar Servicio de jóvenes' : 'Sí, cancelar evento'}
         variant="danger"
         loading={cancelLoading}
       />
@@ -822,7 +821,12 @@ export function EventsManager() {
               : ''}
           </p>
 
-          <EventFormFields form={eventForm} onFieldChange={updateEventField} uniforms={activeUniforms} />
+          <EventFormFields
+            form={eventForm}
+            onFieldChange={updateEventField}
+            uniforms={activeUniforms}
+            maxTeams={regularTeamOptions.length}
+          />
 
           {eventError ? <ErrorMessage message={eventError} /> : null}
 

@@ -24,3 +24,20 @@ export function groupSlotsByDate(slots) {
     slots: dateSlots,
   }));
 }
+
+/**
+ * Un turno de un evento agrupado (Congreso, etc.) es, por dentro, un
+ * `ServiceSlot` normal con `eventGroupId`/datos del grupo. El backend puede
+ * mandar esa referencia como `eventGroupId`/`eventGroupTitle` sueltos o como
+ * un objeto anidado `group: { id, title }` — esta función normaliza ambas
+ * formas para que `ScheduleSlotCard`/`SlotCard` no tengan que conocer el
+ * detalle exacto del DTO.
+ * @param {{ eventGroupId?: string|null, eventGroupTitle?: string|null, group?: { id: string, title: string } | null }} slot
+ * @returns {{ id: string, title: string|null } | null}
+ */
+export function getSlotEventGroup(slot) {
+  if (!slot) return null;
+  if (slot.group && slot.group.id) return slot.group;
+  if (slot.eventGroupId) return { id: slot.eventGroupId, title: slot.eventGroupTitle ?? null };
+  return null;
+}

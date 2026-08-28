@@ -1,4 +1,5 @@
 import { formatTimeLabel } from '../../utils/dates.js';
+import { getSlotEventGroup } from '../../utils/schedule.js';
 import { UniformBadge } from './UniformBadge.jsx';
 import { Badge } from '../ui/Badge.jsx';
 import { Button } from '../ui/Button.jsx';
@@ -26,10 +27,12 @@ const SLOT_TYPE_LABELS = {
  * Dos props de deshabilitado, cada uno atado a un grupo distinto de la
  * tabla de `docs/architecture/phase4c-post-publish-edits-contract.md` §0:
  * - `disabled`: bloquear/desbloquear, reasignar equipo, "Editar evento"
- *   completo. Atado 1:1 a `monthFinalized`, sin excepción de fecha.
- * - `eventActionsDisabled`: agregar (fuera de esta tarjeta)/cancelar/
- *   eliminar evento, y el selector de uniforme del turno. Atado a
- *   `monthFinalized && monthIsPast`.
+ *   completo. Atado a `monthIsPast` (mes finalizado Y ya pasado) — un mes
+ *   finalizado que todavía es el actual o uno futuro deja estas acciones
+ *   habilitadas.
+ * - `eventActionsDisabled`: agregar (fuera de esta tarjeta)/cancelar
+ *   evento o Servicio de jóvenes/eliminar evento, y el selector de
+ *   uniforme del turno. Atado también a `monthIsPast`, mismo criterio.
  *
  * @param {{
  *   slot: Object,
@@ -63,13 +66,25 @@ export function ScheduleSlotCard({
   onCancelEvent,
 }) {
   const isCancelled = Boolean(slot.cancelledAt);
+  const eventGroup = getSlotEventGroup(slot);
   const canReassign = slot.slotType !== 'YOUTH_SERVICE';
-  const canDelete = slot.slotType === 'EXTRAORDINARY' && Boolean(onDeleteEvent);
+  // Un turno que pertenece a un evento agrupado (Congreso, etc.) no ofrece
+  // las acciones de evento suelto: se edita/cancela/elimina desde la
+  // sección de eventos agrupados, que opera sobre el grupo completo o sobre
+  // este turno puntual con sus propios endpoints.
+  const canDelete = slot.slotType === 'EXTRAORDINARY' && Boolean(onDeleteEvent) && !eventGroup;
   // "Editar evento" completo y "Cancelar evento" no tienen sentido sobre un
   // evento ya cancelado: no queda nada que gestionar salvo "Eliminar
   // evento", que sigue disponible para purgarlo del todo.
-  const canEdit = slot.slotType === 'EXTRAORDINARY' && Boolean(onEditEvent) && !isCancelled;
-  const canCancel = slot.slotType === 'EXTRAORDINARY' && Boolean(onCancelEvent) && !isCancelled;
+  const canEdit = slot.slotType === 'EXTRAORDINARY' && Boolean(onEditEvent) && !isCancelled && !eventGroup;
+  // Cancelar admite EXTRAORDINARY y YOUTH_SERVICE (eliminar el equipo YOUTH
+  // completo se hace desde «Equipos», no acá).
+  const canCancel =
+    (slot.slotType === 'EXTRAORDINARY' || slot.slotType === 'YOUTH_SERVICE') &&
+    Boolean(onCancelEvent) &&
+    !isCancelled &&
+    !eventGroup;
+  const cancelLabel = slot.slotType === 'YOUTH_SERVICE' ? 'Cancelar Servicio de jóvenes' : 'Cancelar evento';
 
   return (
     <article className="slot-card schedule-slot-card">
@@ -78,6 +93,8 @@ export function ScheduleSlotCard({
         <p className="slot-card__time">{formatTimeLabel(slot.startTime)}</p>
         <span className="slot-card__type">{SLOT_TYPE_LABELS[slot.slotType] || slot.slotType}</span>
       </header>
+
+      {eventGroup ? <Badge variant="primary">{eventGroup.title || 'Evento agrupado'}</Badge> : null}
 
       {slot.title ? (
         <p className={isCancelled ? 'slot-card__title slot-card__title--cancelled' : 'slot-card__title'}>
@@ -170,7 +187,7 @@ export function ScheduleSlotCard({
               disabled={eventActionsDisabled}
               onClick={() => onCancelEvent(slot)}
             >
-              Cancelar evento
+              {cancelLabel}
             </Button>
           ) : null}
           {canDelete ? (

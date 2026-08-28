@@ -111,7 +111,7 @@ Body: `{ "date": "2026-08-15", "startTime": "19:30", "title": "Vigilia", "teamsN
 | `date` | fecha civil dentro del mes del `MonthCycle` (año/mes deben coincidir) → si no, **400** `FECHA_FUERA_DE_MES` |
 | `startTime` | `"HH:mm"` 24h |
 | `title` | string, `1..100` |
-| `teamsNeeded` | `1` o `2` |
+| `teamsNeeded` | **Ampliado 2026-08-27** (antes fijo a `1` o `2`): admite `1..cantidad de equipos REGULAR del mes` — el tope se valida en el service contra el conteo real (`tx.team.count`), no en el schema Zod (el máximo es dinámico por mes, no una constante). `400 TEAMSNEEDED_EXCEDE_EQUIPOS` si se excede. Requirió relajar el `CHECK` de base `service_slot_teams_needed_range`→`service_slot_teams_needed_positive` (`>= 1`, sin tope superior). Ver `docs/architecture/phase8-congreso-and-verses-contract.md` §1 para el detalle completo y el resto de la ronda que trajo este cambio. |
 | `uniformId` | opcional, debe existir y estar `active: true` si viene |
 
 - **404** si el mes no existe.

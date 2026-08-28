@@ -15,7 +15,7 @@ import { prisma } from "../lib/prisma.js";
 import { NotFoundError } from "../utils/errors.js";
 import { getCached, setCached } from "../lib/cache.js";
 import { env } from "../config/env.js";
-import { currentCivilDate, monthsBetween } from "../utils/dates.js";
+import { currentCivilDate, monthsBetween, daysInMonth } from "../utils/dates.js";
 import { TEAM_SELECT, serializeTeam } from "./teamGeneration.service.js";
 import { SLOT_SELECT, serializeSlot } from "./scheduleGeneration.service.js";
 
@@ -32,6 +32,30 @@ function isWithinHistoryWindow(year, month) {
   const today = currentCivilDate(env.APP_TIMEZONE);
   const monthsAgo = monthsBetween({ year, month }, today);
   return monthsAgo <= PUBLIC_HISTORY_MONTHS;
+}
+
+// Parte 3 (wise-noodling-hickey.md): isWithinHistoryWindow de arriba solo
+// limita hacia ATRÁS (monthsBetween da negativo para un mes futuro, que
+// siempre es <= PUBLIC_HISTORY_MONTHS) -- por diseño, no por descuido, un mes
+// futuro FINALIZED pasaba sin ninguna restricción, contrario a la intención
+// original de "el default nunca salta a futuro" (getLatestPublicSchedule).
+// Esta función tapa ese hueco para la consulta MANUAL de un mes puntual
+// ("Ver otro mes"): el mes siguiente al actual se revela recién en los
+// últimos 8 días (inclusive) del mes civil actual; cualquier mes 2+ meses en
+// el futuro nunca se revela, sin importar el día.
+function isNextMonthEarlyRevealed(year, month) {
+  const today = currentCivilDate(env.APP_TIMEZONE);
+  const nextMonth = today.month === 12 ? { year: today.year + 1, month: 1 } : { year: today.year, month: today.month + 1 };
+  if (year !== nextMonth.year || month !== nextMonth.month) return false;
+
+  const totalDaysThisMonth = daysInMonth(today.year, today.month);
+  return today.day >= totalDaysThisMonth - 7;
+}
+
+/** true si (year, month) es estrictamente posterior al mes civil actual. */
+function isStrictlyFuture(year, month) {
+  const today = currentCivilDate(env.APP_TIMEZONE);
+  return year > today.year || (year === today.year && month > today.month);
 }
 
 // Mensaje único a propósito: la página pública nunca debe permitir distinguir
@@ -64,7 +88,7 @@ export async function buildPublicPayload(monthCycle) {
   const cached = getCached(cacheKey);
   if (cached !== undefined) return cached;
 
-  const [teams, slots] = await Promise.all([
+  const [teams, slots, verses] = await Promise.all([
     prisma.team.findMany({
       where: { monthCycleId: monthCycle.id },
       orderBy: { orderIndex: "asc" },
@@ -74,6 +98,14 @@ export async function buildPublicPayload(monthCycle) {
       where: { monthCycleId: monthCycle.id },
       orderBy: [{ date: "asc" }, { startTime: "asc" }],
       select: SLOT_SELECT,
+    }),
+    // Parte 4 (wise-noodling-hickey.md): versículo(s) del mes, ya resueltos y
+    // persistidos por verses.service.js -- la página pública nunca llama a
+    // bibleSource.service.js directamente.
+    prisma.versePassage.findMany({
+      where: { monthCycleId: monthCycle.id },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, reference: true, text: true, version: true },
     }),
   ]);
 
@@ -85,6 +117,7 @@ export async function buildPublicPayload(monthCycle) {
     },
     teams: teams.map(serializeTeam),
     slots: slots.map(serializeSlot),
+    verses: verses.map((v) => ({ id: v.id, reference: v.reference, text: v.text, version: v.version })),
   };
 
   setCached(cacheKey, payload, PUBLIC_CACHE_TTL_MS);
@@ -99,6 +132,13 @@ export async function getPublicScheduleFor(year, month) {
   // Fuera de la ventana de 1 año: mismo 404 genérico que "no existe"/"DRAFT"
   // -- nunca se distingue el motivo (regla de privacidad ya establecida).
   if (!isWithinHistoryWindow(year, month)) {
+    throw new NotFoundError(PUBLIC_NOT_FOUND_MESSAGE, { code: "MES_NO_PUBLICADO" });
+  }
+
+  // Parte 3 (wise-noodling-hickey.md): un mes estrictamente futuro solo se
+  // revela si es EXACTAMENTE el mes siguiente y estamos en sus últimos 8
+  // días -- mismo 404 genérico si no, nunca se distingue el motivo.
+  if (isStrictlyFuture(year, month) && !isNextMonthEarlyRevealed(year, month)) {
     throw new NotFoundError(PUBLIC_NOT_FOUND_MESSAGE, { code: "MES_NO_PUBLICADO" });
   }
 
@@ -127,7 +167,15 @@ export async function listPublicScheduleHistory() {
     orderBy: [{ year: "desc" }, { month: "desc" }],
     select: { year: true, month: true },
   });
-  return { months: monthCycles.filter((m) => isWithinHistoryWindow(m.year, m.month)) };
+  return {
+    months: monthCycles.filter((m) => {
+      if (!isWithinHistoryWindow(m.year, m.month)) return false;
+      // Parte 3: mismo filtro que getPublicScheduleFor -- un mes futuro solo
+      // entra a la lista si ya se adelantó (últimos 8 días del mes actual).
+      if (isStrictlyFuture(m.year, m.month) && !isNextMonthEarlyRevealed(m.year, m.month)) return false;
+      return true;
+    }),
+  };
 }
 
 /**

@@ -201,7 +201,12 @@ describe("PATCH /api/assignments/:id", () => {
     expect(res.body.error.details.code).toBe("ASIGNACION_NO_ENCONTRADA");
   });
 
-  it("409 MES_FINALIZADO si el mes de la asignación ya no está DRAFT", async () => {
+  // Ajustado 2026-08-25: bloquear/reasignar un turno pasa a permitirse tras
+  // publicar, mismo criterio que agregar/cancelar/eliminar eventos
+  // (assertEditableConsideringFinalization) -- DRAFT sin restricción,
+  // FINALIZED solo si (year, month) es el mes actual o uno futuro (409
+  // MES_PASADO si no).
+  it("200 permite bloquear/reasignar una asignación si el mes ya está FINALIZED pero es actual o futuro", async () => {
     const { monthCycle, slots } = await setupMonthWithSchedule({ year: 2096, month: 8, teamCount: 1 });
     const slot = findSingleTeamFixedSlot(slots);
     const assignmentId = slot.teams[0].assignmentId;
@@ -209,8 +214,20 @@ describe("PATCH /api/assignments/:id", () => {
     await prisma.monthCycle.update({ where: { id: monthCycle.id }, data: { status: "FINALIZED" } });
 
     const res = await authed(request(app).patch(`/api/assignments/${assignmentId}`)).send({ locked: true });
+    expect(res.status).toBe(200);
+    expect(res.body.assignment).toMatchObject({ id: assignmentId, locked: true });
+  });
+
+  it("409 MES_PASADO si el mes de la asignación ya está FINALIZED y ya pasó", async () => {
+    const { monthCycle, slots } = await setupMonthWithSchedule({ year: 2019, month: 8, teamCount: 1 });
+    const slot = findSingleTeamFixedSlot(slots);
+    const assignmentId = slot.teams[0].assignmentId;
+
+    await prisma.monthCycle.update({ where: { id: monthCycle.id }, data: { status: "FINALIZED" } });
+
+    const res = await authed(request(app).patch(`/api/assignments/${assignmentId}`)).send({ locked: true });
     expect(res.status).toBe(409);
-    expect(res.body.error.details.code).toBe("MES_FINALIZADO");
+    expect(res.body.error.details.code).toBe("MES_PASADO");
   });
 
   it("400 si el body no manda ni locked ni teamId", async () => {

@@ -27,10 +27,11 @@ const createEventBodySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date debe tener formato YYYY-MM-DD"),
   startTime: z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/, "startTime debe tener formato HH:mm 24h"),
   title: z.string().min(1, "title es obligatorio").max(100, "title debe tener máximo 100 caracteres"),
-  teamsNeeded: z.coerce
-    .number()
-    .int("teamsNeeded debe ser un entero")
-    .refine((v) => v === 1 || v === 2, "teamsNeeded debe ser 1 o 2"),
+  // Parte 1 (wise-noodling-hickey.md): ya no está fijo a {1,2} -- puede pedir
+  // desde 1 hasta la cantidad de equipos REGULAR del mes, pero ESE máximo
+  // depende del mes (una consulta a la base), así que se valida en el
+  // service (TEAMSNEEDED_EXCEDE_EQUIPOS), no acá.
+  teamsNeeded: z.coerce.number().int("teamsNeeded debe ser un entero").min(1, "teamsNeeded debe ser >= 1"),
   uniformId: z.string().min(1).max(40).optional(),
 });
 
@@ -42,11 +43,7 @@ const updateEventBodySchema = z
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date debe tener formato YYYY-MM-DD").optional(),
     startTime: z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/, "startTime debe tener formato HH:mm 24h").optional(),
     title: z.string().min(1, "title es obligatorio").max(100, "title debe tener máximo 100 caracteres").optional(),
-    teamsNeeded: z.coerce
-      .number()
-      .int("teamsNeeded debe ser un entero")
-      .refine((v) => v === 1 || v === 2, "teamsNeeded debe ser 1 o 2")
-      .optional(),
+    teamsNeeded: z.coerce.number().int("teamsNeeded debe ser un entero").min(1, "teamsNeeded debe ser >= 1").optional(),
     uniformId: z.string().min(1).max(40).nullable().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, { message: "El body no puede estar vacío." });
