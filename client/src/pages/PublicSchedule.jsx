@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AppHeader } from '../components/Layout/AppHeader.jsx';
 import { Spinner } from '../components/ui/Spinner.jsx';
@@ -39,6 +39,11 @@ function buildPersonOptions(teams) {
   return Array.from(byPersonId.values()).sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
 }
 
+/** Calcula el (year, month) civil inmediatamente siguiente a uno dado. */
+function nextCalendarMonth(year, month) {
+  return month === 12 ? { year: year + 1, month: 1 } : { year, month: month + 1 };
+}
+
 /**
  * Formatea la fecha/hora de publicación (`finalizedAt`) en un texto corto de
  * referencia, ej. "Publicado el 8 de agosto de 2026". No es información
@@ -73,6 +78,32 @@ export function PublicSchedule() {
   const [selectedPersonId, setSelectedPersonId] = useState(NO_FILTER);
   const [scheduleView, setScheduleView] = useState('list'); // 'list' | 'calendar'
 
+  // "Mes actual" real (el que devuelve /latest), fijado aparte de `data` para
+  // que las tabs actual/siguiente no dependan de cuál de los dos esté viendo
+  // el usuario en este momento -- sin esto, al entrar a la tab "mes
+  // siguiente" `data.month` pasaría a ser ese mes y el cálculo de "el
+  // siguiente al que se muestra" apuntaría dos meses para adelante en vez de
+  // seguir comparando contra el mes actual real.
+  const [anchorMonth, setAnchorMonth] = useState(null);
+  useEffect(() => {
+    if (data && selectedMonthKey === 'latest') {
+      setAnchorMonth({ year: data.month.year, month: data.month.month });
+    }
+  }, [data, selectedMonthKey]);
+
+  // El mes siguiente solo se ofrece como tab si ya apareció en /history (ahí
+  // ya se aplicó del lado del servidor la ventana de "adelanto de los
+  // últimos 8 días" -- ver publicSchedule.service.js). No hace falta
+  // recalcular esa regla en el cliente.
+  const nextMonthEntry = anchorMonth
+    ? (() => {
+        const { year, month } = nextCalendarMonth(anchorMonth.year, anchorMonth.month);
+        return historyMonths.find((m) => m.year === year && m.month === month) ?? null;
+      })()
+    : null;
+
+  const nextMonthKey = nextMonthEntry ? `${nextMonthEntry.year}-${nextMonthEntry.month}` : null;
+
   function handleMonthChange(value) {
     setSelectedMonthKey(value);
     // La persona filtrada de un mes anterior probablemente no exista (o no
@@ -86,18 +117,52 @@ export function PublicSchedule() {
     }
   }
 
-  // "Más reciente" siempre primero; el resto del historial excluye el mes
-  // que ya está cargado (para no listar el mismo mes dos veces). Si "latest"
-  // no encontró nada (ej. el mes actual todavía no se publicó) pero el
-  // historial sí tiene meses disponibles -- típicamente el mes siguiente,
-  // revelado por la ventana de "adelanto de los últimos 8 días" -- se
-  // muestran igual, para no dejar al usuario sin forma de llegar a ellos.
+  // "Ver otro mes" queda reservado a meses PASADOS (historial de hasta 1
+  // año): el mes actual y, si corresponde, el mes siguiente ya tienen su
+  // propia tab más arriba (ver `monthTabs`) -- no tiene sentido duplicarlos
+  // acá. Si "latest" no encontró nada (ej. el mes actual todavía no se
+  // publicó, sin `anchorMonth` para anclar ninguna tab) el historial completo
+  // sigue cayendo acá, para no dejar al usuario sin forma de llegar a un mes
+  // que sí esté disponible (ej. el mes siguiente ya adelantado).
   const otherMonths = data
-    ? historyMonths.filter((m) => !(m.year === data.month.year && m.month === data.month.month))
+    ? historyMonths.filter((m) => {
+        const isCurrentlyShown = m.year === data.month.year && m.month === data.month.month;
+        const isAnchor = anchorMonth && m.year === anchorMonth.year && m.month === anchorMonth.month;
+        const isNextTab = nextMonthEntry && m.year === nextMonthEntry.year && m.month === nextMonthEntry.month;
+        return !isCurrentlyShown && !isAnchor && !isNextTab;
+      })
     : historyMonths;
 
   const errorInfo = error ? describeApiError(error) : null;
   const notPublished = errorInfo?.code === 'MES_NO_PUBLICADO';
+
+  // Tabs "mes actual" / "mes siguiente": solo existen mientras haya un mes
+  // siguiente ya publicado y revelado. Apenas el mes civil actual termina, lo
+  // que era "el siguiente" pasa a ser el nuevo `anchorMonth` (vía /latest) y,
+  // salvo que YA se haya publicado el mes de después, `nextMonthEntry` vuelve
+  // a ser null y las tabs desaparecen solas -- sin ningún estado que limpiar
+  // a mano.
+  const monthTabs =
+    anchorMonth && nextMonthEntry ? (
+      <div className="public-schedule__month-tabs" role="group" aria-label="Elegir mes">
+        <Button
+          type="button"
+          variant={selectedMonthKey === 'latest' ? 'primary' : 'secondary'}
+          aria-pressed={selectedMonthKey === 'latest'}
+          onClick={() => handleMonthChange('latest')}
+        >
+          {formatMonthYear(anchorMonth.year, anchorMonth.month)}
+        </Button>
+        <Button
+          type="button"
+          variant={selectedMonthKey === nextMonthKey ? 'primary' : 'secondary'}
+          aria-pressed={selectedMonthKey === nextMonthKey}
+          onClick={() => handleMonthChange(nextMonthKey)}
+        >
+          {formatMonthYear(nextMonthEntry.year, nextMonthEntry.month)}
+        </Button>
+      </div>
+    ) : null;
 
   const monthSelector =
     otherMonths.length > 0 ? (
@@ -177,6 +242,7 @@ export function PublicSchedule() {
               {publishedAt ? (
                 <p className="public-schedule__published-at">Publicado el {publishedAt}.</p>
               ) : null}
+              {monthTabs}
               {monthSelector}
             </div>
 

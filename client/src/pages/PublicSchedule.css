@@ -13,6 +13,13 @@
   font-size: var(--font-size-sm);
 }
 
+.public-schedule__month-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
 .public-schedule__verses {
   display: flex;
   flex-direction: column;
