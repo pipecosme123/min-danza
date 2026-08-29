@@ -162,6 +162,39 @@ describe("PublicSchedule (ruta pública, sin login)", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("en el estado vacío, si el historial ya tiene un mes disponible (ej. el mes siguiente adelantado), ofrece el selector para llegar a él", async () => {
+    // Caso real: el mes actual (agosto) nunca se publicó, pero septiembre ya
+    // está FINALIZED y el backend lo revela en /history por la ventana de
+    // "adelanto de los últimos 8 días" -- sin este fix, el selector "Ver otro
+    // mes" no aparecía porque solo se renderizaba junto con `data`.
+    getLatestPublicSchedule.mockRejectedValueOnce(
+      new ApiError("No hay ningún mes publicado para esa fecha.", {
+        status: 404,
+        details: { code: "MES_NO_PUBLICADO" },
+      }),
+    );
+    getScheduleHistory.mockReset().mockResolvedValueOnce({ months: [{ year: 2026, month: 9 }] });
+    const septemberPayload = {
+      ...samplePayload(),
+      month: { year: 2026, month: 9, finalizedAt: "2026-08-29T20:00:00.000Z" },
+    };
+    getPublicScheduleFor.mockResolvedValueOnce(septemberPayload);
+
+    renderPublicSchedule();
+
+    await waitFor(() => expect(screen.getByText(/todavía no hay un mes publicado/i)).toBeInTheDocument());
+    const monthSelect = screen.getByLabelText("Ver otro mes");
+    expect(within(monthSelect).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Más reciente",
+      "Septiembre 2026",
+    ]);
+
+    await userEvent.selectOptions(monthSelect, "2026-9");
+
+    expect(getPublicScheduleFor).toHaveBeenCalledWith(2026, 9);
+    await waitFor(() => expect(screen.getByText("Septiembre 2026")).toBeInTheDocument());
+  });
+
   it("muestra un mensaje de error con reintentar ante un error de red real", async () => {
     getLatestPublicSchedule.mockRejectedValueOnce(new ApiError("No se pudo conectar con el servidor.", { status: 0 }));
     renderPublicSchedule();

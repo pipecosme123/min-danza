@@ -87,13 +87,34 @@ export function PublicSchedule() {
   }
 
   // "Más reciente" siempre primero; el resto del historial excluye el mes
-  // que ya está cargado (para no listar el mismo mes dos veces).
+  // que ya está cargado (para no listar el mismo mes dos veces). Si "latest"
+  // no encontró nada (ej. el mes actual todavía no se publicó) pero el
+  // historial sí tiene meses disponibles -- típicamente el mes siguiente,
+  // revelado por la ventana de "adelanto de los últimos 8 días" -- se
+  // muestran igual, para no dejar al usuario sin forma de llegar a ellos.
   const otherMonths = data
     ? historyMonths.filter((m) => !(m.year === data.month.year && m.month === data.month.month))
-    : [];
+    : historyMonths;
 
   const errorInfo = error ? describeApiError(error) : null;
   const notPublished = errorInfo?.code === 'MES_NO_PUBLICADO';
+
+  const monthSelector =
+    otherMonths.length > 0 ? (
+      <Field
+        label="Ver otro mes"
+        as="select"
+        value={selectedMonthKey}
+        onChange={(event) => handleMonthChange(event.target.value)}
+      >
+        <option value="latest">Más reciente</option>
+        {otherMonths.map((m) => (
+          <option key={`${m.year}-${m.month}`} value={`${m.year}-${m.month}`}>
+            {formatMonthYear(m.year, m.month)}
+          </option>
+        ))}
+      </Field>
+    ) : null;
 
   const allTeams = data ? [...data.teams].sort((a, b) => a.orderIndex - b.orderIndex) : [];
   const publishedAt = data ? formatPublishedAt(data.month.finalizedAt) : null;
@@ -143,6 +164,7 @@ export function PublicSchedule() {
           <EmptyState
             title="Todavía no hay un mes publicado"
             description="El administrador publica el horario del mes una vez que los equipos y turnos quedan confirmados. Vuelve a consultar más tarde."
+            action={monthSelector}
           />
         ) : null}
 
@@ -155,21 +177,7 @@ export function PublicSchedule() {
               {publishedAt ? (
                 <p className="public-schedule__published-at">Publicado el {publishedAt}.</p>
               ) : null}
-              {otherMonths.length > 0 ? (
-                <Field
-                  label="Ver otro mes"
-                  as="select"
-                  value={selectedMonthKey}
-                  onChange={(event) => handleMonthChange(event.target.value)}
-                >
-                  <option value="latest">Más reciente</option>
-                  {otherMonths.map((m) => (
-                    <option key={`${m.year}-${m.month}`} value={`${m.year}-${m.month}`}>
-                      {formatMonthYear(m.year, m.month)}
-                    </option>
-                  ))}
-                </Field>
-              ) : null}
+              {monthSelector}
             </div>
 
             {data.verses && data.verses.length > 0 ? (
