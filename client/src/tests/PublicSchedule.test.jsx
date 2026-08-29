@@ -347,6 +347,57 @@ describe("PublicSchedule (ruta pública, sin login)", () => {
     expect(screen.queryByLabelText("Ver otro mes")).not.toBeInTheDocument();
   });
 
+  it("muestra tabs de mes actual/siguiente cuando el mes siguiente ya está publicado (adelanto de últimos 8 días) y permite cambiar entre ambos", async () => {
+    getLatestPublicSchedule.mockResolvedValueOnce(samplePayload());
+    // /history ya aplicó del lado del servidor la ventana de "adelanto de
+    // últimos 8 días" -- si septiembre aparece acá, es porque ya es válido
+    // ofrecerlo.
+    getScheduleHistory.mockResolvedValueOnce({
+      months: [
+        { year: 2026, month: 9 },
+        { year: 2026, month: 8 },
+        { year: 2025, month: 8 }, // mes pasado real -- debe seguir en el dropdown, no en las tabs.
+      ],
+    });
+    const septemberPayload = {
+      ...samplePayload(),
+      month: { year: 2026, month: 9, finalizedAt: "2026-08-29T20:00:00.000Z" },
+    };
+    getPublicScheduleFor.mockResolvedValueOnce(septemberPayload);
+
+    renderPublicSchedule();
+    await waitFor(() => expect(screen.getByText("Agosto 2026")).toBeInTheDocument());
+
+    const tabs = await screen.findByRole("group", { name: "Elegir mes" });
+    const currentTab = within(tabs).getByRole("button", { name: "Agosto 2026" });
+    const nextTab = within(tabs).getByRole("button", { name: "Septiembre 2026" });
+    expect(currentTab).toHaveAttribute("aria-pressed", "true");
+    expect(nextTab).toHaveAttribute("aria-pressed", "false");
+
+    // El dropdown de historial solo debe listar el mes pasado real, nunca el
+    // mes actual ni el siguiente (ya cubiertos por las tabs).
+    const monthSelect = screen.getByLabelText("Ver otro mes");
+    expect(within(monthSelect).getAllByRole("option").map((o) => o.textContent)).toEqual(["Más reciente", "Agosto 2025"]);
+
+    await userEvent.click(nextTab);
+
+    expect(getPublicScheduleFor).toHaveBeenCalledWith(2026, 9);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Septiembre 2026" })).toBeInTheDocument());
+    // La tab de "mes actual" se sigue mostrando (con el mes real, agosto) y
+    // ahora es la que aparece sin presionar; septiembre queda presionada.
+    expect(screen.getByRole("button", { name: "Agosto 2026" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Septiembre 2026" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("no muestra tabs de mes actual/siguiente cuando no hay un mes siguiente ya publicado y adelantado", async () => {
+    getLatestPublicSchedule.mockResolvedValueOnce(samplePayload());
+    getScheduleHistory.mockResolvedValueOnce({ months: [{ year: 2026, month: 8 }] });
+    renderPublicSchedule();
+
+    await waitFor(() => expect(screen.getByText("Agosto 2026")).toBeInTheDocument());
+    expect(screen.queryByRole("group", { name: "Elegir mes" })).not.toBeInTheDocument();
+  });
+
   it("la vista de calendario mensual siempre muestra todos los turnos, incluso con un filtro de persona activo", async () => {
     getLatestPublicSchedule.mockResolvedValueOnce(samplePayload());
     renderPublicSchedule();
