@@ -89,6 +89,13 @@ jobs:
         with:
           name: frontend-dist
           path: client/dist
+          # Sin esto, upload-artifact excluye dotfiles por defecto: el
+          # deploy borraba silenciosamente el .htaccess del servidor en cada
+          # rsync --delete, tumbando el fallback SPA de react-router-dom y
+          # dando 404 al refrescar cualquier ruta de /admin/* (encontrado en
+          # producción el 2026-08-29 -- confirmado descargando el artifact
+          # real y viendo que faltaba .htaccess).
+          include-hidden-files: true
           retention-days: 1
 
   deploy:
