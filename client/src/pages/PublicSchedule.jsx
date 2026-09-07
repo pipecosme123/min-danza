@@ -342,7 +342,10 @@ export function PublicSchedule() {
       </main>
 
       <footer className="public-footer">
-        <div className="container">
+        <div className="container public-footer__links">
+          <Link to="/lider/login" className="public-footer__admin-link">
+            Acceso líderes
+          </Link>
           <Link to="/admin/login" className="public-footer__admin-link">
             Acceso administrador
           </Link>

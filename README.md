@@ -85,12 +85,20 @@ documentación:
     autenticación**, devuelven la organización del mes `FINALIZED` más reciente (equipos +
     horario, sin el balance de participaciones, que es solo herramienta de administración).
 - **Frontend**: routing completo (`/`, `/admin/login`, `/admin/personas`, `/admin/equipos`,
-  `/admin/eventos`, `/admin/uniformes`), login funcional contra el backend, sesión persistida
-  en `localStorage`, tema claro/oscuro real. Todas las pantallas administrativas son
-  funcionales de punta a punta contra el backend real (`PeopleManager`, `TeamGenerator`,
-  `EventsManager` con vista de lista y de calendario mensual, `UniformsManager`). La página
-  pública (`PublicSchedule.jsx`, en `/`) es real y funcional: muestra el mes finalizado más
-  reciente, con un filtro por persona.
+  `/admin/eventos`, `/admin/uniformes`, `/admin/asistencia`, `/admin/accesos`, y el portal de
+  líderes `/lider/login` + `/lider` + `/lider/reportes/:id`), login funcional contra el
+  backend, sesión persistida en `localStorage`, tema claro/oscuro real. Todas las pantallas
+  administrativas son funcionales de punta a punta contra el backend real (`PeopleManager`,
+  `TeamGenerator`, `EventsManager` con vista de lista y de calendario mensual,
+  `UniformsManager`, `AttendanceManager`, `LeaderAccountsManager`). La página pública
+  (`PublicSchedule.jsx`, en `/`) muestra el mes finalizado más reciente, con un filtro por
+  persona.
+- **Portal de líderes** (Fase 9): cada líder de equipo recibe una cuenta al finalizar el mes
+  y registra en `/lider/*` la asistencia de su equipo por servicio (asistencias,
+  inasistencias con/sin excusa, remplazos, cambios, apoyos, novedades), en borrador y luego
+  enviado, dentro de una ventana que abre 1 h antes del turno y cierra al final del 3.º día
+  posterior. El admin ve los reportes enviados en `/admin/asistencia`; se comparten por
+  WhatsApp en texto plano. Contrato: `docs/architecture/phase9-attendance-reports-contract.md`.
 
 En resumen: **no queda ningún endpoint ni pantalla en estado "placeholder"**. Lo que sigue
 pendiente es explícitamente de alcance (ver la siguiente sección), no un bug ni una fase
@@ -106,9 +114,9 @@ Confirmado contra `server/src/routes/` (ningún router responde `501`) y contra 
 | **Des-finalizar un mes** | No existe ninguna forma de volver un `MonthCycle` de `FINALIZED` a `DRAFT`. Si algo se publicó mal, hoy no hay manera de corregirlo salvo el margen de edición post-publicación de la Fase 4c (agregar/cancelar/eliminar/editar eventos, cambiar el uniforme de un turno, bloquear/reasignar un turno, editar la composición de un equipo, cancelar/eliminar el Servicio de jóvenes — todo solo si el mes es el actual o uno futuro; generar/regenerar horario y (re)sortear equipos siguen bloqueados sin excepción). Pendiente sin fase asignada todavía. |
 | **Historial de meses en la página pública** | La página pública muestra únicamente el mes `FINALIZED` más reciente; no hay selector ni listado de meses anteriores. Decisión confirmada con el usuario, no es un bug. |
 | **Formulario de auto-inscripción de personas** | Las personas solo se cargan por el admin (CRUD o import masivo). Fuera de alcance por ahora. |
-| **Login de usuarios finales** | No hay cuentas para líderes/colaboradores; solo existe la página pública sin login y el login único de administrador. Fuera de alcance por ahora. |
+| **Login de colaboradores (no líderes)** | Los **líderes de equipo** sí tienen login desde la Fase 9 (portal `/lider/*`, ver abajo). El resto de colaboradores no tiene cuenta; solo la página pública sin login. Fuera de alcance por ahora. |
 | **Múltiples administradores** | Un único `AdminUser`, sembrado por `prisma/seed.js`. Fuera de alcance por ahora. |
-| **Reporte de asistencia/excusas por parte de los líderes** | El modelo de datos está preparado para no bloquear esto a futuro (`Team`/`TeamMember`/`ServiceSlot` son entidades independientes), pero no hay ninguna funcionalidad construida todavía. |
+| **Reporte de asistencia público** | El registro de asistencia por líderes existe desde la Fase 9 (2026-09-06), pero el reporte **solo lo ve el administrador**; todavía no hay una vista pública. |
 
 El próximo paso planeado es la **Fase 7 (pulido)**: validaciones de borde adicionales,
 reintentos y estilos finales — sin un alcance cerrado todavía, ver el plan en

@@ -35,7 +35,11 @@ export async function login(username, password) {
     data: { lastLoginAt: new Date() },
   });
 
-  const token = jwt.sign({ sub: admin.id, username: admin.username }, env.JWT_SECRET, {
+  // `role: "admin"` (Fase 9): distingue este token del token del portal de
+  // líderes, firmado con el MISMO JWT_SECRET. `requireAuth` acepta también un
+  // token sin `role` (compat con los de 8 h ya emitidos antes de la Fase 9);
+  // `requireLeaderAuth` en cambio exige `role: "leader"` estricto.
+  const token = jwt.sign({ sub: admin.id, username: admin.username, role: "admin" }, env.JWT_SECRET, {
     expiresIn: TOKEN_TTL,
   });
 

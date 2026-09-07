@@ -34,6 +34,7 @@ import { MonthOccupancyCalendar } from '../components/domain/MonthOccupancyCalen
 import { BalanceSummary } from '../components/domain/BalanceSummary.jsx';
 import { EventGroupsSection } from '../components/domain/EventGroupsSection.jsx';
 import { MonthVersesSection } from '../components/domain/MonthVersesSection.jsx';
+import { NewLeaderAccountsModal } from '../components/domain/NewLeaderAccountsModal.jsx';
 import './EventsManager.css';
 
 const EMPTY_EVENT_FORM = { date: '', startTime: '', title: '', teamsNeeded: '1', uniformId: '' };
@@ -208,6 +209,9 @@ export function EventsManager() {
   // ---- Finalizar mes (publica el mes en la página pública; irreversible en esta fase) ----
   const [finalizeOpen, setFinalizeOpen] = useState(false);
   const [finalizeLoading, setFinalizeLoading] = useState(false);
+  // Fase 9: cuentas de líder recién provisionadas al finalizar. Se muestran
+  // UNA sola vez (con su contraseña temporal) en un modal aparte.
+  const [newLeaderAccounts, setNewLeaderAccounts] = useState(null);
 
   // Turnos sin uniforme (excluidos los cancelados, que ya no lo necesitan) --
   // misma condición que exige el servidor (TURNOS_SIN_UNIFORME, 2026-08-22).
@@ -236,9 +240,12 @@ export function EventsManager() {
     if (!selectedMonthId) return;
     setFinalizeLoading(true);
     try {
-      await finalizeMonth(selectedMonthId);
+      const result = await finalizeMonth(selectedMonthId);
       showSuccess('Se finalizó el mes: ya está visible en la página pública.');
       setFinalizeOpen(false);
+      if (Array.isArray(result?.newLeaderAccounts) && result.newLeaderAccounts.length > 0) {
+        setNewLeaderAccounts(result.newLeaderAccounts);
+      }
       await fetchMonths();
     } catch (err) {
       showError(describeFinalizeError(describeApiError(err)));
@@ -741,6 +748,12 @@ export function EventsManager() {
         confirmLabel="Sí, finalizar mes"
         variant="danger"
         loading={finalizeLoading}
+      />
+
+      {/* Fase 9: contraseñas temporales de las cuentas de líder recién creadas. */}
+      <NewLeaderAccountsModal
+        accounts={newLeaderAccounts}
+        onClose={() => setNewLeaderAccounts(null)}
       />
 
       {/* Eliminar mes: borra equipos, horario y asignaciones por completo. DRAFT

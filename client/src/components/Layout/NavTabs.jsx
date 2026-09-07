@@ -6,6 +6,8 @@ const ADMIN_SECTIONS = [
   { to: '/admin/equipos', label: 'Equipos' },
   { to: '/admin/eventos', label: 'Eventos' },
   { to: '/admin/uniformes', label: 'Uniformes' },
+  { to: '/admin/asistencia', label: 'Asistencia' },
+  { to: '/admin/accesos', label: 'Accesos' },
 ];
 
 /**

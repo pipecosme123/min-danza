@@ -86,6 +86,29 @@ enum Weekday {
   @@map("weekday")
 }
 
+/// DRAFT     = el líder todavía lo está armando (sólo él lo ve).
+/// SUBMITTED = el líder lo envió; recién ahí el admin ve su contenido.
+/// Ver docs/architecture/phase9-attendance-reports-contract.md §4.
+enum AttendanceReportStatus {
+  DRAFT
+  SUBMITTED
+
+  @@map("attendance_report_status")
+}
+
+/// Estado de un integrante del equipo en un servicio concreto.
+/// REMPLAZADO / CAMBIO exigen `coveredByPersonId` (CHECK a nivel de base).
+/// La diferencia entre ambos es sólo semántica (ver contrato §3).
+enum AttendanceEntryStatus {
+  ASISTIO
+  NO_ASISTIO_CON_EXCUSA
+  NO_ASISTIO_SIN_EXCUSA
+  REMPLAZADO
+  CAMBIO
+
+  @@map("attendance_entry_status")
+}
+
 // ------------------------------- ACCESO ------------------------------------
 
 /// Único administrador por ahora. Es una tabla (no una constante) para no
@@ -132,6 +155,16 @@ model Person {
   updatedAt     DateTime       @updatedAt @map("updated_at")
 
   teamMemberships TeamMember[]
+
+  /// Fase 9: cuenta de acceso al módulo de líderes (a lo sumo una por persona,
+  /// reutilizada entre meses). Ver phase9-attendance-reports-contract.md §2.1.
+  leaderAccount      LeaderAccount?
+  /// Entradas de asistencia donde esta persona es el integrante titular.
+  attendanceEntries  AttendanceEntry[]   @relation("AttendanceEntryPerson")
+  /// Entradas de asistencia donde esta persona cubrió (remplazo/cambio) a otra.
+  attendanceCovers   AttendanceEntry[]   @relation("AttendanceEntryCoveredBy")
+  /// Apoyos voluntarios registrados a nombre de esta persona.
+  attendanceSupports AttendanceSupport[] @relation("AttendanceSupportPerson")
 
   /// Consulta caliente: pool de sorteo = personas activas por categoría.
   @@index([active, category])
@@ -185,9 +218,10 @@ model Team {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  monthCycle      MonthCycle       @relation(fields: [monthCycleId], references: [id], onDelete: Cascade)
-  members         TeamMember[]
-  slotAssignments SlotAssignment[]
+  monthCycle       MonthCycle         @relation(fields: [monthCycleId], references: [id], onDelete: Cascade)
+  members          TeamMember[]
+  slotAssignments  SlotAssignment[]
+  attendanceReports AttendanceReport[]
 
   @@unique([monthCycleId, label])
   @@unique([monthCycleId, orderIndex])
@@ -310,10 +344,11 @@ model ServiceSlot {
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  monthCycle  MonthCycle       @relation(fields: [monthCycleId], references: [id], onDelete: Cascade)
-  uniform     Uniform?         @relation(fields: [uniformId], references: [id], onDelete: SetNull)
-  eventGroup  EventGroup?      @relation(fields: [eventGroupId], references: [id], onDelete: Cascade)
-  assignments SlotAssignment[]
+  monthCycle        MonthCycle         @relation(fields: [monthCycleId], references: [id], onDelete: Cascade)
+  uniform           Uniform?           @relation(fields: [uniformId], references: [id], onDelete: SetNull)
+  eventGroup        EventGroup?        @relation(fields: [eventGroupId], references: [id], onDelete: Cascade)
+  assignments       SlotAssignment[]
+  attendanceReports AttendanceReport[]
 
   /// Hace idempotente la generación de slots fijos del mes: re-ejecutarla no
   /// duplica. Incluye slotType para no bloquear un extraordinario que caiga a
@@ -411,4 +446,108 @@ model VersePassage {
 
   @@index([monthCycleId])
   @@map("verse_passage")
+}
+
+// --------------------- FASE 9 · ASISTENCIA DE LÍDERES ---------------------
+// Contrato: docs/architecture/phase9-attendance-reports-contract.md
+
+/// Cuenta de acceso al módulo de líderes. Ligada a un Person, reutilizable
+/// mes a mes. El alta es automática al finalizar un mes (ver
+/// leaderAccounts.service.js#ensureLeaderAccounts); el admin también puede
+/// crearlas/gestionarlas a mano. La contraseña temporal se devuelve UNA sola
+/// vez y nunca se persiste en claro.
+model LeaderAccount {
+  id                 String    @id @default(cuid())
+  personId           String    @unique @map("person_id")
+  username           String    @unique
+  passwordHash       String    @map("password_hash")
+  /// true tras el alta y tras un reset. Mientras sea true, la única acción
+  /// permitida es cambiar la contraseña.
+  mustChangePassword Boolean   @default(true) @map("must_change_password")
+  active             Boolean   @default(true)
+  lastLoginAt        DateTime? @map("last_login_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  person Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+
+  @@map("leader_account")
+}
+
+/// Un reporte de asistencia por (servicio, equipo). Se clava en
+/// (serviceSlotId, teamId) -- NO en SlotAssignment.id -- porque
+/// updateAssignment muta teamId en la misma fila al reasignar un turno a
+/// mano (ver contrato §2.2). FK compuestas al estilo de SlotAssignment: un
+/// equipo de un mes nunca puede ligarse a un slot de otro mes.
+model AttendanceReport {
+  id                String                 @id @default(cuid())
+  serviceSlotId     String                 @map("service_slot_id")
+  teamId            String                 @map("team_id")
+  monthCycleId      String                 @map("month_cycle_id")
+  status            AttendanceReportStatus @default(DRAFT)
+  /// Novedades / comentarios generales del servicio (campo libre del líder).
+  generalNotes      String?                @map("general_notes")
+  submittedAt       DateTime?              @map("submitted_at")
+  /// Última vez que se reabrió a borrador (líder dentro de la ventana, o
+  /// admin en cualquier momento).
+  reopenedAt        DateTime?              @map("reopened_at")
+  /// Auditoría mínima: id de la LeaderAccount que lo creó.
+  createdByLeaderId String?                @map("created_by_leader_id")
+  /// true si el admin editó el contenido después de enviado.
+  lastEditedByAdmin Boolean                @default(false) @map("last_edited_by_admin")
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+
+  serviceSlot ServiceSlot        @relation(fields: [serviceSlotId, monthCycleId], references: [id, monthCycleId], onDelete: Cascade)
+  team        Team               @relation(fields: [teamId, monthCycleId], references: [id, monthCycleId], onDelete: Cascade)
+  entries     AttendanceEntry[]
+  supports    AttendanceSupport[]
+
+  @@unique([serviceSlotId, teamId])
+  @@index([monthCycleId, status])
+  @@index([teamId])
+  @@map("attendance_report")
+}
+
+/// Estado de un integrante del equipo (snapshot del roster al crear el
+/// borrador; ver contrato §4.1-4.2). `status` nace null ("sin marcar");
+/// enviar el reporte exige que todos tengan status.
+model AttendanceEntry {
+  id                String                 @id @default(cuid())
+  reportId          String                 @map("report_id")
+  personId          String                 @map("person_id")
+  status            AttendanceEntryStatus?
+  /// Obligatorio SII status ∈ {REMPLAZADO, CAMBIO} (CHECK en la base).
+  /// Persona del padrón, distinta de personId. NO se agrega al equipo del
+  /// mes: es sólo de este servicio.
+  coveredByPersonId String?                @map("covered_by_person_id")
+  note              String?
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+
+  report    AttendanceReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  person    Person           @relation("AttendanceEntryPerson", fields: [personId], references: [id], onDelete: Restrict)
+  coveredBy Person?          @relation("AttendanceEntryCoveredBy", fields: [coveredByPersonId], references: [id], onDelete: Restrict)
+
+  @@unique([reportId, personId])
+  @@index([reportId])
+  @@map("attendance_entry")
+}
+
+/// Apoyo voluntario: persona que participó por decisión propia, sin estar
+/// ligada a ninguna ausencia.
+model AttendanceSupport {
+  id        String   @id @default(cuid())
+  reportId  String   @map("report_id")
+  personId  String   @map("person_id")
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  report AttendanceReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  person Person           @relation("AttendanceSupportPerson", fields: [personId], references: [id], onDelete: Restrict)
+
+  @@unique([reportId, personId])
+  @@index([reportId])
+  @@map("attendance_support")
 }

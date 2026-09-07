@@ -9,6 +9,7 @@ import { shuffle } from "../utils/shuffle.js";
 import { invalidateByPrefix } from "../lib/cache.js";
 import { formatDbDate } from "../utils/dates.js";
 import { assertEditableConsideringFinalization } from "../utils/monthLifecycle.js";
+import { ensureLeaderAccounts } from "./leaderAccounts.service.js";
 
 const MONTH_SELECT = {
   id: true,
@@ -207,7 +208,15 @@ export async function finalizeMonthCycle(id) {
   // escritura de base que deba ser atómica con lo anterior.
   invalidateByPrefix("schedule:");
 
-  return updated;
+  // Fase 9: provisiona la cuenta de acceso al módulo de líderes para cada
+  // líder (regular y de jóvenes) del mes recién publicado. Idempotente y
+  // fuera de la transacción a propósito (bcrypt es lento; y crear cuentas no
+  // necesita ser atómico con el cambio de status, igual que la invalidación
+  // de caché de arriba). `newLeaderAccounts` trae las contraseñas temporales
+  // recién generadas -- se muestran UNA sola vez en la UI del admin.
+  const { newLeaderAccounts } = await ensureLeaderAccounts(id);
+
+  return { ...updated, newLeaderAccounts };
 }
 
 // ---------------------------------------------------------------------------
@@ -621,7 +630,17 @@ export async function listTeamsForMonth(monthCycleId) {
 
 export async function updateTeam(teamId, members) {
   try {
-    return await updateTeamTransaction(teamId, members);
+    const { team, monthCycleId, monthStatus } = await updateTeamTransaction(teamId, members);
+    // Fase 9: si el mes ya está publicado y esta edición dejó un líder nuevo
+    // (p. ej. una promoción manual de ministro a líder), le provisionamos la
+    // cuenta de acceso al módulo de líderes. Idempotente; fuera de la
+    // transacción a propósito (bcrypt es lento y no debe retener una conexión
+    // de la base). En DRAFT no se crean cuentas todavía (nacen al finalizar).
+    if (monthStatus === "FINALIZED") {
+      const { newLeaderAccounts } = await ensureLeaderAccounts(monthCycleId);
+      return { team, newLeaderAccounts };
+    }
+    return { team };
   } catch (err) {
     // Carrera: dos PATCH concurrentes sobre el mismo equipo (doble clic,
     // dos pestañas) pueden pasar ambos las validaciones de arriba antes de
@@ -779,6 +798,6 @@ async function updateTeamTransaction(teamId, members) {
     // de módulos existente.
     invalidateByPrefix("schedule:");
 
-    return { team: serializeTeam(updated) };
+    return { team: serializeTeam(updated), monthCycleId, monthStatus: team.monthCycle.status };
   });
 }

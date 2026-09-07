@@ -54,6 +54,16 @@ afterAll(async () => {
   });
   await prisma.team.deleteMany({ where: { monthCycleId: { in: createdMonthCycleIds } } });
   await prisma.monthCycle.deleteMany({ where: { id: { in: createdMonthCycleIds } } });
+  // Fase 9: algún caso finaliza un mes y luego edita un equipo, lo que
+  // provisiona LeaderAccount (FK Restrict a person); borrarlas antes.
+  await prisma.leaderAccount.deleteMany({
+    where: {
+      OR: [
+        { personId: { in: createdPersonIds } },
+        { person: { fullName: { startsWith: NAME_PREFIX } } },
+      ],
+    },
+  });
   await prisma.person.deleteMany({ where: { id: { in: createdPersonIds } } });
   await prisma.person.deleteMany({ where: { fullName: { startsWith: NAME_PREFIX } } });
 

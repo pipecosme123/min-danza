@@ -7,10 +7,11 @@
 // vive acá.
 
 import { prisma } from "../lib/prisma.js";
-import { NotFoundError, ValidationError } from "../utils/errors.js";
+import { NotFoundError, ValidationError, ConflictError } from "../utils/errors.js";
 import { assertEditableConsideringFinalization } from "../utils/monthLifecycle.js";
 import { invalidateCached } from "../lib/cache.js";
 import { cacheKeyFor } from "./publicSchedule.service.js";
+import { hasAttendanceReport } from "./attendance.service.js";
 
 const ASSIGNMENT_SELECT = {
   id: true,
@@ -49,6 +50,17 @@ export async function updateAssignment(assignmentId, data) {
       throw new ValidationError(
         "El equipo del Servicio de jóvenes no se puede reasignar a mano: siempre es el equipo YOUTH del mes.",
         { code: "ASIGNACION_JOVENES_NO_EDITABLE" }
+      );
+    }
+
+    // Fase 9: si el equipo actual de este turno ya tiene un reporte de
+    // asistencia, reasignarlo cambiaría de equipo y dejaría el reporte
+    // colgando de un turno que ya no le corresponde. El admin debe reabrir o
+    // eliminar el reporte primero.
+    if (wantsTeamChange && (await hasAttendanceReport(assignment.serviceSlotId, assignment.teamId))) {
+      throw new ConflictError(
+        "Este turno ya tiene un reporte de asistencia para el equipo actual; no se puede reasignar.",
+        { code: "ASIGNACION_CON_REPORTE" }
       );
     }
 

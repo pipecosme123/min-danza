@@ -8,8 +8,14 @@
  * y no de detalles concretos de transporte.
  */
 
-/** Clave de localStorage donde AuthContext persiste el token JWT. */
+/** Clave de localStorage donde AuthContext persiste el token JWT del admin. */
 export const TOKEN_STORAGE_KEY = 'app_auth_token';
+/**
+ * Clave separada para el token del portal de líderes (Fase 9). Vive aparte
+ * del token de admin a propósito: los dos portales pueden estar abiertos en
+ * el mismo navegador sin pisarse, y cerrar sesión en uno no afecta al otro.
+ */
+export const LEADER_TOKEN_STORAGE_KEY = 'app_leader_token';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -22,25 +28,28 @@ export class ApiError extends Error {
   }
 }
 
-function getToken() {
+function getToken(audience) {
   try {
-    return localStorage.getItem(TOKEN_STORAGE_KEY);
+    const key = audience === 'leader' ? LEADER_TOKEN_STORAGE_KEY : TOKEN_STORAGE_KEY;
+    return localStorage.getItem(key);
   } catch {
     return null;
   }
 }
 
 /**
- * Notifica a AuthContext que el token dejó de ser válido (401) para que
- * pueda cerrar sesión de inmediato, sin que este módulo dependa de React.
+ * Notifica al contexto de auth correspondiente que el token dejó de ser
+ * válido (401) para que cierre sesión de inmediato, sin que este módulo
+ * dependa de React. El portal de líderes escucha `app:unauthorized:leader`
+ * para no desloguear al admin (y viceversa).
  */
-function notifyUnauthorized() {
-  window.dispatchEvent(new Event('app:unauthorized'));
+function notifyUnauthorized(audience) {
+  window.dispatchEvent(new Event(audience === 'leader' ? 'app:unauthorized:leader' : 'app:unauthorized'));
 }
 
-async function request(path, { method = 'GET', body, headers, signal } = {}) {
+async function request(path, { method = 'GET', body, headers, signal, auth = 'admin' } = {}) {
   const isFormData = body instanceof FormData;
-  const token = getToken();
+  const token = getToken(auth);
 
   let response;
   try {
@@ -66,7 +75,7 @@ async function request(path, { method = 'GET', body, headers, signal } = {}) {
     : null;
 
   if (!response.ok) {
-    if (response.status === 401) notifyUnauthorized();
+    if (response.status === 401) notifyUnauthorized(auth);
     throw new ApiError(
       payload?.error?.message ?? payload?.message ?? `Error ${response.status} al comunicarse con el servidor.`,
       {

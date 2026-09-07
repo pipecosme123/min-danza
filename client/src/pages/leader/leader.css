@@ -1,0 +1,185 @@
+/* Portal de líderes (Fase 9). Reutiliza el sistema de diseño (tokens.css). */
+
+.leader-services__group {
+  margin-bottom: var(--space-6);
+}
+
+.leader-services__month {
+  font-size: var(--font-size-lg);
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.leader-services__list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.leader-service-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.leader-service-card__main {
+  min-width: 12rem;
+  flex: 1 1 14rem;
+}
+
+.leader-service-card__title {
+  font-weight: var(--font-weight-medium);
+  margin: 0 0 var(--space-1);
+}
+
+.leader-service-card__when,
+.leader-service-card__team {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.leader-service-card__status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: flex-start;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.leader-service-card__action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+}
+
+.leader-service-card__hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+/* ---- Editor de reporte ---- */
+
+.leader-report__back,
+.attendance-panel__back {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  cursor: pointer;
+  padding: var(--space-2) 0;
+  font-size: var(--font-size-sm);
+}
+
+.leader-report__header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-4);
+}
+
+.leader-report__when,
+.leader-report__team {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+}
+
+.leader-report__badges {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.leader-report__deadline {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.leader-report__closed-notice {
+  background: var(--color-warning);
+  color: var(--color-warning-contrast);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+}
+
+.leader-report__footer-actions,
+.attendance-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+/* ---- Contraseña temporal (modal de finalizar mes / accesos) ---- */
+
+.temp-credentials-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.temp-credentials-table th,
+.temp-credentials-table td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.temp-credentials-table code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--color-bg-secondary);
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius-sm);
+}
+
+/* ---- Matriz de asistencia (admin) ---- */
+
+.attendance-cell__title {
+  display: block;
+  font-weight: var(--font-weight-medium);
+}
+
+.attendance-cell__sub {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.attendance-panel {
+  margin-top: var(--space-4);
+}
+
+.leader-accounts__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-end;
+  margin-bottom: var(--space-4);
+}
+
+.leader-accounts__toolbar .searchable-select {
+  flex: 1 1 18rem;
+}
+
+.leader-accounts__row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}

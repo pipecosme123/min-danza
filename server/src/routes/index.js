@@ -26,6 +26,9 @@ import assignmentsRoutes from "./assignments.routes.js";
 import slotsRoutes from "./slots.routes.js";
 import uniformsRoutes from "./uniforms.routes.js";
 import scheduleRoutes from "./schedule.routes.js";
+import leaderRoutes from "./leader.routes.js";
+import leaderAccountsRoutes from "./leaderAccounts.routes.js";
+import attendanceRoutes from "./attendance.routes.js";
 import { adminLimiter } from "../middleware/rateLimit.js";
 
 const router = Router();
@@ -41,5 +44,15 @@ router.use("/assignments", adminLimiter, assignmentsRoutes);
 router.use("/slots", adminLimiter, slotsRoutes);
 router.use("/uniforms", adminLimiter, uniformsRoutes);
 router.use("/schedule", scheduleRoutes);
+
+// Fase 9. `/leader` es el portal de líderes: no lleva `adminLimiter` ni
+// `requireAuth` acá -- trae sus propios `leaderLoginLimiter`/`leaderApiLimiter`
+// y `requireLeaderAuth` por ruta (login es público). `/leader-accounts` es
+// administrativo (adminLimiter en el mount, requireAuth dentro del router).
+// `attendanceRoutes` se monta en "/" (mezcla /months/:id/attendance y
+// /attendance/reports/:id) con auth+limiter por ruta, igual que teams/events.
+router.use("/leader", leaderRoutes);
+router.use("/leader-accounts", adminLimiter, leaderAccountsRoutes);
+router.use("/", attendanceRoutes);
 
 export default router;
