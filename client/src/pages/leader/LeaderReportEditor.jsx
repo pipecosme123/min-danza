@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   getLeaderReport,
@@ -12,7 +12,7 @@ import { Spinner } from '../../components/ui/Spinner.jsx';
 import { ErrorMessage } from '../../components/ui/ErrorMessage.jsx';
 import { Badge } from '../../components/ui/Badge.jsx';
 import { Button } from '../../components/ui/Button.jsx';
-import { ConfirmDialog } from '../../components/ui/ConfirmDialog.jsx';
+import { ReportSubmitSummary } from './ReportSubmitSummary.jsx';
 import { AttendanceReportForm } from '../../components/domain/AttendanceReportForm.jsx';
 import { useToast } from '../../hooks/useToast.js';
 import { describeApiError } from '../../utils/apiError.js';
@@ -20,6 +20,7 @@ import { shareReportByWhatsapp } from './whatsappShare.js';
 import {
   formatSlotWhen,
   formatDateTimeShort,
+  joinTeamLabels,
   WINDOW_LABEL,
   WINDOW_BADGE_VARIANT,
   REPORT_STATUS_LABEL,
@@ -36,8 +37,11 @@ export function LeaderReportEditor() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [confirmSubmit, setConfirmSubmit] = useState(false);
+  // Contenido congelado que muestra el resumen previo al envío; null = cerrado.
+  const [submitDraft, setSubmitDraft] = useState(null);
   const [busyAction, setBusyAction] = useState(null);
+  // Contenido actual del formulario (sin guardar), ver handleSubmit.
+  const draftRef = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -78,12 +82,32 @@ export function LeaderReportEditor() {
     }
   }
 
+  // "Enviar reporte": valida lo que está en pantalla y, si está completo,
+  // abre el resumen (ReportSubmitSummary) congelando ese contenido.
+  function openSubmitSummary() {
+    const draft = draftRef.current;
+    if (draft && draft.problems.length > 0) {
+      showError(draft.problems[0]);
+      return;
+    }
+    setSubmitDraft(draft);
+  }
+
   async function handleSubmit() {
-    setConfirmSubmit(false);
+    // Enviar = guardar lo que está en pantalla + enviar. Sin esto, el
+    // backend envía lo último guardado: si el líder nunca tocó "Guardar
+    // cambios", todos siguen sin marcar en la base (el "Asistió" por defecto
+    // vive sólo en el formulario) y el envío falla con REPORTE_INCOMPLETO.
+    const draft = submitDraft;
     setBusyAction('submit');
     try {
+      if (draft) {
+        const saved = await saveLeaderReport(reportId, draft.body);
+        setReport(saved);
+      }
       const updated = await submitLeaderReport(reportId);
       setReport(updated);
+      setSubmitDraft(null);
       showSuccess('Reporte enviado al administrador.');
     } catch (err) {
       const info = describeApiError(err);
@@ -128,7 +152,7 @@ export function LeaderReportEditor() {
     return <ErrorMessage message={describeApiError(loadError).message} onRetry={load} />;
   }
 
-  const { report: meta, slot, team, window, permissions } = report;
+  const { report: meta, slot, teams, shared, window, permissions } = report;
   const windowClosed = window.state === 'CERRADA';
 
   return (
@@ -141,12 +165,13 @@ export function LeaderReportEditor() {
         <div>
           <h1>{slot.label}</h1>
           <p className="leader-report__when">{formatSlotWhen(slot)}</p>
-          <p className="leader-report__team">{team.displayLabel}</p>
+          <p className="leader-report__team">{joinTeamLabels(teams)}</p>
         </div>
         <div className="leader-report__badges">
           <Badge variant={meta.status === 'SUBMITTED' ? 'success' : 'warning'}>
             {REPORT_STATUS_LABEL[meta.status]}
           </Badge>
+          {shared ? <Badge variant="neutral">Turno compartido</Badge> : null}
           <Badge variant={WINDOW_BADGE_VARIANT[window.state]}>{WINDOW_LABEL[window.state]}</Badge>
           {window.state === 'ABIERTA' ? (
             <span className="leader-report__deadline">
@@ -170,16 +195,20 @@ export function LeaderReportEditor() {
         readOnly={!permissions.canEdit}
         saving={saving}
         onSave={handleSave}
+        saveVariant="secondary"
+        onDraftChange={(draft) => {
+          draftRef.current = draft;
+        }}
       />
 
       <div className="leader-report__footer-actions">
         {permissions.canSubmit ? (
           <Button
-            onClick={() => setConfirmSubmit(true)}
+            onClick={openSubmitSummary}
             loading={busyAction === 'submit'}
             disabled={saving}
           >
-            Enviar al administrador
+            Enviar reporte
           </Button>
         ) : null}
         {permissions.canReopen ? (
@@ -194,14 +223,14 @@ export function LeaderReportEditor() {
         ) : null}
       </div>
 
-      <ConfirmDialog
-        open={confirmSubmit}
-        onClose={() => setConfirmSubmit(false)}
-        onConfirm={handleSubmit}
-        title="Enviar el reporte"
-        confirmLabel="Enviar"
+      <ReportSubmitSummary
+        open={submitDraft !== null}
+        draft={submitDraft}
+        entryNames={new Map(report.entries.map((e) => [e.personId, e.fullName]))}
+        people={people}
         loading={busyAction === 'submit'}
-        description="Al enviarlo, el administrador podrá verlo. Vas a poder volver a editarlo mientras la ventana siga abierta."
+        onConfirm={handleSubmit}
+        onClose={() => setSubmitDraft(null)}
       />
     </div>
   );

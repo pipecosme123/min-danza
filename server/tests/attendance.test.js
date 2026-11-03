@@ -597,6 +597,156 @@ describe("Fase 9 · vistas del admin", () => {
   });
 });
 
+describe("Fase 9 · reporte compartido entre equipos (turno multi-equipo)", () => {
+  // Pedido del usuario (2026-09-13): un turno con 2+ equipos asignados
+  // (acá, un evento extraordinario con teamsNeeded:2) comparte UN SOLO
+  // reporte entre los líderes de esos equipos -- cualquiera lo crea, lo
+  // completa (con el padrón de ambos equipos junto) y lo envía; no se
+  // implementa ningún bloqueo de edición concurrente entre ellos (a
+  // propósito, ver migración 20260913000000).
+  let ctx;
+  let slotId;
+  let teamAId;
+  let teamBId;
+  let accountA;
+  let accountB;
+
+  beforeAll(async () => {
+    ctx = await setupFinalizedMonth({ year: 2097, month: 9, teamCount: 3 });
+
+    const eventRes = await authed(request(app).post(`/api/months/${ctx.monthCycle.id}/events`)).send({
+      date: `${ctx.monthCycle.year}-${String(ctx.monthCycle.month).padStart(2, "0")}-10`,
+      startTime: "19:00",
+      title: "QA Vigilia Compartida",
+      teamsNeeded: 2,
+    });
+    expect(eventRes.status).toBe(201);
+    slotId = eventRes.body.slot.id;
+    [teamAId, teamBId] = eventRes.body.slot.teams.map((t) => t.id);
+    expect(teamAId).not.toBe(teamBId);
+    await rescheduleSlot(slotId, civilStr(0), "19:00");
+
+    const leaderOf = async (teamId) => {
+      const membership = await prisma.teamMember.findFirst({
+        where: { teamId, role: "LEADER" },
+        select: { personId: true },
+      });
+      return ctx.newLeaderAccounts.find((a) => a.personId === membership.personId);
+    };
+    accountA = await leaderOf(teamAId);
+    accountB = await leaderOf(teamBId);
+    expect(accountA).toBeTruthy();
+    expect(accountB).toBeTruthy();
+  });
+
+  it("el líder A crea el reporte y el padrón incluye a los integrantes de AMBOS equipos", async () => {
+    const tokenA = await activatedLeaderToken(accountA);
+    const created = await asLeader(
+      request(app).post(`/api/leader/services/${slotId}/${teamAId}/report`),
+      tokenA
+    );
+    expect(created.status).toBe(201);
+    expect(created.body.teams.map((t) => t.id).sort()).toEqual([teamAId, teamBId].sort());
+    expect(created.body.shared).toBe(true);
+
+    const [membersA, membersB] = await Promise.all([
+      prisma.teamMember.count({ where: { teamId: teamAId } }),
+      prisma.teamMember.count({ where: { teamId: teamBId } }),
+    ]);
+    expect(created.body.entries.length).toBe(membersA + membersB);
+  });
+
+  it("crear un segundo reporte para el mismo turno (desde el otro equipo) da 409", async () => {
+    const tokenB = await activatedLeaderToken(accountB);
+    const res = await asLeader(
+      request(app).post(`/api/leader/services/${slotId}/${teamBId}/report`),
+      tokenB
+    );
+    expect(res.status).toBe(409);
+    expect(res.body.error.details.code).toBe("REPORTE_YA_EXISTE");
+  });
+
+  it("GET /services le muestra a AMBOS líderes el mismo reporte ya creado", async () => {
+    const tokenA = await activatedLeaderToken(accountA);
+    const tokenB = await activatedLeaderToken(accountB);
+    const [svcA, svcB] = await Promise.all([
+      asLeader(request(app).get("/api/leader/services"), tokenA),
+      asLeader(request(app).get("/api/leader/services"), tokenB),
+    ]);
+    const rowA = svcA.body.services.find((s) => s.slotId === slotId);
+    const rowB = svcB.body.services.find((s) => s.slotId === slotId);
+    expect(rowA.report).toBeTruthy();
+    expect(rowB.report).toBeTruthy();
+    expect(rowA.report.id).toBe(rowB.report.id);
+    expect(rowA.shared).toBe(true);
+  });
+
+  it("el líder B (que no lo creó) puede abrir, editar y enviar el reporte del líder A", async () => {
+    const tokenA = await activatedLeaderToken(accountA);
+    const tokenB = await activatedLeaderToken(accountB);
+
+    const svc = await asLeader(request(app).get("/api/leader/services"), tokenA);
+    const reportId = svc.body.services.find((s) => s.slotId === slotId).report.id;
+
+    // El líder B, ajeno a la creación, puede leerlo.
+    const viewByB = await asLeader(request(app).get(`/api/leader/reports/${reportId}`), tokenB);
+    expect(viewByB.status).toBe(200);
+
+    const entries = viewByB.body.entries.map((e) => ({ personId: e.personId, status: "ASISTIO" }));
+    const save = await asLeader(request(app).patch(`/api/leader/reports/${reportId}`), tokenB).send({
+      entries,
+    });
+    expect(save.status).toBe(200);
+
+    const submit = await asLeader(request(app).post(`/api/leader/reports/${reportId}/submit`), tokenB);
+    expect(submit.status).toBe(200);
+    expect(submit.body.report.status).toBe("SUBMITTED");
+
+    // Un líder ajeno a AMBOS equipos del turno sigue sin poder tocarlo.
+    const outsider = ctx.newLeaderAccounts.find(
+      (a) => a.personId !== accountA.personId && a.personId !== accountB.personId
+    );
+    const tokenOutsider = await activatedLeaderToken(outsider);
+    const forbidden = await asLeader(request(app).get(`/api/leader/reports/${reportId}`), tokenOutsider);
+    expect(forbidden.status).toBe(403);
+
+    // El texto de WhatsApp menciona los dos equipos (combinados, sin importar
+    // el orden en que el sorteo los asignó) y a los dos líderes primero.
+    const wa = await asLeader(request(app).get(`/api/leader/reports/${reportId}/whatsapp-text`), tokenA);
+    expect(wa.status).toBe(200);
+    const [teamA, teamB] = await Promise.all([
+      prisma.team.findUnique({ where: { id: teamAId }, select: { label: true } }),
+      prisma.team.findUnique({ where: { id: teamBId }, select: { label: true } }),
+    ]);
+    const teamsLine = wa.body.text.split("\n")[2];
+    expect(teamsLine).toContain(teamA.label);
+    expect(teamsLine).toContain(teamB.label);
+    expect(teamsLine).toMatch(/ y /);
+  });
+
+  it("GET /months/:id/attendance colapsa el turno compartido en UNA sola fila con los dos equipos", async () => {
+    const res = await authed(request(app).get(`/api/months/${ctx.monthCycle.id}/attendance`));
+    expect(res.status).toBe(200);
+    const rows = res.body.items.filter((i) => i.slotId === slotId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].shared).toBe(true);
+    expect(rows[0].teams.map((t) => t.id).sort()).toEqual([teamAId, teamBId].sort());
+    expect(rows[0].status).toBe("ENVIADO");
+  });
+
+  it("no se puede reasignar a mano ninguno de los dos equipos mientras exista el reporte compartido", async () => {
+    const assignment = await prisma.slotAssignment.findFirst({
+      where: { serviceSlotId: slotId, teamId: teamAId },
+      select: { id: true },
+    });
+    const res = await authed(request(app).patch(`/api/assignments/${assignment.id}`)).send({
+      teamId: ctx.teams.find((t) => t.id !== teamAId && t.id !== teamBId && t.teamType === "REGULAR")?.id,
+    });
+    expect(res.status).toBe(409);
+    expect(res.body.error.details.code).toBe("ASIGNACION_CON_REPORTE");
+  });
+});
+
 describe("Fase 9 · guarda en reasignación de turno", () => {
   it("no se puede reasignar a mano un turno que ya tiene reporte para ese equipo", async () => {
     const ctx = await setupFinalizedMonth({ year: 2097, month: 8, teamCount: 3 });

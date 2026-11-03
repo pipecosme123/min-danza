@@ -474,14 +474,22 @@ model LeaderAccount {
   @@map("leader_account")
 }
 
-/// Un reporte de asistencia por (servicio, equipo). Se clava en
-/// (serviceSlotId, teamId) -- NO en SlotAssignment.id -- porque
+/// Un reporte de asistencia por SERVICIO (serviceSlotId), no por equipo --
+/// ajustado 2026-09-13: cuando un turno tiene 2+ equipos asignados (evento
+/// extraordinario, Vigilia Unida, Ayuno Congregacional, turno de Congreso),
+/// todos comparten un único reporte, completable por cualquiera de los
+/// líderes de esos equipos (siempre que compartan la misma hora, garantizado
+/// porque un ServiceSlot es una sola fecha+hora). `teamId` queda como el
+/// equipo bajo el que se creó (representativo, sólo para la FK); la fuente de
+/// verdad de "qué equipos cubre" es SlotAssignment por serviceSlotId (ver
+/// `getSlotTeams` en attendance.service.js), NO este campo. Se sigue
+/// clavando en serviceSlotId -- NO en SlotAssignment.id -- porque
 /// updateAssignment muta teamId en la misma fila al reasignar un turno a
 /// mano (ver contrato §2.2). FK compuestas al estilo de SlotAssignment: un
 /// equipo de un mes nunca puede ligarse a un slot de otro mes.
 model AttendanceReport {
   id                String                 @id @default(cuid())
-  serviceSlotId     String                 @map("service_slot_id")
+  serviceSlotId     String                 @unique @map("service_slot_id")
   teamId            String                 @map("team_id")
   monthCycleId      String                 @map("month_cycle_id")
   status            AttendanceReportStatus @default(DRAFT)
@@ -503,7 +511,6 @@ model AttendanceReport {
   entries     AttendanceEntry[]
   supports    AttendanceSupport[]
 
-  @@unique([serviceSlotId, teamId])
   @@index([monthCycleId, status])
   @@index([teamId])
   @@map("attendance_report")

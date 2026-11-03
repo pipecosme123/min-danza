@@ -35,9 +35,10 @@ const MONTH = { id: 'm1', year: 2026, month: 9, status: 'FINALIZED' };
 function item(overrides = {}) {
   return {
     slotId: 's1',
-    teamId: 't1',
+    teamIds: ['t1'],
     slot: { id: 's1', date: '2026-09-06', startTime: '08:00', slotType: 'FIXED', label: 'Domingo 08:00' },
-    team: { id: 't1', label: 'Equipo 1', orderIndex: 1, teamType: 'REGULAR', displayLabel: 'Equipo 1' },
+    teams: [{ id: 't1', label: 'Equipo 1', orderIndex: 1, teamType: 'REGULAR', displayLabel: 'Equipo 1' }],
+    shared: false,
     window: { opensAt: '2026-09-06T12:00:00Z', closesAt: '2026-09-09T04:59:59Z', state: 'CERRADA' },
     status: 'SIN_EMPEZAR',
     reportId: null,
@@ -59,7 +60,13 @@ describe('AttendanceManager', () => {
       month: MONTH,
       items: [
         item({ status: 'ENVIADO', reportId: 'r1' }),
-        item({ slotId: 's2', teamId: 't2', team: { ...item().team, id: 't2', displayLabel: 'Equipo 2' }, status: 'BORRADOR', reportId: 'r2' }),
+        item({
+          slotId: 's2',
+          teamIds: ['t2'],
+          teams: [{ ...item().teams[0], id: 't2', displayLabel: 'Equipo 2' }],
+          status: 'BORRADOR',
+          reportId: 'r2',
+        }),
       ],
     });
     renderPage();
@@ -80,7 +87,7 @@ describe('AttendanceManager', () => {
       report: { id: 'r1', status: 'SUBMITTED', generalNotes: 'ok', lastEditedByAdmin: false },
       month: MONTH,
       slot: item().slot,
-      team: item().team,
+      teams: item().teams,
       window: item().window,
       entries: [],
       supports: [],

@@ -1,8 +1,25 @@
 // Fase 9 · Reportes de asistencia por líderes.
 //
-// Un reporte por (serviceSlotId, teamId). El líder lo crea en borrador, lo
-// edita, lo envía y puede reabrirlo dentro de la ventana (attendanceWindow.js).
-// El admin ve el contenido sólo de los enviados y puede editarlos/reabrirlos.
+// Un reporte por serviceSlotId (ajustado 2026-09-13, ver comentario del
+// modelo en schema.prisma). Cuando un turno tiene un solo equipo asignado
+// (el caso más común: turnos fijos regulares) esto se comporta exactamente
+// como antes -- un reporte, un equipo, un líder. Cuando tiene 2+ equipos
+// asignados (evento extraordinario, "Vigilia Unida - Comuna 21", "Ayuno
+// Congregacional", turno de Congreso) el reporte cubre a TODOS los
+// integrantes de TODOS esos equipos, y cualquiera de sus líderes puede
+// crearlo/editarlo/enviarlo -- nunca se compite por equipo, se comparte por
+// turno. `getSlotTeams`/`assertLeadsSlotTeam` son el punto único donde vive
+// esa regla; el resto de las funciones ya no razona en términos de "el
+// equipo del reporte" sino de "los equipos de este turno".
+//
+// A propósito NO hay ningún bloqueo de edición concurrente entre los líderes
+// que comparten un reporte (pedido explícito del usuario, ver migración
+// 20260913000000): si dos guardan al mismo tiempo, gana el último -- mismo
+// comportamiento que ya existía para dos guardados seguidos del mismo líder.
+//
+// El líder lo crea en borrador, lo edita, lo envía y puede reabrirlo dentro
+// de la ventana (attendanceWindow.js). El admin ve el contenido sólo de los
+// enviados y puede editarlos/reabrirlos.
 //
 // Los routers (routes/leader.routes.js, routes/attendance.routes.js) sólo
 // parsean/validan/serializan; toda regla vive acá.
@@ -64,6 +81,15 @@ function compareEsName(a, b) {
   return a.localeCompare(b, "es", { sensitivity: "base" });
 }
 
+/** ["Equipo 1"] -> "Equipo 1"; ["Equipo 1","Equipo 3"] -> "Equipo 1 y Equipo
+ * 3"; 3+ -> "Equipo 1, Equipo 3 y Equipo 5". Encabezado de un turno
+ * compartido entre varios equipos (WhatsApp y UI). */
+function joinSpanishList(items) {
+  if (items.length <= 1) return items.join("");
+  if (items.length === 2) return `${items[0]} y ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")} y ${items[items.length - 1]}`;
+}
+
 async function assertLeadsTeamId(client, personId, teamId) {
   const membership = await client.teamMember.findFirst({
     where: { teamId, personId, role: "LEADER" },
@@ -71,6 +97,36 @@ async function assertLeadsTeamId(client, personId, teamId) {
   });
   if (!membership) {
     throw new HttpError(403, "No lideras este equipo.", { code: "NO_ES_LIDER_DEL_EQUIPO" });
+  }
+}
+
+/** Todos los equipos asignados a un turno (1 en el caso común, 2+ cuando es
+ * un evento/Vigilia/Ayuno/turno de Congreso con varios equipos elegidos),
+ * ordenados por orderIndex. Fuente de verdad de "a quién cubre el reporte de
+ * este turno" -- NUNCA `AttendanceReport.teamId`, que sólo es el equipo bajo
+ * el que se creó. */
+async function getSlotTeams(serviceSlotId) {
+  return prisma.team.findMany({
+    where: { slotAssignments: { some: { serviceSlotId } } },
+    select: { id: true, label: true, orderIndex: true, teamType: true },
+    orderBy: { orderIndex: "asc" },
+  });
+}
+
+/** Verifica que `personId` lidere AL MENOS UNO de los equipos asignados a
+ * `serviceSlotId`. Reemplaza a `assertLeadsTeamId` en todo lo que opera
+ * sobre un reporte ya existente o por crear: un reporte es del turno, no de
+ * un equipo puntual, así que cualquiera de los líderes involucrados puede
+ * tocarlo. */
+async function assertLeadsSlotTeam(personId, serviceSlotId) {
+  const membership = await prisma.teamMember.findFirst({
+    where: { personId, role: "LEADER", team: { slotAssignments: { some: { serviceSlotId } } } },
+    select: { id: true },
+  });
+  if (!membership) {
+    throw new HttpError(403, "No lideras ninguno de los equipos de este turno.", {
+      code: "NO_ES_LIDER_DEL_EQUIPO",
+    });
   }
 }
 
@@ -85,7 +141,9 @@ function loadReportFull(reportId) {
         },
       },
       supports: { include: { person: { select: { id: true, fullName: true } } } },
-      team: { select: { id: true, label: true, orderIndex: true, teamType: true } },
+      // NO se incluye `team`: el equipo bajo el que se creó ya no es la
+      // fuente de verdad de a quién pertenece el reporte (ver `getSlotTeams`
+      // / comentario de cabecera); se dejó de usar acá a propósito.
       serviceSlot: {
         select: {
           id: true,
@@ -103,13 +161,21 @@ function loadReportFull(reportId) {
   });
 }
 
-/** Agrega entries para integrantes nuevos del equipo (status null). Devuelve
- * cuántas agregó. Ver contrato §4.2 — sólo se llama con el reporte en DRAFT. */
-async function reconcileRoster(report) {
-  const members = await prisma.teamMember.findMany({
-    where: { teamId: report.teamId },
+/** Todas las personas de los equipos asignados a `serviceSlotId` (unión, sin
+ * repetidos): el padrón real de un reporte, sea de 1 o de varios equipos. */
+async function slotMembers(serviceSlotId) {
+  const slotTeams = await getSlotTeams(serviceSlotId);
+  return prisma.teamMember.findMany({
+    where: { teamId: { in: slotTeams.map((t) => t.id) } },
     select: { personId: true },
   });
+}
+
+/** Agrega entries para integrantes nuevos de los equipos del turno (status
+ * null). Devuelve cuántas agregó. Ver contrato §4.2 — sólo se llama con el
+ * reporte en DRAFT. */
+async function reconcileRoster(report) {
+  const members = await slotMembers(report.serviceSlotId);
   const haveEntry = new Set(report.entries.map((e) => e.personId));
   const toAdd = members.filter((m) => !haveEntry.has(m.personId));
   if (toAdd.length === 0) return 0;
@@ -127,12 +193,15 @@ async function serializeReport(report, { reconcile }) {
     if (added > 0) full = await loadReportFull(full.id);
   }
 
+  const slotTeams = await getSlotTeams(full.serviceSlotId);
   const members = await prisma.teamMember.findMany({
-    where: { teamId: full.teamId },
+    where: { teamId: { in: slotTeams.map((t) => t.id) } },
     select: { personId: true, role: true },
   });
   const roleByPerson = new Map(members.map((m) => [m.personId, m.role]));
-  const leaderPersonId = members.find((m) => m.role === "LEADER")?.personId ?? null;
+  // Turno compartido entre 2+ equipos -> 2+ líderes; todos van primero (entre
+  // ellos, alfabético), no sólo "el" líder de un único equipo.
+  const leaderPersonIds = new Set(members.filter((m) => m.role === "LEADER").map((m) => m.personId));
 
   const entries = full.entries
     .map((e) => ({
@@ -147,8 +216,9 @@ async function serializeReport(report, { reconcile }) {
       note: e.note ?? null,
     }))
     .sort((a, b) => {
-      if (a.personId === leaderPersonId) return -1;
-      if (b.personId === leaderPersonId) return 1;
+      const aLeader = leaderPersonIds.has(a.personId);
+      const bLeader = leaderPersonIds.has(b.personId);
+      if (aLeader !== bLeader) return aLeader ? -1 : 1;
       if (a.personYaNoEnEquipo !== b.personYaNoEnEquipo) return a.personYaNoEnEquipo ? 1 : -1;
       return compareEsName(a.fullName, b.fullName);
     });
@@ -176,13 +246,18 @@ async function serializeReport(report, { reconcile }) {
       status: full.serviceSlot.monthCycle.status,
     },
     slot: serializeSlot(full.serviceSlot),
-    team: {
-      id: full.team.id,
-      label: full.team.label,
-      orderIndex: full.team.orderIndex,
-      teamType: full.team.teamType,
-      displayLabel: teamDisplayLabel(full.team),
-    },
+    // `teams`: 1 elemento en el caso común (un equipo por turno), 2+ cuando
+    // el turno es compartido (evento/Vigilia/Ayuno/Congreso con varios
+    // equipos) -- ver comentario de cabecera. `shared` es sólo un atajo para
+    // que el front no tenga que mirar `teams.length` en cada lado.
+    teams: slotTeams.map((t) => ({
+      id: t.id,
+      label: t.label,
+      orderIndex: t.orderIndex,
+      teamType: t.teamType,
+      displayLabel: teamDisplayLabel(t),
+    })),
+    shared: slotTeams.length > 1,
     window: serializeWindow(window),
     entries,
     supports,
@@ -206,10 +281,7 @@ async function applyReportContent(report, body, { isAdmin = false } = {}) {
   const wantsSupports = body.supports !== undefined;
   const wantsNotes = body.generalNotes !== undefined;
 
-  const members = await prisma.teamMember.findMany({
-    where: { teamId: report.teamId },
-    select: { personId: true },
-  });
+  const members = await slotMembers(report.serviceSlotId);
   const memberSet = new Set(members.map((m) => m.personId));
   const existingEntrySet = new Set(report.entries.map((e) => e.personId));
 
@@ -397,13 +469,33 @@ export async function listLeaderServices(personId) {
   });
 
   const slotIds = [...new Set(assignments.map((a) => a.serviceSlot.id))];
-  const reports = slotIds.length
-    ? await prisma.attendanceReport.findMany({
-        where: { serviceSlotId: { in: slotIds }, teamId: { in: teamIds } },
-        select: { id: true, serviceSlotId: true, teamId: true, status: true },
-      })
-    : [];
-  const reportByKey = new Map(reports.map((r) => [`${r.serviceSlotId}|${r.teamId}`, r]));
+  // Reportes por SLOT, no por (slot, mi equipo): si el turno es compartido,
+  // puede que otro de sus líderes ya lo haya creado bajo el suyo.
+  const [reports, slotTeamRows] = await Promise.all([
+    slotIds.length
+      ? prisma.attendanceReport.findMany({
+          where: { serviceSlotId: { in: slotIds } },
+          select: { id: true, serviceSlotId: true, status: true },
+        })
+      : [],
+    slotIds.length
+      ? prisma.slotAssignment.findMany({
+          where: { serviceSlotId: { in: slotIds } },
+          select: {
+            serviceSlotId: true,
+            team: { select: { id: true, label: true, orderIndex: true, teamType: true } },
+          },
+        })
+      : [],
+  ]);
+  const reportBySlot = new Map(reports.map((r) => [r.serviceSlotId, r]));
+  const teamsBySlot = new Map();
+  for (const row of slotTeamRows) {
+    const list = teamsBySlot.get(row.serviceSlotId) ?? [];
+    list.push(row.team);
+    teamsBySlot.set(row.serviceSlotId, list);
+  }
+  for (const list of teamsBySlot.values()) list.sort((a, b) => a.orderIndex - b.orderIndex);
 
   const now = new Date();
   const services = [];
@@ -414,7 +506,8 @@ export async function listLeaderServices(personId) {
     if (window.state === "CERRADA" && now.getTime() - window.closesAt.getTime() > RECENT_CLOSED_MS) continue;
 
     const team = teamById.get(a.teamId);
-    const report = reportByKey.get(`${slot.id}|${a.teamId}`) ?? null;
+    const report = reportBySlot.get(slot.id) ?? null;
+    const slotTeams = teamsBySlot.get(slot.id) ?? [team];
     services.push({
       slotId: slot.id,
       teamId: a.teamId,
@@ -426,6 +519,16 @@ export async function listLeaderServices(personId) {
         teamType: team.teamType,
         displayLabel: teamDisplayLabel(team),
       },
+      // Todos los equipos de este turno (1 en el caso común, 2+ si es
+      // compartido); `shared` evita que el front tenga que mirar el largo.
+      teams: slotTeams.map((t) => ({
+        id: t.id,
+        label: t.label,
+        orderIndex: t.orderIndex,
+        teamType: t.teamType,
+        displayLabel: teamDisplayLabel(t),
+      })),
+      shared: slotTeams.length > 1,
       month: { id: team.monthCycle.id, year: team.monthCycle.year, month: team.monthCycle.month },
       window: serializeWindow(window),
       report: report ? { id: report.id, status: report.status } : null,
@@ -493,15 +596,22 @@ export async function createReportDraft(leader, slotId, teamId) {
   }
   assertWindowOpenForWrite(slot);
 
+  // Único por turno (no por equipo): si otro líder de un equipo compañero de
+  // este mismo turno ya lo creó, éste es "ese" reporte -- no hay uno por
+  // equipo. No hay ningún lock entre el chequeo y el create de abajo (a
+  // propósito, ver comentario de cabecera): una carrera entre dos líderes
+  // creándolo al mismo tiempo puede dar dos 201, la segunda vez pisando la
+  // primera vía el índice único -- mismo tipo de condición de carrera ya
+  // documentada para otras acciones de esta fase, no es nueva de esta ronda.
   const existing = await prisma.attendanceReport.findUnique({
-    where: { serviceSlotId_teamId: { serviceSlotId: slotId, teamId } },
+    where: { serviceSlotId: slotId },
     select: { id: true },
   });
   if (existing) {
     throw new ConflictError("Ya existe un reporte para este turno.", { code: "REPORTE_YA_EXISTE" });
   }
 
-  const members = await prisma.teamMember.findMany({ where: { teamId }, select: { personId: true } });
+  const members = await slotMembers(slotId);
   const created = await prisma.attendanceReport.create({
     data: {
       serviceSlotId: slotId,
@@ -520,7 +630,7 @@ export async function createReportDraft(leader, slotId, teamId) {
 export async function getLeaderReport(leader, reportId) {
   const report = await loadReportFull(reportId);
   if (!report) throw new NotFoundError("Reporte no encontrado.", { code: "REPORTE_NO_ENCONTRADO" });
-  await assertLeadsTeamId(prisma, leader.personId, report.teamId);
+  await assertLeadsSlotTeam(leader.personId, report.serviceSlotId);
   return serializeReport(report, { reconcile: true });
 }
 
@@ -528,7 +638,7 @@ export async function getLeaderReport(leader, reportId) {
 export async function saveReportDraft(leader, reportId, body) {
   const report = await loadReportFull(reportId);
   if (!report) throw new NotFoundError("Reporte no encontrado.", { code: "REPORTE_NO_ENCONTRADO" });
-  await assertLeadsTeamId(prisma, leader.personId, report.teamId);
+  await assertLeadsSlotTeam(leader.personId, report.serviceSlotId);
   if (report.status !== "DRAFT") {
     throw new ConflictError("El reporte no está en borrador.", { code: "REPORTE_NO_EN_BORRADOR" });
   }
@@ -542,7 +652,7 @@ export async function saveReportDraft(leader, reportId, body) {
 export async function submitReport(leader, reportId) {
   let report = await loadReportFull(reportId);
   if (!report) throw new NotFoundError("Reporte no encontrado.", { code: "REPORTE_NO_ENCONTRADO" });
-  await assertLeadsTeamId(prisma, leader.personId, report.teamId);
+  await assertLeadsSlotTeam(leader.personId, report.serviceSlotId);
   if (report.status !== "DRAFT") {
     throw new ConflictError("El reporte ya fue enviado.", { code: "REPORTE_NO_EN_BORRADOR" });
   }
@@ -551,10 +661,7 @@ export async function submitReport(leader, reportId) {
   await reconcileRoster(report);
   report = await loadReportFull(reportId);
 
-  const members = await prisma.teamMember.findMany({
-    where: { teamId: report.teamId },
-    select: { personId: true },
-  });
+  const members = await slotMembers(report.serviceSlotId);
   const memberSet = new Set(members.map((m) => m.personId));
   const pending = report.entries
     .filter((e) => memberSet.has(e.personId) && e.status == null)
@@ -577,7 +684,7 @@ export async function submitReport(leader, reportId) {
 export async function reopenReportAsLeader(leader, reportId) {
   const report = await loadReportFull(reportId);
   if (!report) throw new NotFoundError("Reporte no encontrado.", { code: "REPORTE_NO_ENCONTRADO" });
-  await assertLeadsTeamId(prisma, leader.personId, report.teamId);
+  await assertLeadsSlotTeam(leader.personId, report.serviceSlotId);
   if (report.status !== "SUBMITTED") {
     throw new ConflictError("El reporte no está enviado.", { code: "REPORTE_NO_ENVIADO" });
   }
@@ -600,11 +707,12 @@ export async function reopenReportAsLeader(leader, reportId) {
 // ---------------------------------------------------------------------------
 
 async function renderWhatsappText(report) {
+  const slotTeams = await getSlotTeams(report.serviceSlotId);
   const members = await prisma.teamMember.findMany({
-    where: { teamId: report.teamId },
+    where: { teamId: { in: slotTeams.map((t) => t.id) } },
     select: { personId: true, role: true },
   });
-  const leaderPersonId = members.find((m) => m.role === "LEADER")?.personId ?? null;
+  const leaderPersonIds = new Set(members.filter((m) => m.role === "LEADER").map((m) => m.personId));
 
   const participated = [];
   const absent = [];
@@ -623,8 +731,9 @@ async function renderWhatsappText(report) {
   }
 
   participated.sort((a, b) => {
-    if (a.personId === leaderPersonId) return -1;
-    if (b.personId === leaderPersonId) return 1;
+    const aLeader = leaderPersonIds.has(a.personId);
+    const bLeader = leaderPersonIds.has(b.personId);
+    if (aLeader !== bLeader) return aLeader ? -1 : 1;
     return compareEsName(a.name, b.name);
   });
   absent.sort(compareEsName);
@@ -634,7 +743,7 @@ async function renderWhatsappText(report) {
   const lines = [];
   lines.push(`Asistencia — ${slotLabel(slot)}`);
   lines.push(`${longDate(slot.date)} · ${slot.startTime}`);
-  lines.push(teamDisplayLabel(report.team));
+  lines.push(joinSpanishList(slotTeams.map(teamDisplayLabel)));
   lines.push("");
 
   participated.forEach((p, i) => {
@@ -660,7 +769,7 @@ async function renderWhatsappText(report) {
 export async function buildWhatsappText({ leader = null, reportId }) {
   const report = await loadReportFull(reportId);
   if (!report) throw new NotFoundError("Reporte no encontrado.", { code: "REPORTE_NO_ENCONTRADO" });
-  if (leader) await assertLeadsTeamId(prisma, leader.personId, report.teamId);
+  if (leader) await assertLeadsSlotTeam(leader.personId, report.serviceSlotId);
   if (report.status !== "SUBMITTED") {
     throw new ConflictError("El reporte todavía no fue enviado.", { code: "REPORTE_NO_ENVIADO" });
   }
@@ -692,20 +801,30 @@ export async function listMonthAttendance(monthCycleId) {
 
   const reports = await prisma.attendanceReport.findMany({
     where: { monthCycleId },
-    select: { id: true, serviceSlotId: true, teamId: true, status: true, submittedAt: true, lastEditedByAdmin: true },
+    select: { id: true, serviceSlotId: true, status: true, submittedAt: true, lastEditedByAdmin: true },
   });
-  const reportByKey = new Map(reports.map((r) => [`${r.serviceSlotId}|${r.teamId}`, r]));
+  const reportBySlot = new Map(reports.map((r) => [r.serviceSlotId, r]));
+
+  // Un turno = una fila, sin importar cuántos equipos tenga asignados: un
+  // reporte compartido no tiene sentido mostrado 2-3 veces con acciones
+  // repetidas apuntando al mismo reportId.
+  const bySlot = new Map();
+  for (const a of assignments) {
+    const entry = bySlot.get(a.serviceSlot.id) ?? { slot: a.serviceSlot, teams: [] };
+    entry.teams.push(a.team);
+    bySlot.set(a.serviceSlot.id, entry);
+  }
 
   const now = new Date();
-  const items = assignments.map((a) => {
-    const slot = a.serviceSlot;
-    const r = reportByKey.get(`${slot.id}|${a.teamId}`) ?? null;
+  const items = [...bySlot.values()].map(({ slot, teams }) => {
+    teams.sort((x, y) => x.orderIndex - y.orderIndex);
+    const r = reportBySlot.get(slot.id) ?? null;
     const window = computeAttendanceWindow(slot.date, slot.startTime, now);
     let status = "SIN_EMPEZAR";
     if (r) status = r.status === "SUBMITTED" ? "ENVIADO" : "BORRADOR";
     return {
       slotId: slot.id,
-      teamId: a.teamId,
+      teamIds: teams.map((t) => t.id),
       slot: {
         id: slot.id,
         date: formatDbDate(slot.date),
@@ -714,13 +833,14 @@ export async function listMonthAttendance(monthCycleId) {
         title: slot.title ?? null,
         label: slotLabel(slot),
       },
-      team: {
-        id: a.team.id,
-        label: a.team.label,
-        orderIndex: a.team.orderIndex,
-        teamType: a.team.teamType,
-        displayLabel: teamDisplayLabel(a.team),
-      },
+      teams: teams.map((t) => ({
+        id: t.id,
+        label: t.label,
+        orderIndex: t.orderIndex,
+        teamType: t.teamType,
+        displayLabel: teamDisplayLabel(t),
+      })),
+      shared: teams.length > 1,
       window: serializeWindow(window),
       status,
       reportId: r ? r.id : null,
@@ -732,7 +852,7 @@ export async function listMonthAttendance(monthCycleId) {
   items.sort((x, y) => {
     if (x.slot.date !== y.slot.date) return x.slot.date < y.slot.date ? -1 : 1;
     if (x.slot.startTime !== y.slot.startTime) return x.slot.startTime < y.slot.startTime ? -1 : 1;
-    return x.team.orderIndex - y.team.orderIndex;
+    return x.teams[0].orderIndex - y.teams[0].orderIndex;
   });
 
   return { month, items };
@@ -779,11 +899,13 @@ export async function adminReopenReport(reportId) {
   return { reportId: updated.id, status: updated.status };
 }
 
-/** Usado por assignments.service.js para bloquear la reasignación de un turno
- * que ya tiene un reporte de asistencia para ese equipo. */
-export async function hasAttendanceReport(serviceSlotId, teamId) {
+/** Usado por assignments.service.js para bloquear la reasignación de
+ * cualquier equipo de un turno que ya tiene reporte de asistencia (el
+ * reporte es del turno, no de un equipo puntual -- ver comentario de
+ * cabecera). */
+export async function hasAttendanceReport(serviceSlotId) {
   const r = await prisma.attendanceReport.findUnique({
-    where: { serviceSlotId_teamId: { serviceSlotId, teamId } },
+    where: { serviceSlotId },
     select: { id: true },
   });
   return Boolean(r);

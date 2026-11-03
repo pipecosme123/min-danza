@@ -15,7 +15,7 @@ import { AttendanceReportForm } from './AttendanceReportForm.jsx';
 import { useToast } from '../../hooks/useToast.js';
 import { describeApiError } from '../../utils/apiError.js';
 import { shareReportByWhatsapp } from '../../pages/leader/whatsappShare.js';
-import { formatSlotWhen } from '../../pages/leader/leaderFormat.js';
+import { formatSlotWhen, joinTeamLabels } from '../../pages/leader/leaderFormat.js';
 
 /**
  * Panel del admin para un reporte de asistencia ENVIADO: ver, editar y
@@ -101,7 +101,7 @@ export function AdminAttendanceReportPanel({ reportId, onBack, onChanged }) {
   if (loading) return <Spinner label="Cargando el reporte..." />;
   if (error) return <ErrorMessage message={describeApiError(error).message} onRetry={load} />;
 
-  const { slot, team, report: meta } = report;
+  const { slot, teams, shared, report: meta } = report;
 
   return (
     <div className="attendance-panel">
@@ -113,10 +113,11 @@ export function AdminAttendanceReportPanel({ reportId, onBack, onChanged }) {
         <div>
           <h2>{slot.label}</h2>
           <p className="leader-report__when">{formatSlotWhen(slot)}</p>
-          <p className="leader-report__team">{team.displayLabel}</p>
+          <p className="leader-report__team">{joinTeamLabels(teams)}</p>
         </div>
         <div className="leader-report__badges">
           <Badge variant="success">Enviado</Badge>
+          {shared ? <Badge variant="neutral">Turno compartido</Badge> : null}
           {meta.lastEditedByAdmin ? <Badge variant="neutral">Editado por admin</Badge> : null}
         </div>
       </header>

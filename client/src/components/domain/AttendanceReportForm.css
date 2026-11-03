@@ -66,6 +66,28 @@
   flex: 0 0 auto;
 }
 
+.attendance-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  align-items: center;
+  flex: 1 1 100%;
+}
+
+.attendance-radio-group--sub {
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--color-border);
+}
+
+.attendance-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  min-height: var(--tap-target-min);
+  cursor: pointer;
+}
+
 .roster-row__cover-picker,
 .support-row__picker {
   flex: 1 1 14rem;
@@ -115,6 +137,11 @@
 .attendance-form__notes-readonly {
   white-space: pre-wrap;
   color: var(--color-text-secondary);
+}
+
+.attendance-form__notes-input {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .attendance-form__actions {

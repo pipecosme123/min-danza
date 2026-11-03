@@ -49,6 +49,13 @@
   font-size: var(--font-size-sm);
 }
 
+.leader-service-card__shared {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-style: italic;
+}
+
 .leader-service-card__status {
   display: flex;
   flex-direction: column;
@@ -82,6 +89,14 @@
   font-size: var(--font-size-sm);
 }
 
+/* --color-primary es el mismo azul en los dos temas a propósito (ver
+   tokens.css), pero contra el fondo oscuro queda con muy poco contraste.
+   Mismo ajuste puntual que ya usa global.css para los <a> en tema oscuro. */
+[data-theme='dark'] .leader-report__back,
+[data-theme='dark'] .attendance-panel__back {
+  color: #93c5fd;
+}
+
 .leader-report__header {
   display: flex;
   flex-wrap: wrap;
@@ -97,14 +112,20 @@
   color: var(--color-text-secondary);
 }
 
+/* Badges en una sola fila; el texto "Cierra el…" (no es un badge) baja a su
+ * propia línea ocupando todo el ancho. flex-wrap sólo como red en pantallas
+ * muy angostas, para no provocar scroll horizontal. */
 .leader-report__badges {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
   gap: var(--space-2);
 }
 
 .leader-report__deadline {
+  flex-basis: 100%;
+  text-align: right;
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
@@ -182,4 +203,48 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
+}
+
+/* --- Resumen previo al envío (ReportSubmitSummary) --- */
+.submit-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.submit-summary__title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+}
+
+.submit-summary__count {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-regular);
+}
+
+.submit-summary__list {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+.submit-summary__detail,
+.submit-summary__empty,
+.submit-summary__hint {
+  color: var(--color-text-secondary);
+}
+
+.submit-summary__empty,
+.submit-summary__notes {
+  margin: 0;
+}
+
+.submit-summary__notes {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.submit-summary__hint {
+  margin: 0;
+  font-size: var(--font-size-sm);
 }

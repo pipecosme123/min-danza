@@ -1,9 +1,11 @@
 # Fase 9 — Reportes de asistencia por líderes de equipo
 
-> Estado: **implementado** (2026-09-06). Backend + frontend + pruebas de punta
-> a punta, ambas suites en verde. Este documento fija las decisiones acordadas
-> con el usuario y sirve de referencia de la API real. Las desviaciones
-> respecto del plan original están en §12 al final.
+> Estado: **implementado** (2026-09-06, ampliado 2026-09-13). Backend +
+> frontend + pruebas de punta a punta, ambas suites en verde. Este documento
+> fija las decisiones acordadas con el usuario y sirve de referencia de la
+> API real. Las desviaciones respecto del plan original están en §12; la
+> ampliación de reporte compartido entre equipos y el pulido de UI del
+> 2026-09-13 están en §13, al final.
 
 ---
 
@@ -609,3 +611,98 @@ inversas en `Person`, `ServiceSlot`, `Team`).
    reasignación) + `tests/attendanceWindow.test.js` (10). Frontend:
    `LeaderLogin`, `LeaderChangePassword`, `LeaderServices`, `LeaderReportEditor`,
    `AttendanceManager`.
+
+## 13. Ampliación 2026-09-13: reporte compartido entre equipos + pulido de UI
+
+Dos pedidos acotados del usuario, ya con la Fase 9 una semana en producción.
+Ver CLAUDE.md ("Registro de asistencia (líderes)" y la ronda 2026-09-13) para
+el resumen orientado a negocio; acá el detalle técnico que no encaja ahí.
+
+### 13.1 Reporte compartido entre equipos
+
+**Pedido**: "para el evento A hay asignados los equipos 5, 3 y 1, cualquiera
+de los 3 líderes puede llenar el reporte por los 3 equipos". Pregunta de
+diseño resuelta con el usuario: ¿un reporte combinado único, o reportes
+separados con acceso compartido? Eligió el combinado, "siempre y cuando estén
+asignados a la misma hora" — condición que ya está garantizada por diseño,
+porque un `ServiceSlot` es una sola fecha+hora: los "equipos de un evento" son
+exactamente los que tienen un `SlotAssignment` sobre ese mismo
+`serviceSlotId`.
+
+**Modelo**: `AttendanceReport` pasa de ser único por `(serviceSlotId, teamId)`
+a único por `serviceSlotId` solo (migración `20260913000000_shared_multi_team_attendance_reports`). `teamId` se conserva como columna (no
+nullable, por la FK compuesta con `monthCycleId`) pero deja de ser la fuente
+de verdad de "a quién pertenece el reporte" — pasa a ser sólo "el equipo bajo
+el que se creó", sin significado funcional. La fuente de verdad real es
+`SlotAssignment` filtrado por `serviceSlotId` (función `getSlotTeams` en
+`attendance.service.js`): 1 fila en el caso común, 2+ cuando el turno es
+compartido. La migración fusiona automáticamente cualquier reporte duplicado
+preexistente para el mismo turno (no se encontró ninguno en los datos reales
+al escribir esto — Fase 9 llevaba una semana en producción y el primer turno
+multi-equipo compartido real todavía no había tenido dos líderes reportando
+por separado).
+
+**Autorización**: `assertLeadsSlotTeam(personId, serviceSlotId)` reemplaza a
+`assertLeadsTeamId(personId, report.teamId)` en todo lo que opera sobre un
+reporte ya existente — comprueba que la persona lidere AL MENOS UNO de los
+equipos del turno, vía una única consulta relacional
+(`teamMember.findFirst({ where: { personId, role: "LEADER", team: { slotAssignments: { some: { serviceSlotId } } } } })`). `createReportDraft` sigue
+verificando que el `teamId` específico pasado en la URL sea uno que la
+persona lidere (sin cambios, ya era así), pero el padrón que arma es la unión
+de miembros de TODOS los equipos del turno, no sólo de ese uno.
+
+**Serialización**: `serializeReport`/`listLeaderServices`/`listMonthAttendance`
+ganan `teams: [...]` (ordenado por `orderIndex`) y `shared: boolean`; pierden
+el `team` singular en la respuesta del reporte (`GET .../reports/:id`,
+`POST .../report`). `listLeaderServices` sigue devolviendo también `team`
+(singular, el equipo propio del líder en esa fila) porque ahí sí tiene
+sentido — es "tu equipo en este turno", no "el equipo del reporte". El texto
+de WhatsApp junta las etiquetas de los equipos ("Equipo 1 y Equipo 3",
+"Equipo 1, Equipo 3 y Equipo 5") y ordena a todos los líderes involucrados
+primero (antes: un único `leaderPersonId`, ahora un `Set<personId>`).
+
+**Sin bloqueo de edición concurrente, a propósito**: el pedido decía
+explícitamente "considera más no implementa" el bloqueo de que sólo un líder
+edite a la vez. Dos líderes guardando al mismo tiempo hoy es last-write-wins
+(mismo comportamiento que ya existía para dos guardados seguidos del mismo
+líder) — no hay ningún lock optimista ni pesimista. Tampoco hay lock entre el
+chequeo de "ya existe" y el `create` de `createReportDraft`: una carrera
+genuina entre dos líderes creándolo en el mismo instante podría, en teoría,
+dar dos 201 antes de que el índice único de la base rechace el segundo
+insert — no se agregó ninguna transacción/lock para cerrar esa ventana,
+mismo criterio que otras condiciones de carrera ya documentadas en §12.4 y en
+la ronda 2026-08-25 de CLAUDE.md. Queda anotado como mejora futura posible,
+no como bug abierto.
+
+**`assignments.service.js`**: `hasAttendanceReport` pierde el parámetro
+`teamId` (ahora sólo `serviceSlotId`) — reasignar CUALQUIERA de los equipos
+de un turno que ya tiene reporte se rechaza (`409 ASIGNACION_CON_REPORTE`),
+no sólo si el reporte estaba bajo ese `teamId` puntual.
+
+**Pruebas nuevas**: `describe("Fase 9 · reporte compartido entre equipos (turno multi-equipo)")` en `attendance.test.js` (6 casos, usa un evento
+extraordinario con `teamsNeeded: 2` para armar el turno multi-equipo de
+prueba): creación por el líder A con padrón unido, 409 al intentar crear un
+segundo desde el equipo B, `GET /services` le muestra a ambos líderes el
+mismo `reportId`, el líder B (que no lo creó) puede leerlo/editarlo/enviarlo
+y un tercer líder ajeno a ambos equipos sigue recibiendo 403, el texto de
+WhatsApp menciona los dos equipos, la matriz de admin colapsa el turno en una
+sola fila, y la reasignación de cualquiera de los dos equipos se rechaza.
+
+### 13.2 Pulido de UI (sin impacto en el contrato de API salvo lo ya descrito)
+
+- Formulario del reporte (`AttendanceReportForm.jsx`): radio buttons en vez
+  de `<select>` (`Asistió` default / `No asistió` / `Remplazo` / `Cambio`,
+  con `Con excusa`/`Sin excusa` como sub-opción de `No asistió`); sólo
+  `Con excusa` conserva un campo de texto (antes también lo tenía
+  `Sin excusa`, como nota libre); los apoyos perdieron su campo de nota.
+- Textarea de "Novedades y comentarios": `width: 100%` explícito (no estaba
+  dentro de un `.field` flex que lo estirara).
+- Jerarquía de botones: "Guardar cambios" pasa a `variant="secondary"` en el
+  portal de líderes (prop nueva `saveVariant` en `AttendanceReportForm`,
+  default `"primary"` — el panel de admin no cambia); "Enviar al
+  administrador" se renombra a "Enviar reporte".
+- Contraste en tema oscuro: "Volver a mis servicios"/"Volver a la lista"
+  (`.leader-report__back`/`.attendance-panel__back`) pasan a `#93c5fd` bajo
+  `[data-theme='dark']`, mismo ajuste que ya tenían los `<a>` globales
+  (`--color-primary` da ~2.4:1 de contraste contra `--color-surface` oscuro,
+  bajo el mínimo WCAG AA de 4.5:1).

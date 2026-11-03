@@ -13,6 +13,7 @@ import { describeApiError } from '../utils/apiError.js';
 import { formatMonthYear } from '../utils/dates.js';
 import {
   formatSlotWhen,
+  joinTeamLabels,
   ADMIN_STATUS_LABEL,
   ADMIN_STATUS_VARIANT,
   WINDOW_LABEL,
@@ -56,19 +57,21 @@ export function AttendanceManager() {
         </p>
       </header>
 
-      <Field
-        as="select"
-        label="Mes"
-        value={selectedMonthId}
-        onChange={(e) => setSelectedMonthId(e.target.value)}
-      >
-        {months.map((m) => (
-          <option key={m.id} value={m.id}>
-            {formatMonthYear(m.year, m.month)}
-            {m.status === 'FINALIZED' ? ' · Finalizado' : ' · Borrador'}
-          </option>
-        ))}
-      </Field>
+      {!openReportId ? (
+        <Field
+          as="select"
+          label="Mes"
+          value={selectedMonthId}
+          onChange={(e) => setSelectedMonthId(e.target.value)}
+        >
+          {months.map((m) => (
+            <option key={m.id} value={m.id}>
+              {formatMonthYear(m.year, m.month)}
+              {m.status === 'FINALIZED' ? ' · Finalizado' : ' · Borrador'}
+            </option>
+          ))}
+        </Field>
+      ) : null}
 
       {openReportId ? (
         <AdminAttendanceReportPanel
@@ -114,12 +117,15 @@ function AttendanceMatrix({ items, onOpen }) {
         </thead>
         <tbody>
           {items.map((item) => (
-            <tr key={`${item.slotId}|${item.teamId}`}>
+            <tr key={item.slotId}>
               <td>
                 <span className="attendance-cell__title">{item.slot.label}</span>
                 <span className="attendance-cell__sub">{formatSlotWhen(item.slot)}</span>
               </td>
-              <td>{item.team.displayLabel}</td>
+              <td>
+                {joinTeamLabels(item.teams)}
+                {item.shared ? <span className="attendance-cell__sub"> (turno compartido)</span> : null}
+              </td>
               <td>
                 <Badge variant={WINDOW_BADGE_VARIANT[item.window.state]}>
                   {WINDOW_LABEL[item.window.state]}

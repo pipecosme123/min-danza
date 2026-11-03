@@ -13,6 +13,7 @@ import { formatMonthYear } from '../../utils/dates.js';
 import {
   formatSlotWhen,
   formatDateTimeShort,
+  joinTeamLabels,
   WINDOW_LABEL,
   WINDOW_BADGE_VARIANT,
   REPORT_STATUS_LABEL,
@@ -107,6 +108,13 @@ export function LeaderServices() {
                       <p className="leader-service-card__title">{svc.slot.label}</p>
                       <p className="leader-service-card__when">{formatSlotWhen(svc.slot)}</p>
                       <p className="leader-service-card__team">{svc.team.displayLabel}</p>
+                      {svc.shared ? (
+                        <p className="leader-service-card__shared">
+                          Turno compartido con{' '}
+                          {joinTeamLabels(svc.teams.filter((t) => t.id !== svc.team.id))} — cualquiera de
+                          los líderes puede completar el reporte.
+                        </p>
+                      ) : null}
                     </div>
 
                     <div className="leader-service-card__status">

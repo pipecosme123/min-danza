@@ -53,13 +53,14 @@ export async function updateAssignment(assignmentId, data) {
       );
     }
 
-    // Fase 9: si el equipo actual de este turno ya tiene un reporte de
-    // asistencia, reasignarlo cambiaría de equipo y dejaría el reporte
-    // colgando de un turno que ya no le corresponde. El admin debe reabrir o
-    // eliminar el reporte primero.
-    if (wantsTeamChange && (await hasAttendanceReport(assignment.serviceSlotId, assignment.teamId))) {
+    // Fase 9 (ampliado 2026-09-13): el reporte de asistencia es del TURNO,
+    // no de un equipo puntual (un turno con 2+ equipos comparte un único
+    // reporte entre sus líderes) -- reasignar cualquiera de los equipos de
+    // un turno que ya tiene reporte dejaría su padrón corrupto (le sobraría
+    // o faltaría gente). El admin debe reabrir o eliminar el reporte primero.
+    if (wantsTeamChange && (await hasAttendanceReport(assignment.serviceSlotId))) {
       throw new ConflictError(
-        "Este turno ya tiene un reporte de asistencia para el equipo actual; no se puede reasignar.",
+        "Este turno ya tiene un reporte de asistencia; no se puede reasignar.",
         { code: "ASIGNACION_CON_REPORTE" }
       );
     }

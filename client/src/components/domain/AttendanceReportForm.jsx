@@ -1,11 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { SearchableSelect } from '../ui/SearchableSelect.jsx';
 import { Badge } from '../ui/Badge.jsx';
 import { Button } from '../ui/Button.jsx';
 import {
-  ENTRY_STATUS_OPTIONS,
   ENTRY_STATUS_LABEL,
   COVERED_STATUSES,
+  NOTE_VISIBLE_STATUSES,
+  PRIMARY_STATUS_OPTIONS,
+  EXCUSE_OPTIONS,
+  primaryStatusOf,
 } from '../../pages/leader/leaderFormat.js';
 import './AttendanceReportForm.css';
 
@@ -22,21 +25,40 @@ let supportKeySeq = 0;
  *   readOnly?: boolean,
  *   saving?: boolean,
  *   onSave: (body: object) => Promise<void>,
+ *   saveVariant?: 'primary'|'secondary', // el portal de líderes lo pasa en
+ *     'secondary': "Guardar cambios" es un paso intermedio frente a "Enviar
+ *     reporte", que es la acción importante y debe quedar como primary.
+ *   onDraftChange?: (draft: { body: object, problems: string[] }) => void,
+ *     // avisa el contenido actual en pantalla (sin guardar) cada vez que
+ *     // cambia. El portal de líderes lo usa para que "Enviar reporte" guarde
+ *     // primero lo que se ve -- incluido el "Asistió" por defecto, que hasta
+ *     // entonces sólo existe acá y en la base sigue sin marcar.
  * }} props
  */
-export function AttendanceReportForm({ report, people, readOnly = false, saving = false, onSave }) {
+export function AttendanceReportForm({
+  report,
+  people,
+  readOnly = false,
+  saving = false,
+  onSave,
+  saveVariant = 'primary',
+  onDraftChange,
+}) {
   const teamMemberIds = useMemo(
     () => new Set(report.entries.filter((e) => !e.personYaNoEnEquipo).map((e) => e.personId)),
     [report.entries],
   );
 
+  // Sin marcar (null) arranca en "Asistió": la mayoría del equipo asiste, así
+  // el líder solo toca las excepciones. '' queda libre como estado interno
+  // para "eligió No asistió pero todavía no dice si con o sin excusa".
   const [entries, setEntries] = useState(() =>
     report.entries.map((e) => ({
       personId: e.personId,
       fullName: e.fullName,
       role: e.role,
       personYaNoEnEquipo: e.personYaNoEnEquipo,
-      status: e.status ?? '',
+      status: e.status || 'ASISTIO',
       coveredByPersonId: e.coveredByPersonId ?? '',
       note: e.note ?? '',
     })),
@@ -62,12 +84,27 @@ export function AttendanceReportForm({ report, people, readOnly = false, saving 
       prev.map((e) => {
         if (e.personId !== personId) return e;
         const next = { ...e, ...patch };
-        if (patch.status !== undefined && !COVERED_STATUSES.has(patch.status)) {
-          next.coveredByPersonId = '';
+        if (patch.status !== undefined) {
+          if (!COVERED_STATUSES.has(patch.status)) next.coveredByPersonId = '';
+          if (!NOTE_VISIBLE_STATUSES.has(patch.status)) next.note = '';
         }
         return next;
       }),
     );
+  }
+
+  // Radio principal: Asistió / No asistió / Remplazo / Cambio.
+  function setPrimaryStatus(personId, primary) {
+    if (primary === 'NO_ASISTIO') {
+      updateEntry(personId, { status: '' }); // pendiente: falta elegir con/sin excusa
+    } else {
+      updateEntry(personId, { status: primary });
+    }
+  }
+
+  // Radio secundario, sólo visible cuando el primario es "No asistió".
+  function setExcuseStatus(personId, excuseStatus) {
+    updateEntry(personId, { status: excuseStatus });
   }
 
   function removeEntry(personId) {
@@ -104,6 +141,9 @@ export function AttendanceReportForm({ report, people, readOnly = false, saving 
   // Validación local ligera para no mandar un guardado que el backend rechazará.
   const localProblems = [];
   for (const e of entries) {
+    if (e.status === '') {
+      localProblems.push(`Elegí si ${e.fullName} tiene excusa o no.`);
+    }
     if (COVERED_STATUSES.has(e.status) && !e.coveredByPersonId) {
       localProblems.push(`Indicá quién cubrió a ${e.fullName}.`);
     }
@@ -115,6 +155,17 @@ export function AttendanceReportForm({ report, people, readOnly = false, saving 
     if (localProblems.length > 0) return;
     await onSave(buildBody());
   }
+
+  // Ref para no re-disparar el efecto si el padre pasa un callback nuevo en
+  // cada render; sólo importa que cambie el contenido.
+  const onDraftChangeRef = useRef(onDraftChange);
+  onDraftChangeRef.current = onDraftChange;
+  const problemsKey = localProblems.join('\n');
+  useEffect(() => {
+    onDraftChangeRef.current?.({ body: buildBody(), problems: problemsKey ? problemsKey.split('\n') : [] });
+    // buildBody lee exactamente estos tres estados.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, supports, generalNotes, problemsKey]);
 
   const showActions = !readOnly;
 
@@ -143,21 +194,52 @@ export function AttendanceReportForm({ report, people, readOnly = false, saving 
                 </div>
               ) : (
                 <div className="roster-row__controls">
-                  <label className="roster-row__field">
-                    <span className="visually-hidden">Estado de {e.fullName}</span>
-                    <select
-                      className="field__control"
-                      value={e.status}
-                      onChange={(ev) => updateEntry(e.personId, { status: ev.target.value })}
-                    >
-                      <option value="">Sin marcar</option>
-                      {ENTRY_STATUS_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  {(() => {
+                    const primary = primaryStatusOf(e.status);
+                    return (
+                      <>
+                        <div
+                          className="attendance-radio-group"
+                          role="radiogroup"
+                          aria-label={`Estado de ${e.fullName}`}
+                        >
+                          {PRIMARY_STATUS_OPTIONS.map((o) => (
+                            <label key={o.value} className="attendance-radio">
+                              <input
+                                type="radio"
+                                name={`status-${e.personId}`}
+                                value={o.value}
+                                checked={primary === o.value}
+                                onChange={() => setPrimaryStatus(e.personId, o.value)}
+                              />
+                              {o.label}
+                            </label>
+                          ))}
+                        </div>
+
+                        {primary === 'NO_ASISTIO' ? (
+                          <div
+                            className="attendance-radio-group attendance-radio-group--sub"
+                            role="radiogroup"
+                            aria-label={`¿${e.fullName} tiene excusa?`}
+                          >
+                            {EXCUSE_OPTIONS.map((o) => (
+                              <label key={o.value} className="attendance-radio">
+                                <input
+                                  type="radio"
+                                  name={`excuse-${e.personId}`}
+                                  value={o.value}
+                                  checked={e.status === o.value}
+                                  onChange={() => setExcuseStatus(e.personId, o.value)}
+                                />
+                                {o.label}
+                              </label>
+                            ))}
+                          </div>
+                        ) : null}
+                      </>
+                    );
+                  })()}
 
                   {COVERED_STATUSES.has(e.status) ? (
                     <div className="roster-row__cover-picker">
@@ -172,14 +254,17 @@ export function AttendanceReportForm({ report, people, readOnly = false, saving 
                     </div>
                   ) : null}
 
-                  <input
-                    type="text"
-                    className="field__control roster-row__note"
-                    placeholder="Nota (opcional)"
-                    maxLength={500}
-                    value={e.note}
-                    onChange={(ev) => updateEntry(e.personId, { note: ev.target.value })}
-                  />
+                  {NOTE_VISIBLE_STATUSES.has(e.status) ? (
+                    <input
+                      type="text"
+                      className="field__control roster-row__note"
+                      placeholder="Escribí la excusa"
+                      aria-label={`Excusa de ${e.fullName}`}
+                      maxLength={500}
+                      value={e.note}
+                      onChange={(ev) => updateEntry(e.personId, { note: ev.target.value })}
+                    />
+                  ) : null}
 
                   {e.personYaNoEnEquipo ? (
                     <button
@@ -227,23 +312,13 @@ export function AttendanceReportForm({ report, people, readOnly = false, saving 
               {readOnly ? (
                 s.note ? <span className="roster-row__note-text">“{s.note}”</span> : null
               ) : (
-                <>
-                  <input
-                    type="text"
-                    className="field__control roster-row__note"
-                    placeholder="Nota (opcional)"
-                    maxLength={500}
-                    value={s.note}
-                    onChange={(ev) => updateSupport(s._key, { note: ev.target.value })}
-                  />
-                  <button
-                    type="button"
-                    className="roster-row__remove"
-                    onClick={() => removeSupport(s._key)}
-                  >
-                    Quitar
-                  </button>
-                </>
+                <button
+                  type="button"
+                  className="roster-row__remove"
+                  onClick={() => removeSupport(s._key)}
+                >
+                  Quitar
+                </button>
               )}
             </li>
           ))}
@@ -263,7 +338,7 @@ export function AttendanceReportForm({ report, people, readOnly = false, saving 
           </p>
         ) : (
           <textarea
-            className="field__control"
+            className="field__control attendance-form__notes-input"
             rows={4}
             maxLength={4000}
             placeholder="Anotá cualquier novedad del servicio (opcional)."
@@ -283,6 +358,7 @@ export function AttendanceReportForm({ report, people, readOnly = false, saving 
             </ul>
           ) : null}
           <Button
+            variant={saveVariant}
             onClick={handleSave}
             loading={saving}
             disabled={localProblems.length > 0}
