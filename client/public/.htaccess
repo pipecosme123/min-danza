@@ -16,6 +16,12 @@
   RewriteRule . /index.html [L]
 </IfModule>
 
+# --- Tipos MIME que Apache puede no conocer (manifest de la app móvil) ---
+<IfModule mod_mime.c>
+  AddType application/manifest+json .webmanifest
+  AddType image/x-icon .ico
+</IfModule>
+
 # --- Caché: assets con hash, inmutables; index.html nunca ---
 <IfModule mod_headers.c>
   <FilesMatch "\.(js|css|woff2?|png|svg|jpg|jpeg|webp)$">

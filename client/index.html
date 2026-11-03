@@ -2,7 +2,19 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Identidad: pestaña del navegador (íconos transparentes) y pantalla de
+         inicio en móviles (ICONO APP.jpg, con fondo). Fuentes originales en
+         src/assets/ICONOS. El ?v= evita el caché "immutable" de .htaccess al
+         cambiar un ícono: subir el número si se reemplaza alguno. -->
+    <link rel="icon" href="/favicon.ico?v=1" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png?v=1" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png?v=1" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png?v=1" />
+    <link rel="manifest" href="/manifest.webmanifest?v=1" />
+    <meta name="apple-mobile-web-app-title" content="Mindanza" />
+    <meta name="application-name" content="Mindanza" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
