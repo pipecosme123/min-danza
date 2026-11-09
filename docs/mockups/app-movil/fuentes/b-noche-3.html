@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Mockup B — Noche de adoración (administración)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="b-noche.css" data-diseno="b-noche">
+<style>
+/* Tokens propios de administración; el tema claro los redefine abajo. */
+:root { --outline: #4a3d58; --sub: #d8cbe4; --err: #ffb3b8; --err-c: #4a1d24; --info: #b0c6ff; --info-c: #24304d; }
+
+.navbar--adm .nav { font-size: 11px; }
+.navbar--adm .nav i { width: 56px; }
+.top--adm { padding-bottom: 10px; }
+.top__acts { display: flex; gap: 6px; }
+.ib { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 18px; color: var(--sub); }
+.msearch { margin: 0 16px 12px; background: var(--s2); border-radius: 999px; padding: 13px 18px; color: var(--muted); font-size: 14.5px; display: flex; gap: 12px; align-items: center; }
+.monthchip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--outline); font-size: 13px; font-weight: 600; color: var(--sub); margin-top: 6px; }
+.monthchip .b { padding: 2px 8px; font-size: 11px; }
+
+/* 9 · Personas */
+.plist { margin: 0 16px; background: var(--s1); border-radius: 28px; padding: 4px 0; }
+.pi { display: flex; align-items: center; gap: 13px; padding: 10px 16px; }
+.pi .avatar { width: 40px; height: 40px; font-size: 13px; flex: none; }
+.pi__m { flex: 1; min-width: 0; }
+.pi__n { font-size: 15px; font-weight: 500; }
+.pi__s { font-size: 12.5px; color: var(--muted); margin-top: 2px; display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+.lab { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+.lab--jov { background: var(--info-c); color: var(--info); }
+.lab--may { background: #4a3a14; color: var(--warn); }
+.lab--off { background: var(--s3); color: var(--muted); }
+.pi--off { opacity: .55; }
+.trail { color: var(--muted); font-size: 18px; }
+.efab { position: absolute; right: 16px; bottom: 112px; z-index: 5; background: var(--pri-c); color: var(--pri); border-radius: 18px; padding: 17px 20px; font-weight: 600; font-size: 15px; display: flex; gap: 10px; align-items: center; box-shadow: 0 10px 24px -6px rgba(0,0,0,.6); }
+
+/* 10 · Equipos */
+.tline { display: flex; align-items: center; gap: 13px; padding: 10px 18px; }
+.tline .avatar { width: 38px; height: 38px; font-size: 13px; }
+.tline span { font-size: 15px; }
+.tline .r { margin-left: auto; display: flex; gap: 6px; }
+.tline em { font-style: normal; font-size: 12px; color: var(--muted); }
+.actrow { display: flex; gap: 10px; margin-top: 2px; }
+.btn-o { flex: 1; text-align: center; border: 1px solid #6b5a7c; color: var(--pri); padding: 12px; border-radius: 999px; font-weight: 600; font-size: 14px; }
+.btn-t { flex: 1; text-align: center; background: var(--pri-c); color: var(--pri); padding: 12px; border-radius: 999px; font-weight: 600; font-size: 14px; }
+.note { display: flex; gap: 10px; background: var(--s1); border-radius: 18px; padding: 12px 14px; font-size: 12.5px; color: var(--sub); line-height: 1.4; }
+
+/* 11 · Eventos */
+.balance { background: var(--s1); border-radius: 24px; padding: 14px 16px; }
+.balance__h { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 600; color: var(--pri); letter-spacing: .04em; }
+.balance__h em { font-style: normal; color: var(--ok); letter-spacing: 0; }
+.bars { display: flex; gap: 8px; margin-top: 10px; align-items: flex-end; }
+.bars div { flex: 1; text-align: center; font-size: 11px; color: var(--muted); }
+.bars i { display: block; border-radius: 8px 8px 4px 4px; background: var(--pri-c); margin-bottom: 4px; }
+.bars .lo i { background: var(--acc); }
+.bars b { display: block; font-size: 13px; color: var(--ink); }
+.erow { background: var(--s1); border-radius: 20px; padding: 12px 14px; }
+.erow__top { display: flex; align-items: center; gap: 10px; }
+.erow__time { font-size: 15px; font-weight: 700; width: 64px; flex: none; }
+.erow__t { flex: 1; font-weight: 600; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.erow__bot { display: flex; gap: 8px; margin: 8px 0 0 74px; }
+.dd { flex: 1; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--outline); padding: 4px 2px 6px; font-size: 12.5px; color: var(--sub); white-space: nowrap; overflow: hidden; }
+.dd::after { content: "▾"; margin-left: auto; color: var(--muted); }
+.dd--warn { color: var(--warn); border-color: var(--warn); }
+.erow--x .erow__t, .erow--x .erow__time { text-decoration: line-through; color: var(--muted); }
+.lab--x { background: var(--s3); color: var(--muted); }
+.lab--g { background: var(--pri-c); color: var(--pri); }
+.lab--e { background: var(--acc-c); color: var(--acc); }
+.banner { position: absolute; left: 0; right: 0; bottom: 96px; z-index: 4; background: var(--s3); padding: 12px 16px; display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--sub); }
+.banner b { color: var(--ink); display: block; }
+.banner .dis { margin-left: auto; }
+.efab--sm { bottom: 172px; padding: 15px 18px; }
+
+/* 12 · Uniformes */
+.urow { display: flex; align-items: center; gap: 14px; padding: 10px 18px; }
+.urow .sw { width: 40px; height: 40px; border-radius: 12px; flex: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+.urow__m { flex: 1; }
+.urow__n { font-size: 15px; font-weight: 500; }
+.urow__s { font-size: 12.5px; color: var(--muted); }
+.sw-m { width: 52px; height: 32px; border-radius: 999px; background: var(--s3); border: 2px solid #6b5a7c; position: relative; flex: none; }
+.sw-m::after { content: ""; position: absolute; top: 6px; left: 6px; width: 16px; height: 16px; border-radius: 50%; background: #8f7fa0; }
+.sw-m.on { background: var(--pri); border-color: var(--pri); }
+.sw-m.on::after { left: 24px; top: 2px; width: 24px; height: 24px; background: var(--on-pri); }
+.urow--off { opacity: .6; }
+.scrim { position: absolute; inset: 0; background: rgba(0,0,0,.55); z-index: 6; }
+.msheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 7; background: var(--s2); border-radius: 28px 28px 0 0; padding: 12px 20px 40px; }
+.msheet::before { content: ""; display: block; width: 32px; height: 4px; border-radius: 2px; background: #6b5a7c; margin: 0 auto 16px; }
+.msheet h3 { font-size: 21px; font-weight: 600; }
+.msheet .tf { position: relative; border: 2px solid var(--pri); border-radius: 6px; padding: 16px 16px 12px; margin-top: 20px; font-size: 16px; }
+.msheet .tf label { position: absolute; top: -9px; left: 12px; background: var(--s2); padding: 0 6px; font-size: 12.5px; color: var(--pri); }
+.msheet .sec { font-size: 13px; color: var(--muted); margin: 16px 0 10px; font-weight: 500; }
+.pal { display: grid; grid-template-columns: repeat(8, 1fr); gap: 9px; }
+.pal i { aspect-ratio: 1; border-radius: 12px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); position: relative; }
+.pal i.on { box-shadow: 0 0 0 2px var(--s2), 0 0 0 4px var(--pri); }
+.pal i.on::after { content: "✓"; position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+.cust { display: flex; align-items: center; gap: 12px; margin-top: 14px; font-size: 14px; color: var(--pri); font-weight: 600; }
+.cust i { width: 28px; height: 28px; border-radius: 8px; background: conic-gradient(#ef4444, #f59e0b, #eab308, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444); }
+.cust span { margin-left: auto; font-family: Consolas, monospace; font-size: 12.5px; color: var(--muted); font-weight: 400; }
+.acts2 { display: flex; gap: 10px; padding-top: 22px; }
+.acts2 div { flex: 1; text-align: center; padding: 15px; border-radius: 999px; font-weight: 700; font-size: 15px; }
+.acts2 .o { border: 1px solid #6b5a7c; color: var(--pri); }
+.acts2 .f { background: var(--pri); color: var(--on-pri); }
+.dis { margin-left: auto; background: rgba(255,255,255,.06); color: #6f6380; padding: 10px 16px; border-radius: 999px; font-weight: 600; font-size: 13.5px; }
+
+/* ===== Tema claro (?tema=claro) ===== */
+html.tema-claro { --outline: #cdbfdb; --sub: #4b3a5a; --err: #b42335; --err-c: #fde2e4; --info: #2f4fa8; --info-c: #dde7ff; }
+html.tema-claro .dis { background: rgba(31,19,40,.05); color: #a99bb6; }
+html.tema-claro .acts2 .o { border-color: #b9a8c9; }
+html.tema-claro .msheet .tf { border-color: var(--pri); }
+html.tema-claro .bars i { background: #d9bdf2; }
+html.tema-claro .lab--may { background: #fef3c7; color: #a16207; }
+html.tema-claro .lab--e { background: #ffe4d4; color: #c2531c; }
+html.tema-claro .efab { box-shadow: 0 10px 22px -8px rgba(123,47,168,.45); }
+html.tema-claro .btn-o, html.tema-claro .sw-m { border-color: #b9a8c9; }
+html.tema-claro .sw-m.on { border-color: var(--pri); }
+html.tema-claro .sw-m::after { background: #8f7fa0; }
+html.tema-claro .sw-m.on::after { background: #fff; }
+html.tema-claro .banner { box-shadow: 0 -6px 20px -12px rgba(60,20,90,.3); }
+html.tema-claro .scrim { background: rgba(31,19,40,.4); }
+html.tema-claro .msheet::before { background: #b9a8c9; }
+html.tema-claro .urow .sw, html.tema-claro .pal i { box-shadow: inset 0 0 0 1px rgba(31,19,40,.15); }
+html.tema-claro .pal i.on { box-shadow: 0 0 0 2px var(--s2), 0 0 0 4px var(--pri); }
+</style>
+</head>
+<body>
+<header class="board__head">
+  <div>
+    <div class="board__kicker">Propuesta B · Administración</div>
+    <h1 class="board__title">Noche de adoración (3/3)</h1>
+  </div>
+  <p class="board__notes" data-nota-claro="Vistas del <b>administrador</b> en la versión clara: superficies lavanda, violeta como primario de acciones y switches, y los mismos <b>estados con color</b> (Joven, Adulto mayor, sin uniforme, cancelado) saturados para leerse a pleno día.">
+    Las cuatro vistas del <b>administrador</b> en lenguaje Material You: <b>Personas</b> con barra de
+    búsqueda y botón flotante extendido, <b>Equipos</b> por pestañas con roles y acciones del mes,
+    <b>Horario y eventos</b> con gráfico de balance y un aviso fijo de lo que falta para publicar, y
+    <b>Uniformes</b> con switches y una hoja inferior para editar el color.
+  </p>
+</header>
+
+<div class="board__row">
+  <!-- 9. Personas -->
+  <div class="shot">
+    <div class="phone"><div class="screen">
+      <div class="status"><span>9:41</span><span class="status__icons"><i class="sig"></i><i class="bat"></i></span></div>
+      <div class="top top--adm"><div><p>Administración</p><h2>Personas</h2></div><div class="top__acts"><span class="ib">⇪</span><span class="ib">☰</span></div></div>
+      <div class="msearch">🔍 Buscar por nombre o documento</div>
+      <div class="chips"><span class="chip on">Todas · 142</span><span class="chip">Instructor</span><span class="chip">Ministro</span><span class="chip">Joven</span></div>
+      <div class="plist">
+        <div class="pi"><div class="avatar">AS</div><div class="pi__m"><div class="pi__n">Aksel Skirvin</div><div class="pi__s">Instructor · 1.023.456.789</div></div><span class="trail">⋮</span></div>
+        <div class="pi"><div class="avatar">CG</div><div class="pi__m"><div class="pi__n">Carla Gómez</div><div class="pi__s">Ministro <span class="lab lab--jov">Joven</span></div></div><span class="trail">⋮</span></div>
+        <div class="pi"><div class="avatar">DI</div><div class="pi__m"><div class="pi__n">Daisie Ilewicz</div><div class="pi__s">Ministro <span class="lab lab--may">Adulto mayor</span></div></div><span class="trail">⋮</span></div>
+        <div class="pi"><div class="avatar">JW</div><div class="pi__m"><div class="pi__n">Joanne Wartnaby</div><div class="pi__s">Instructor · 2.357.498.250</div></div><span class="trail">⋮</span></div>
+        <div class="pi"><div class="avatar">LP</div><div class="pi__m"><div class="pi__n">Luisa Peña</div><div class="pi__s">Ministro <span class="lab lab--jov">Joven</span></div></div><span class="trail">⋮</span></div>
+        <div class="pi pi--off"><div class="avatar">RM</div><div class="pi__m"><div class="pi__n">Rosa Medina</div><div class="pi__s">Ministro <span class="lab lab--off">Inactiva</span></div></div><span class="trail">⋮</span></div>
+      </div>
+      <div class="efab">＋ Nueva persona</div>
+      <div class="navbar navbar--adm">
+        <div class="nav on"><i>☷</i>Personas</div><div class="nav"><i>☺</i>Equipos</div><div class="nav"><i>▦</i>Eventos</div><div class="nav"><i>◐</i>Uniformes</div><div class="nav"><i>⋯</i>Más</div>
+      </div>
+      <div class="home-ind"></div>
+    </div></div>
+    <div class="shot__label">9 · Personas</div>
+  </div>
+
+  <!-- 10. Equipos -->
+  <div class="shot">
+    <div class="phone"><div class="screen">
+      <div class="status"><span>9:41</span><span class="status__icons"><i class="sig"></i><i class="bat"></i></span></div>
+      <div class="top top--adm"><div><p>Administración</p><h2>Equipos</h2><span class="monthchip">Diciembre 2026 ▾ <span class="b b--warn">Borrador</span></span></div></div>
+      <div class="team-tabs"><span class="chip on">Equipo 1</span><span class="chip">2</span><span class="chip">3</span><span class="chip">4</span><span class="chip">5</span><span class="chip">6</span><span class="chip">Jóvenes</span></div>
+      <div class="pad">
+        <div class="list">
+          <div class="tline"><div class="avatar" style="background:var(--acc);color:var(--acc-c)">JW</div><span>Joanne Wartnaby</span><div class="r"><span class="lab lab--e">Líder</span></div></div>
+          <div class="tline"><div class="avatar">AS</div><span>Aksel Skirvin</span><div class="r"><em>Apoyo</em></div></div>
+          <div class="tline"><div class="avatar">DI</div><span>Daisie Ilewicz</span><div class="r"><span class="lab lab--may">Adulto mayor</span></div></div>
+          <div class="tline"><div class="avatar">MS</div><span>Merralee Skully</span></div>
+          <div class="tline"><div class="avatar">PJ</div><span>Petronille Janikowski</span></div>
+          <div class="tline" style="color:var(--muted);font-size:13.5px;padding-top:4px">+ 19 integrantes más · 24 en total</div>
+        </div>
+        <div class="actrow"><div class="btn-o">✎ Editar integrantes</div><div class="btn-t">⟳ Re-sortear mes</div></div>
+        <div class="note"><span>ⓘ</span><div>Re-sortear vuelve a armar <b style="color:var(--ink)">todos</b> los equipos y borra el horario generado. Se puede elegir otra cantidad de equipos.</div></div>
+      </div>
+      <div class="navbar navbar--adm">
+        <div class="nav"><i>☷</i>Personas</div><div class="nav on"><i>☺</i>Equipos</div><div class="nav"><i>▦</i>Eventos</div><div class="nav"><i>◐</i>Uniformes</div><div class="nav"><i>⋯</i>Más</div>
+      </div>
+      <div class="home-ind"></div>
+    </div></div>
+    <div class="shot__label">10 · Equipos del mes</div>
+  </div>
+
+  <!-- 11. Eventos -->
+  <div class="shot">
+    <div class="phone"><div class="screen">
+      <div class="status"><span>9:41</span><span class="status__icons"><i class="sig"></i><i class="bat"></i></span></div>
+      <div class="top top--adm"><div><p>Diciembre 2026 · Borrador</p><h2>Horario y eventos</h2></div><span class="ib">▦</span></div>
+      <div class="pad" style="gap:8px">
+        <div class="balance">
+          <div class="balance__h">BALANCE DEL MES <em>Parejo</em></div>
+          <div class="bars">
+            <div><i style="height:30px"></i><b>4</b>E1</div><div><i style="height:30px"></i><b>4</b>E2</div><div><i style="height:30px"></i><b>4</b>E3</div><div class="lo"><i style="height:22px"></i><b>3</b>E4</div><div><i style="height:30px"></i><b>4</b>E5</div><div><i style="height:30px"></i><b>4</b>E6</div>
+          </div>
+        </div>
+        <div class="day">Miércoles 2</div>
+        <div class="erow"><div class="erow__top"><span class="erow__time">5:00 pm</span><span class="erow__t">Turno fijo</span><span>🔒</span></div>
+          <div class="erow__bot"><span class="dd">Equipo 3</span><span class="dd"><span class="dot" style="background:#0044ff"></span>Celestial</span></div></div>
+        <div class="day">Viernes 4</div>
+        <div class="erow"><div class="erow__top"><span class="erow__time">7:00 pm</span><span class="erow__t">Vigilia Unida – Comuna 21</span></div>
+          <div class="erow__bot"><span class="dd">Equipos 1 + 5</span><span class="dd dd--warn">Sin uniforme</span></div></div>
+        <div class="erow"><div class="erow__top"><span class="erow__time">8:00 pm</span><span class="erow__t">Congreso de danza</span><span class="lab lab--g">Congreso</span></div></div>
+        <div class="erow erow--x"><div class="erow__top"><span class="erow__time">9:00 pm</span><span class="erow__t">Ensayo general</span><span class="lab lab--x">Cancelado</span></div></div>
+      </div>
+      <div class="efab efab--sm">＋ Evento</div>
+      <div class="banner"><span style="font-size:18px">⚠</span><div><b>3 turnos sin uniforme</b>Asignalos para poder publicar</div><span class="dis">Finalizar</span></div>
+      <div class="navbar navbar--adm">
+        <div class="nav"><i>☷</i>Personas</div><div class="nav"><i>☺</i>Equipos</div><div class="nav on"><i>▦</i>Eventos</div><div class="nav"><i>◐</i>Uniformes</div><div class="nav"><i>⋯</i>Más</div>
+      </div>
+      <div class="home-ind"></div>
+    </div></div>
+    <div class="shot__label">11 · Horario y eventos</div>
+  </div>
+
+  <!-- 12. Uniformes -->
+  <div class="shot">
+    <div class="phone"><div class="screen">
+      <div class="status"><span>9:41</span><span class="status__icons"><i class="sig"></i><i class="bat"></i></span></div>
+      <div class="top top--adm"><div><p>Administración</p><h2>Uniformes</h2></div></div>
+      <div class="chips"><span class="chip on">Activos · 7</span><span class="chip">Inactivos · 1</span><span class="chip">Todos</span></div>
+      <div class="pad">
+        <div class="list">
+          <div class="urow"><div class="sw" style="background:#0044ff"></div><div class="urow__m"><div class="urow__n">Celestial</div><div class="urow__s">#0044FF</div></div><span class="sw-m on"></span></div>
+          <div class="urow"><div class="sw" style="background:#7c3aed"></div><div class="urow__m"><div class="urow__n">Vino Nuevo</div><div class="urow__s">#7C3AED</div></div><span class="sw-m on"></span></div>
+          <div class="urow"><div class="sw" style="background:#c0392b"></div><div class="urow__m"><div class="urow__n">Cinturón Rojo</div><div class="urow__s">#C0392B</div></div><span class="sw-m on"></span></div>
+        </div>
+      </div>
+      <div class="scrim"></div>
+      <div class="msheet">
+        <h3>Editar uniforme</h3>
+        <div class="tf"><label>Nombre</label>Camiseta Amarilla</div>
+        <div class="sec">Color</div>
+        <div class="pal">
+          <i style="background:#0044ff"></i><i style="background:#7c3aed"></i><i style="background:#c0392b"></i><i style="background:#d4af37"></i>
+          <i style="background:#eeff00" class="on"></i><i style="background:#16a34a"></i><i style="background:#e5e7eb"></i><i style="background:#111111"></i>
+        </div>
+        <div class="cust"><i></i>Color personalizado<span>#EEFF00</span></div>
+        <div class="acts2"><div class="o">Desactivar</div><div class="f">Guardar</div></div>
+      </div>
+      <div class="home-ind" style="z-index:8"></div>
+    </div></div>
+    <div class="shot__label">12 · Uniformes</div>
+  </div>
+</div>
+<script src="tema.js"></script>
+<script src="solo.js"></script>
+</body>
+</html>

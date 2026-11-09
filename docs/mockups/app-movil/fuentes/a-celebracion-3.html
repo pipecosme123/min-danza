@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Mockup A — Celebración (administración)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="a-celebracion.css" data-diseno="a-celebracion">
+<style>
+/* Tokens propios de las pantallas de administración (el tema oscuro los redefine abajo). */
+:root { --tint: #fdeef1; --tint-strong: #fbe0e7; --field: #fff; --field-line: #f0d6dd; --card2: #fff; }
+
+/* Encabezado de administración: franja con degradado más baja que el hero público. */
+.adm-head { background: var(--grad); color: #fff; padding: 0 20px 16px; border-radius: 0 0 28px 28px; }
+.adm-head .status { color: #fff; padding: 6px 10px 0 14px; margin: 0 -20px 0 -20px; padding-left: 34px; padding-right: 30px; }
+.adm-k { font-size: 11.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .85; }
+.adm-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; margin-top: 2px; }
+.adm-head h2 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
+.adm-head p { font-size: 13px; opacity: .9; }
+.adm-btn { background: #fff; color: var(--magenta); font-weight: 800; font-size: 13px; padding: 9px 13px; border-radius: 12px; white-space: nowrap; }
+.adm-btn--ghost { background: rgba(255,255,255,.2); color: #fff; }
+.adm-search { margin-top: 12px; background: rgba(255,255,255,.95); color: #8a6f84; border-radius: 14px; padding: 11px 14px; font-size: 14px; }
+.monthsel { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; background: rgba(255,255,255,.18); border-radius: 999px; padding: 5px 6px 5px 12px; font-size: 13px; font-weight: 700; }
+.monthsel .st { background: #fff; color: #b45309; border-radius: 999px; padding: 3px 9px; font-size: 11.5px; }
+
+.filters { display: flex; gap: 6px; padding: 12px 16px 4px; overflow: hidden; }
+.f { padding: 7px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 700; background: var(--card); color: var(--muted); white-space: nowrap; box-shadow: 0 2px 8px -5px rgba(120,30,80,.3); }
+.f.on { background: var(--grad); color: #fff; }
+.f em { font-style: normal; opacity: .75; font-weight: 600; }
+
+/* Tab bar de administración (5 pestañas) */
+.tabbar--adm .tab { font-size: 10.5px; }
+.tabbar--adm .tab i { font-size: 19px; }
+
+/* 9 · Personas */
+.plist { margin: 8px 16px 0; background: var(--card); border-radius: 22px; padding: 2px 14px; box-shadow: 0 6px 20px -12px rgba(120,30,80,.3); }
+.pr { display: flex; align-items: center; gap: 11px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.pr:last-child { border-bottom: 0; }
+.pr .av { width: 38px; height: 38px; font-size: 12.5px; background: var(--tint); color: var(--magenta); }
+.pr__m { flex: 1; min-width: 0; }
+.pr__n { font-weight: 700; font-size: 14.5px; }
+.pr__d { font-size: 12px; color: var(--muted); margin-top: 1px; display: flex; gap: 5px; align-items: center; flex-wrap: nowrap; }
+.mini { font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+.mini--ins { background: #fde7f6; color: #a3189b; }
+.mini--min { background: #fdeaea; color: #c2263d; }
+.mini--jov { background: #e0f2fe; color: #0369a1; }
+.mini--may { background: #fff3db; color: #b45309; }
+.mini--off { background: #eee6ea; color: #7d6b78; }
+.pr--off { opacity: .55; }
+.kebab { color: var(--muted); font-size: 18px; font-weight: 800; padding: 0 2px; }
+.selbar { position: absolute; left: 14px; right: 14px; bottom: 106px; z-index: 4; background: #2b1331; color: #fff; border-radius: 18px; padding: 11px 14px; display: flex; align-items: center; gap: 10px; font-size: 13px; box-shadow: 0 14px 28px -12px rgba(43,19,49,.6); }
+.selbar b { font-weight: 800; }
+.selbar span { margin-left: auto; background: rgba(255,255,255,.16); padding: 7px 10px; border-radius: 10px; font-weight: 700; font-size: 12px; }
+.selbar span + span { margin-left: 0; }
+.chk { width: 20px; height: 20px; border-radius: 7px; border: 2px solid #e6c5cf; flex: none; }
+.chk.on { background: var(--grad); border-color: transparent; position: relative; }
+.chk.on::after { content: "✓"; position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 12px; font-weight: 800; }
+
+/* 10 · Equipos */
+.teams { padding: 12px 16px 120px; display: flex; flex-direction: column; gap: 10px; }
+.tc { background: var(--card); border-radius: 22px; padding: 14px; box-shadow: 0 6px 20px -12px rgba(120,30,80,.3); }
+.tc__h { display: flex; align-items: center; justify-content: space-between; }
+.tc__t { font-weight: 800; font-size: 17px; }
+.tc__c { font-size: 12px; color: var(--muted); font-weight: 600; }
+.tc__edit { font-size: 12.5px; font-weight: 800; color: var(--coral); }
+.tm { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 14px; font-weight: 600; }
+.tm .av { width: 30px; height: 30px; font-size: 11px; background: var(--tint); color: var(--magenta); }
+.tm--lead .av { background: var(--grad); color: #fff; }
+.role { margin-left: auto; font-size: 10.5px; font-weight: 800; padding: 3px 8px; border-radius: 999px; }
+.role--lead { background: var(--grad); color: #fff; }
+.role--sup { background: #f4e9ef; color: #7a4a6b; }
+.role + .mini { margin-left: 4px; }
+.tm .mini:only-of-type { margin-left: auto; }
+.more { font-size: 12.5px; color: var(--muted); font-weight: 600; padding-top: 4px; }
+.tc--mini { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; }
+.tc--mini .sub2 { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.tc--youth { box-shadow: 0 0 0 2px #bae6fd, 0 6px 20px -12px rgba(3,105,161,.4); }
+
+/* 11 · Eventos */
+.balance { margin: 12px 16px 0; background: var(--card); border-radius: 18px; padding: 10px 12px; box-shadow: 0 4px 14px -10px rgba(120,30,80,.35); }
+.balance__h { font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); display: flex; justify-content: space-between; }
+.balance__h em { font-style: normal; color: #15803d; text-transform: none; letter-spacing: 0; }
+.bars { display: flex; gap: 6px; margin-top: 8px; align-items: flex-end; }
+.bars div { flex: 1; text-align: center; font-size: 10.5px; color: var(--muted); font-weight: 700; }
+.bars i { display: block; border-radius: 6px 6px 3px 3px; background: var(--grad); margin-bottom: 4px; }
+.bars b { display: block; font-size: 12px; color: var(--ink); }
+.evs { padding: 8px 16px 160px; display: flex; flex-direction: column; gap: 8px; }
+.ev-day { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin: 6px 4px 0; }
+.ev { background: var(--card); border-radius: 18px; padding: 11px 12px; box-shadow: 0 4px 14px -10px rgba(120,30,80,.35); }
+.ev__top { display: flex; align-items: center; gap: 8px; }
+.ev__time { font-weight: 800; font-size: 14px; width: 62px; flex: none; }
+.ev__t { flex: 1; font-weight: 700; font-size: 14px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lock { font-size: 13px; }
+.ev__bot { display: flex; gap: 6px; margin-top: 8px; margin-left: 70px; }
+.sel { flex: 1; border: 1.5px solid var(--field-line); border-radius: 10px; padding: 6px 9px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; background: var(--field); }
+.sel::after { content: "▾"; margin-left: auto; color: var(--muted); }
+.sel--warn { border-color: #f59e0b; color: #b45309; background: #fffaf0; }
+.ev--x .ev__t, .ev--x .ev__time { text-decoration: line-through; color: var(--muted); }
+.tagx { font-size: 10.5px; font-weight: 800; padding: 3px 7px; border-radius: 999px; background: #eee6ea; color: #7d6b78; white-space: nowrap; }
+.tage { font-size: 10.5px; font-weight: 800; padding: 3px 7px; border-radius: 999px; background: #fde7f6; color: #a3189b; white-space: nowrap; }
+.tagc { font-size: 10.5px; font-weight: 800; padding: 3px 7px; border-radius: 999px; background: #ede9fe; color: #6d28d9; white-space: nowrap; }
+.fin { position: absolute; left: 14px; right: 14px; bottom: 104px; z-index: 4; display: flex; gap: 8px; align-items: stretch; }
+.fin__warn { flex: 1; background: #fff3db; color: #92400e; border-radius: 16px; padding: 9px 12px; font-size: 12px; line-height: 1.35; font-weight: 600; box-shadow: 0 8px 20px -12px rgba(146,64,14,.5); }
+.fin__warn b { display: block; font-size: 12.5px; }
+.fab-add { width: 54px; flex: none; border-radius: 18px; background: var(--grad); color: #fff; display: grid; place-items: center; font-size: 26px; font-weight: 700; box-shadow: 0 12px 24px -10px rgba(226,55,79,.7); }
+
+/* 12 · Uniformes */
+.ulist { padding: 12px 16px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.uc { background: var(--card); border-radius: 20px; padding: 10px; box-shadow: 0 4px 14px -10px rgba(120,30,80,.35); }
+.uc__sw { height: 54px; border-radius: 14px; border: 1px solid rgba(0,0,0,.06); }
+.uc__n { font-weight: 800; font-size: 13.5px; margin-top: 8px; }
+.uc__s { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 11.5px; color: var(--muted); font-weight: 600; }
+.tg { width: 32px; height: 19px; border-radius: 999px; background: #e7d9df; position: relative; flex: none; }
+.tg::after { content: ""; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+.tg.on { background: var(--grad); }
+.tg.on::after { left: 15px; }
+.uc--off { opacity: .55; }
+.dim2 { position: absolute; inset: 0; background: rgba(43,19,49,.45); z-index: 6; }
+.usheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 7; background: var(--bg); border-radius: 30px 30px 0 0; padding: 10px 20px 40px; }
+.usheet::before { content: ""; width: 40px; height: 5px; border-radius: 3px; background: #e5cfd6; margin: 0 auto 14px; display: block; }
+.usheet h3 { font-size: 20px; font-weight: 800; }
+.usheet .field { margin-top: 12px; }
+.usheet .field label { display: block; font-size: 12.5px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+.usheet .field > div { border: 1.5px solid var(--coral); box-shadow: 0 0 0 4px #fde3e8; border-radius: 14px; padding: 12px 14px; font-size: 15px; background: var(--field); }
+.pal { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; }
+.pal i { aspect-ratio: 1; border-radius: 50%; border: 1px solid rgba(0,0,0,.08); }
+.pal i.on { box-shadow: 0 0 0 2.5px var(--bg), 0 0 0 5px var(--coral); }
+.custom { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 13px; font-weight: 700; color: var(--coral); }
+.custom i { width: 26px; height: 26px; border-radius: 50%; background: conic-gradient(#ef4444, #f59e0b, #eab308, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444); }
+.preview { margin-top: 14px; display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: 14px; padding: 10px 12px; font-size: 13px; font-weight: 600; }
+.usheet .cta { position: static; margin-top: 16px; }
+
+/* ===== Tema oscuro (?tema=oscuro) ===== */
+html.tema-oscuro { --field: rgba(255,255,255,.03); --field-line: #4a2f4f; }
+html.tema-oscuro .adm-head { background: linear-gradient(135deg, #6d1166 0%, #a3203a 60%, #b8730a 100%); }
+html.tema-oscuro .adm-btn { background: rgba(255,255,255,.92); color: #b8198f; }
+html.tema-oscuro .adm-search { background: rgba(0,0,0,.25); color: #e9cfe0; }
+html.tema-oscuro .f { box-shadow: var(--shadow); }
+html.tema-oscuro .plist, html.tema-oscuro .tc, html.tema-oscuro .balance, html.tema-oscuro .ev, html.tema-oscuro .uc { box-shadow: var(--shadow); }
+html.tema-oscuro .mini--ins, html.tema-oscuro .tage { background: rgba(255,138,216,.15); color: #ff9fdf; }
+html.tema-oscuro .mini--min { background: rgba(255,107,129,.15); color: #ff8b9c; }
+html.tema-oscuro .mini--jov { background: rgba(56,189,248,.15); color: #7dd3fc; }
+html.tema-oscuro .mini--may { background: rgba(251,191,36,.16); color: #fcd34d; }
+html.tema-oscuro .mini--off, html.tema-oscuro .tagx { background: rgba(255,255,255,.08); color: #b59aae; }
+html.tema-oscuro .tagc { background: rgba(167,139,250,.16); color: #c4b5fd; }
+html.tema-oscuro .role--sup { background: rgba(255,255,255,.08); color: #e2c9da; }
+html.tema-oscuro .chk { border-color: #5b3d60; }
+html.tema-oscuro .selbar { background: #3a2440; box-shadow: 0 14px 28px -10px rgba(0,0,0,.9); }
+html.tema-oscuro .tc--youth { box-shadow: 0 0 0 2px rgba(56,189,248,.4), var(--shadow); }
+html.tema-oscuro .balance__h em { color: #86efac; }
+html.tema-oscuro .sel--warn { background: rgba(251,191,36,.08); color: #fcd34d; border-color: #b7791f; }
+html.tema-oscuro .fin__warn { background: #3b2a0e; color: #fde68a; box-shadow: 0 10px 22px -12px rgba(0,0,0,.9); }
+html.tema-oscuro .tg { background: #3a2a3e; }
+html.tema-oscuro .tg.on { background: var(--grad); }
+html.tema-oscuro .adm-btn--ghost { background: rgba(255,255,255,.16); color: #fff; }
+html.tema-oscuro .dim2 { background: rgba(5,2,6,.65); }
+html.tema-oscuro .usheet { box-shadow: 0 -10px 30px -10px rgba(0,0,0,.8); }
+html.tema-oscuro .usheet::before { background: #4a2f4f; }
+html.tema-oscuro .usheet .field > div { box-shadow: 0 0 0 4px rgba(255,107,129,.18); }
+html.tema-oscuro .pal i, html.tema-oscuro .uc__sw { border-color: rgba(255,255,255,.12); }
+</style>
+</head>
+<body>
+<header class="board__head">
+  <div>
+    <div class="board__kicker">Propuesta A · Administración</div>
+    <h1 class="board__title">Celebración (3/3)</h1>
+  </div>
+  <p class="board__notes" data-nota-oscuro="Vistas del <b>administrador</b> en la versión oscura: el encabezado conserva un degradado más profundo, las tarjetas pasan a superficies ciruela y los <b>estados</b> (borrador, sin uniforme, cancelado, Joven, Adulto mayor) mantienen su color con fondos translúcidos para seguir distinguiéndose de un vistazo.">
+    Las cuatro vistas del <b>administrador</b> llevadas al teléfono: <b>Personas</b> (búsqueda, filtros y
+    acciones en lote), <b>Equipos</b> del mes con roles y edición, <b>Horario y eventos</b> con balance,
+    uniforme por turno y el aviso de lo que falta para publicar, y <b>Uniformes</b> con su paleta. La barra
+    de pestañas cambia a la del modo administración; el degradado queda en el encabezado y la acción principal.
+  </p>
+</header>
+
+<div class="board__row">
+  <!-- 9. Personas -->
+  <div class="shot">
+    <div class="phone"><div class="screen">
+      <div class="adm-head">
+        <div class="status"><span>9:41</span><span class="status__icons"><i class="sig"></i><i class="bat"></i></span></div>
+        <div class="adm-k">Administración</div>
+        <div class="adm-row"><div><h2>Personas</h2><p>142 activas</p></div><div style="display:flex;gap:6px"><span class="adm-btn adm-btn--ghost">⇪ Importar</span><span class="adm-btn">＋ Nueva</span></div></div>
+        <div class="adm-search">🔍 Buscar por nombre o documento…</div>
+      </div>
+      <div class="filters"><span class="f on">Todas</span><span class="f">Instructores <em>38</em></span><span class="f">Ministros <em>104</em></span><span class="f">Joven</span></div>
+      <div class="plist">
+        <div class="pr"><span class="chk on"></span><div class="av">AS</div><div class="pr__m"><div class="pr__n">Aksel Skirvin</div><div class="pr__d">1.023.456.789 <span class="mini mini--ins">Instructor</span></div></div><span class="kebab">⋮</span></div>
+        <div class="pr"><span class="chk on"></span><div class="av">CG</div><div class="pr__m"><div class="pr__n">Carla Gómez</div><div class="pr__d"><span class="mini mini--min">Ministro</span><span class="mini mini--jov">Joven</span></div></div><span class="kebab">⋮</span></div>
+        <div class="pr"><span class="chk"></span><div class="av">DI</div><div class="pr__m"><div class="pr__n">Daisie Ilewicz</div><div class="pr__d">52.884.120 <span class="mini mini--min">Ministro</span><span class="mini mini--may">Adulto mayor</span></div></div><span class="kebab">⋮</span></div>
+        <div class="pr"><span class="chk"></span><div class="av">JW</div><div class="pr__m"><div class="pr__n">Joanne Wartnaby</div><div class="pr__d">2.357.498.250 <span class="mini mini--ins">Instructor</span></div></div><span class="kebab">⋮</span></div>
+        <div class="pr"><span class="chk on"></span><div class="av">LP</div><div class="pr__m"><div class="pr__n">Luisa Peña</div><div class="pr__d"><span class="mini mini--min">Ministro</span><span class="mini mini--jov">Joven</span></div></div><span class="kebab">⋮</span></div>
+        <div class="pr pr--off"><span class="chk"></span><div class="av">RM</div><div class="pr__m"><div class="pr__n">Rosa Medina</div><div class="pr__d"><span class="mini mini--min">Ministro</span><span class="mini mini--off">Inactiva</span></div></div><span class="kebab">⋮</span></div>
+      </div>
+      <div class="selbar"><b>3 seleccionadas</b><span>Marcar Joven</span><span>Desactivar</span></div>
+      <div class="tabbar tabbar--adm">
+        <div class="tab on"><i>☷</i>Personas</div><div class="tab"><i>☺</i>Equipos</div><div class="tab"><i>▦</i>Eventos</div><div class="tab"><i>◐</i>Uniformes</div><div class="tab"><i>⋯</i>Más</div>
+      </div>
+      <div class="home-ind"></div>
+    </div></div>
+    <div class="shot__label">9 · Personas</div>
+  </div>
+
+  <!-- 10. Equipos -->
+  <div class="shot">
+    <div class="phone"><div class="screen">
+      <div class="adm-head">
+        <div class="status"><span>9:41</span><span class="status__icons"><i class="sig"></i><i class="bat"></i></span></div>
+        <div class="adm-k">Administración</div>
+        <div class="adm-row"><div><h2>Equipos</h2><p>6 equipos + Servicio de jóvenes</p></div><span class="adm-btn">⟳ Re-sortear</span></div>
+        <div class="monthsel">Diciembre 2026 ▾ <span class="st">Borrador</span></div>
+      </div>
+      <div class="teams">
+        <div class="tc">
+          <div class="tc__h"><div><div class="tc__t">Equipo 1</div><div class="tc__c">24 integrantes</div></div><span class="tc__edit">✎ Editar</span></div>
+          <div class="tm tm--lead"><div class="av">JW</div>Joanne Wartnaby<span class="role role--lead">Líder</span></div>
+          <div class="tm"><div class="av">AS</div>Aksel Skirvin<span class="role role--sup">Apoyo</span></div>
+          <div class="tm"><div class="av">DI</div>Daisie Ilewicz<span class="mini mini--may" style="margin-left:auto">Adulto mayor</span></div>
+          <div class="tm"><div class="av">MS</div>Merralee Skully</div>
+          <div class="more">+ 20 integrantes más</div>
+        </div>
+        <div class="tc">
+          <div class="tc__h"><div><div class="tc__t">Equipo 2</div><div class="tc__c">24 integrantes</div></div><span class="tc__edit">✎ Editar</span></div>
+          <div class="tm tm--lead"><div class="av">TP</div>Tobe Proback<span class="role role--lead">Líder</span></div>
+          <div class="tm"><div class="av">UK</div>Urbano Kunzler<span class="role role--sup">Apoyo</span></div>
+        </div>
+        <div class="tc tc--mini tc--youth"><div><div class="tc__t">Servicio de jóvenes</div><div class="sub2">Líder: Carla Gómez · 10 integrantes</div></div><span class="tc__edit">✎ Editar</span></div>
+      </div>
+      <div class="tabbar tabbar--adm">
+        <div class="tab"><i>☷</i>Personas</div><div class="tab on"><i>☺</i>Equipos</div><div class="tab"><i>▦</i>Eventos</div><div class="tab"><i>◐</i>Uniformes</div><div class="tab"><i>⋯</i>Más</div>
+      </div>
+      <div class="home-ind"></div>
+    </div></div>
+    <div class="shot__label">10 · Equipos del mes</div>
+  </div>
+
+  <!-- 11. Eventos -->
+  <div class="shot">
+    <div class="phone"><div class="screen">
+      <div class="adm-head">
+        <div class="status"><span>9:41</span><span class="status__icons"><i class="sig"></i><i class="bat"></i></span></div>
+        <div class="adm-k">Administración</div>
+        <div class="adm-row"><div><h2>Horario y eventos</h2><p>24 turnos · Lista ▸ Calendario</p></div></div>
+        <div class="monthsel">Diciembre 2026 ▾ <span class="st">Borrador</span></div>
+      </div>
+      <div class="balance">
+        <div class="balance__h">Balance de participaciones <em>parejo ✓</em></div>
+        <div class="bars">
+          <div><i style="height:28px"></i><b>4</b>E1</div><div><i style="height:28px"></i><b>4</b>E2</div><div><i style="height:28px"></i><b>4</b>E3</div><div><i style="height:21px"></i><b>3</b>E4</div><div><i style="height:28px"></i><b>4</b>E5</div><div><i style="height:28px"></i><b>4</b>E6</div>
+        </div>
+      </div>
+      <div class="evs">
+        <div class="ev-day">Miércoles 2</div>
+        <div class="ev"><div class="ev__top"><span class="ev__time">5:00 pm</span><span class="ev__t">Turno fijo</span><span class="lock">🔒</span></div>
+          <div class="ev__bot"><span class="sel">Equipo 3</span><span class="sel"><span class="dot" style="background:#0044ff"></span>Celestial</span></div></div>
+        <div class="ev-day">Viernes 4</div>
+        <div class="ev"><div class="ev__top"><span class="ev__time">7:00 pm</span><span class="ev__t">Vigilia Unida – Comuna 21</span></div>
+          <div class="ev__bot"><span class="sel">Equipos 1 + 5</span><span class="sel sel--warn">Sin uniforme</span></div></div>
+        <div class="ev"><div class="ev__top"><span class="ev__time">8:00 pm</span><span class="ev__t">Congreso de danza</span><span class="tagc">Congreso</span></div>
+          <div class="ev__bot"><span class="sel">Equipos 2 + 4</span><span class="sel"><span class="dot" style="background:#7c3aed"></span>Vino Nuevo</span></div></div>
+        <div class="ev ev--x"><div class="ev__top"><span class="ev__time">9:00 pm</span><span class="ev__t">Ensayo general</span><span class="tagx">Cancelado</span></div></div>
+      </div>
+      <div class="fin"><div class="fin__warn"><b>Falta para publicar</b>3 turnos sin uniforme asignado</div><div class="fab-add">＋</div></div>
+      <div class="tabbar tabbar--adm">
+        <div class="tab"><i>☷</i>Personas</div><div class="tab"><i>☺</i>Equipos</div><div class="tab on"><i>▦</i>Eventos</div><div class="tab"><i>◐</i>Uniformes</div><div class="tab"><i>⋯</i>Más</div>
+      </div>
+      <div class="home-ind"></div>
+    </div></div>
+    <div class="shot__label">11 · Horario y eventos</div>
+  </div>
+
+  <!-- 12. Uniformes -->
+  <div class="shot">
+    <div class="phone"><div class="screen">
+      <div class="adm-head">
+        <div class="status"><span>9:41</span><span class="status__icons"><i class="sig"></i><i class="bat"></i></span></div>
+        <div class="adm-k">Administración</div>
+        <div class="adm-row"><div><h2>Uniformes</h2><p>7 activos · 1 inactivo</p></div><span class="adm-btn">＋ Nuevo</span></div>
+      </div>
+      <div class="ulist">
+        <div class="uc"><div class="uc__sw" style="background:#0044ff"></div><div class="uc__n">Celestial</div><div class="uc__s">Activo <span class="tg on"></span></div></div>
+        <div class="uc"><div class="uc__sw" style="background:#7c3aed"></div><div class="uc__n">Vino Nuevo</div><div class="uc__s">Activo <span class="tg on"></span></div></div>
+        <div class="uc"><div class="uc__sw" style="background:#c0392b"></div><div class="uc__n">Cinturón Rojo</div><div class="uc__s">Activo <span class="tg on"></span></div></div>
+        <div class="uc"><div class="uc__sw" style="background:#d4af37"></div><div class="uc__n">Cinturón Dorado</div><div class="uc__s">Activo <span class="tg on"></span></div></div>
+      </div>
+      <div class="dim2"></div>
+      <div class="usheet">
+        <h3>Nuevo uniforme</h3>
+        <div class="field"><label>Nombre</label><div>Camiseta Amarilla</div></div>
+        <div class="field"><label>Color</label>
+          <div class="pal" style="border:0;box-shadow:none;padding:0;background:none">
+            <i style="background:#0044ff"></i><i style="background:#7c3aed"></i><i style="background:#c0392b"></i><i style="background:#d4af37"></i>
+            <i style="background:#eeff00" class="on"></i><i style="background:#16a34a"></i><i style="background:#ffffff"></i><i style="background:#111111"></i>
+          </div>
+        </div>
+        <div class="custom"><i></i>Color personalizado…</div>
+        <div class="preview"><span class="dot" style="background:#eeff00;width:14px;height:14px;box-shadow:0 0 0 1px rgba(0,0,0,.2)"></span>Así se verá en el horario: Camiseta Amarilla</div>
+        <div class="cta"><div class="btn btn--sec">Cancelar</div><div class="btn btn--pri">Guardar</div></div>
+      </div>
+      <div class="home-ind" style="z-index:8"></div>
+    </div></div>
+    <div class="shot__label">12 · Uniformes</div>
+  </div>
+</div>
+<script src="tema.js"></script>
+<script src="solo.js"></script>
+</body>
+</html>

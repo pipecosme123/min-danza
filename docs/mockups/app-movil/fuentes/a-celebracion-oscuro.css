@@ -1,0 +1,66 @@
+/* Propuesta A · Celebración — tema oscuro (?tema=oscuro, ver tema.js).
+ * Fondo ciruela profundo, superficies elevadas en violeta tintado y el mismo
+ * degradado de la pandereta como firma en encabezados y acción principal.
+ * Los rosados pálidos del tema claro pasan a tintes translúcidos del coral. */
+html.tema-oscuro {
+  --board-bg: #140a17; --board-ink: #f7e9f2;
+  --bg: #170c1a; --ink: #f8ecf4; --muted: #b59aae; --line: #33213a;
+  --card: #241528; --card2: #2e1b33;
+  --magenta: #ff8ad8; --coral: #ff6b81; --amber: #fbbf24;
+  --tint: rgba(255, 107, 129, .14); --tint-strong: rgba(255, 107, 129, .24);
+  --shadow: 0 10px 26px -14px rgba(0, 0, 0, .8);
+}
+html.tema-oscuro .home-ind { color: var(--ink) !important; }
+
+/* Superficies blancas -> superficies elevadas */
+html.tema-oscuro .card,
+html.tema-oscuro .person,
+html.tema-oscuro .sv,
+html.tema-oscuro .wa,
+html.tema-oscuro .sum,
+html.tema-oscuro .sum-grid div,
+html.tema-oscuro .week div,
+html.tema-oscuro .search { background: var(--card); box-shadow: var(--shadow); }
+html.tema-oscuro .tabbar { background: var(--card2); box-shadow: 0 14px 34px -12px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.04) inset; }
+html.tema-oscuro .btn--sec { background: var(--card2); color: var(--magenta); box-shadow: var(--shadow); }
+html.tema-oscuro .week .on { background: var(--grad); }
+
+/* Rosados pálidos -> tintes del coral */
+html.tema-oscuro .chip,
+html.tema-oscuro .date,
+html.tema-oscuro .member .av,
+html.tema-oscuro .person__top .av,
+html.tema-oscuro .sv__btn--ghost { background: var(--tint); }
+html.tema-oscuro .mine { background: linear-gradient(90deg, var(--tint-strong), transparent); }
+html.tema-oscuro .verse::before { color: rgba(255, 107, 129, .16); }
+html.tema-oscuro .opt { background: rgba(255,255,255,.05); color: var(--muted); }
+html.tema-oscuro .opt.on { background: var(--grad); color: #fff; }
+html.tema-oscuro .opt.no.on { background: #e2374f; }
+html.tema-oscuro .sub .opt { background: transparent; border-color: #4a2f4f; }
+html.tema-oscuro .sub .opt.on { background: var(--tint); border-color: var(--coral); color: var(--coral); }
+html.tema-oscuro .excuse { border-color: #4a2f4f; background: rgba(255,255,255,.03); }
+html.tema-oscuro .progress { background: #3a2440; }
+html.tema-oscuro .leader .av { background: #fff; color: #b8198f; }
+html.tema-oscuro .seg .on { color: #b8198f; }
+
+/* Badges */
+html.tema-oscuro .b--warn, html.tema-oscuro .badge { background: rgba(251,191,36,.16); color: #fcd34d; }
+html.tema-oscuro .b--neu { background: rgba(255,255,255,.08); color: #e2c9da; }
+html.tema-oscuro .b--ok { background: rgba(74,222,128,.15); color: #86efac; }
+
+/* Pantallas 5-8 (portal del líder) */
+html.tema-oscuro .login__card { background: var(--card); color: var(--ink); box-shadow: 0 24px 44px -18px rgba(0,0,0,.8); }
+html.tema-oscuro .field div { border-color: #4a2f4f; background: rgba(255,255,255,.03); }
+html.tema-oscuro .field .focus { border-color: var(--coral); box-shadow: 0 0 0 4px rgba(255,107,129,.18); }
+html.tema-oscuro .login { background: linear-gradient(160deg, #4a0f45 0%, #3b0d24 55%, #1a0c14 100%); }
+html.tema-oscuro .login__logo { box-shadow: 0 0 0 4px rgba(255,255,255,.18), 0 18px 34px -10px rgba(226,55,79,.55); }
+html.tema-oscuro .sv--open { box-shadow: 0 0 0 2px rgba(255,107,129,.55), 0 12px 26px -14px rgba(226,55,79,.7); }
+html.tema-oscuro .sv__btn--off { background: rgba(255,255,255,.06); color: #6f5a6b; }
+html.tema-oscuro .dim { background: rgba(5, 2, 6, .65); }
+html.tema-oscuro .sheet { background: var(--bg); box-shadow: 0 -10px 30px -10px rgba(0,0,0,.8); }
+html.tema-oscuro .sheet::before { background: #4a2f4f; }
+html.tema-oscuro .sum-grid b[style*="15803d"] { color: #86efac !important; }
+html.tema-oscuro .sum-grid b[style*="--coral"] { color: var(--coral) !important; }
+html.tema-oscuro .wa__bubble { background: #144d37; color: #e7fbe0; }
+/* La tarjeta del próximo servicio conserva el degradado (la regla de .card de arriba lo aplanaba). */
+html.tema-oscuro .card.next { background: var(--grad); box-shadow: 0 14px 30px -14px rgba(226,55,79,.6); }

@@ -1,0 +1,67 @@
+/* Propuesta B · Noche de adoración — tema claro (?tema=claro, ver tema.js).
+ * Mismo lenguaje Material You sobre fondo lavanda muy claro: el violeta pasa a
+ * ser el primario fuerte (texto/acciones) y el durazno queda como acento cálido. */
+html.tema-claro {
+  --board-bg: #f2edf8; --board-ink: #1f1328;
+  --bg: #fcf9ff; --ink: #1f1328; --muted: #6d5f7a; --line: #e6dcef;
+  --s1: #f3ecf9; --s2: #ece2f5; --s3: #e7daf3;
+  --pri: #7b2fa8; --on-pri: #ffffff; --pri-c: #ecd8fb;
+  --acc: #e8743a; --acc-c: #ffffff;
+  --ok: #15803d; --warn: #a16207;
+}
+html.tema-claro .phone { box-shadow: 0 0 0 2px #2a2a2e inset, 0 30px 60px -24px rgba(60,20,90,.35); }
+
+/* Inicio / tarjetas destacadas */
+html.tema-claro .tile--hi { background: linear-gradient(160deg, #e7d0fb 0%, #f6edfd 75%); }
+html.tema-claro .tile--hi::after { background: radial-gradient(circle, rgba(232,116,58,.28), transparent 70%); }
+html.tema-claro .mid { color: #4b3a5a; }
+html.tema-claro .pill { background: rgba(123,47,168,.09); }
+html.tema-claro .stat b { color: #d0611f; }
+html.tema-claro .me { color: #fff; }
+
+/* Chips, badges y estados */
+html.tema-claro .chip { border-color: #cdbfdb; color: #4b3a5a; }
+html.tema-claro .chip.on { border-color: var(--pri-c); color: var(--pri); }
+html.tema-claro .b--warn { background: #fef3c7; color: #a16207; }
+html.tema-claro .b--neu { background: var(--s3); color: #4b3a5a; }
+html.tema-claro .b--ok { background: #dcfce7; color: #15803d; }
+html.tema-claro .state--ok { background: #dcfce7; color: #15803d; }
+html.tema-claro .state--no { background: #fde2e4; color: #b42335; }
+html.tema-claro .state--sw { background: #dde7ff; color: #2f4fa8; }
+html.tema-claro .counter b[style*="ffb3b8"] { color: #b42335 !important; }
+html.tema-claro .counter b[style*="b0c6ff"] { color: #2f4fa8 !important; }
+html.tema-claro .segm { border-color: #cdbfdb; }
+html.tema-claro .segm span { color: #4b3a5a; border-color: #cdbfdb; }
+html.tema-claro .segm .on { color: var(--pri); }
+html.tema-claro .fab { box-shadow: 0 10px 22px -8px rgba(232,116,58,.6); }
+html.tema-claro .sheet-hint { box-shadow: 0 -6px 20px -12px rgba(60,20,90,.3); }
+html.tema-claro .sheet-hint::before { background: #b9a8c9; }
+
+/* Pantallas 5-8 (portal del líder) */
+html.tema-claro .login__glow { background: radial-gradient(circle, rgba(123,47,168,.16), transparent 65%); }
+html.tema-claro .login__logo { box-shadow: 0 16px 34px -12px rgba(123,47,168,.45); }
+html.tema-claro .tf { border-color: #b9a8c9; }
+html.tema-claro .tf--focus { border-color: var(--pri); }
+html.tema-claro .login__note { color: #4b3a5a; }
+html.tema-claro .seg { border-color: #cdbfdb; }
+html.tema-claro .seg span { color: #4b3a5a; border-color: #cdbfdb; }
+html.tema-claro .seg .on { color: var(--pri); }
+html.tema-claro .card--now { background: linear-gradient(160deg, #e7d0fb 0%, #f6edfd 80%); }
+html.tema-claro .card--now .card__s, html.tema-claro .timer div { color: #5b4a6b; }
+html.tema-claro .ring { background: conic-gradient(var(--acc) 0 75%, rgba(123,47,168,.12) 0); }
+html.tema-claro .ring::after { background: #f1e3fb; color: var(--ink); }
+html.tema-claro .outl { border-color: #b9a8c9; }
+html.tema-claro .dis { background: rgba(31,19,40,.05); color: #a99bb6; }
+html.tema-claro .donut { background: conic-gradient(#22a35a 0 70%, #e5576a 0 90%, #5b7fe0 0 100%); }
+html.tema-claro .leg i[style*="--ok"] { background: #22a35a !important; }
+html.tema-claro .leg i[style*="ffb3b8"] { background: #e5576a !important; }
+html.tema-claro .leg i[style*="b0c6ff"] { background: #5b7fe0 !important; }
+html.tema-claro .acc__b { color: #3b2d47; }
+html.tema-claro .bar2 { box-shadow: 0 -6px 20px -12px rgba(60,20,90,.3); }
+html.tema-claro .bar2 .o { border-color: #b9a8c9; }
+html.tema-claro .ok-hero { background: linear-gradient(160deg, #d3f8e0 0%, #f3ecf9 85%); }
+html.tema-claro .ok-ic { background: #16a34a; color: #fff; }
+html.tema-claro .ok-hero p { color: #166534; }
+html.tema-claro .share pre { color: #3b2d47; }
+html.tema-claro .wa-fab { color: #fff; background: #1faa52; box-shadow: 0 10px 22px -8px rgba(31,170,82,.6); }
+html.tema-claro .dot { box-shadow: 0 0 0 1px rgba(31,19,40,.25); }

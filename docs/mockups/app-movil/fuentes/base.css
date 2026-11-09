@@ -1,0 +1,52 @@
+/* Marco común de los tableros de mockups: 4 teléfonos de 390x844 (iPhone 14/15)
+ * lado a lado, con título y notas del concepto arriba. Cada diseño define
+ * sus propios tokens y estilos de pantalla. */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1840px; }
+body {
+  font-family: var(--font, "Segoe UI", system-ui, sans-serif);
+  background: var(--board-bg);
+  color: var(--board-ink);
+  padding: 48px 56px 64px;
+  -webkit-font-smoothing: antialiased;
+}
+.board__head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 40px; gap: 48px; }
+.board__kicker { font-size: 14px; letter-spacing: .14em; text-transform: uppercase; opacity: .7; margin-bottom: 8px; font-weight: 600; }
+.board__title { font-family: var(--display, inherit); font-size: 44px; line-height: 1.05; font-weight: 800; }
+.board__notes { max-width: 760px; font-size: 16px; line-height: 1.55; opacity: .85; }
+.board__notes b { opacity: 1; }
+.board__row { display: flex; gap: 40px; justify-content: space-between; }
+.shot { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.shot__label { font-size: 15px; font-weight: 600; opacity: .8; }
+
+.phone {
+  width: 390px; height: 844px; border-radius: 56px; padding: 11px;
+  background: #0b0b0d;
+  box-shadow: 0 0 0 2px #2a2a2e inset, 0 30px 60px -20px rgba(0,0,0,.45), 0 12px 24px -12px rgba(0,0,0,.3);
+}
+.screen {
+  position: relative; width: 100%; height: 100%; border-radius: 46px; overflow: hidden;
+  background: var(--bg); color: var(--ink);
+  display: flex; flex-direction: column;
+}
+.status {
+  height: 50px; flex: none; display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 30px 0 34px; font-size: 15px; font-weight: 600; position: relative; z-index: 3;
+}
+.status::after {
+  content: ""; position: absolute; left: 50%; top: 11px; transform: translateX(-50%);
+  width: 122px; height: 35px; border-radius: 20px; background: #000;
+}
+.status__icons { display: flex; gap: 6px; align-items: center; }
+.status__icons i { display: block; background: currentColor; border-radius: 2px; }
+.sig { width: 17px; height: 11px; clip-path: polygon(0 100%, 100% 0, 100% 100%); }
+.bat { width: 25px; height: 12px; border-radius: 4px !important; }
+.home-ind { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); width: 134px; height: 5px; border-radius: 3px; background: currentColor; opacity: .85; z-index: 5; }
+.body { flex: 1; overflow: hidden; position: relative; }
+
+/* Modo ?solo=N (solo.js): un teléfono suelto, sin tablero. */
+html.solo, html.solo body { width: 430px; }
+html.solo body { padding: 20px; background: transparent; }
+html.solo .board__head, html.solo .shot__label { display: none; }
+html.solo .phone { box-shadow: 0 0 0 2px #2a2a2e inset; }
+.board__tema { font-weight: 500; opacity: .6; }

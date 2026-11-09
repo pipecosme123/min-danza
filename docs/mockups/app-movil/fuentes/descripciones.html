@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Descripción de pantallas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Documento imprimible (A4 horizontal) que arma descripciones.js según ?d=a|b. */
+@page { size: A4 landscape; margin: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "Inter", "Segoe UI", sans-serif; color: #1f1a24; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.page { width: 297mm; height: 210mm; padding: 11mm 14mm 13mm; page-break-after: always; position: relative; overflow: hidden; display: flex; gap: 12mm; }
+.page:last-child { page-break-after: auto; }
+.theme-a { --acc: #e2374f; --acc2: #a3189b; --soft: #fff4ee; --band: linear-gradient(135deg,#a3189b,#e2374f 55%,#f59e0b); }
+.theme-b { --acc: #7c3aed; --acc2: #4a2063; --soft: #f4effa; --band: linear-gradient(160deg,#4a2063,#1d1724); }
+.foot { position: absolute; left: 16mm; right: 16mm; bottom: 7mm; display: flex; justify-content: space-between; font-size: 8pt; color: #8a8191; }
+
+/* Portada */
+.cover { flex-direction: column; background: var(--soft); }
+.cover__band { position: absolute; inset: 0 0 auto 0; height: 50mm; background: var(--band); }
+.cover__head { position: relative; color: #fff; display: flex; gap: 8mm; align-items: center; height: 28mm; }
+.cover__head img { width: 24mm; height: 24mm; border-radius: 6mm; box-shadow: 0 0 0 1mm rgba(255,255,255,.5); }
+.cover__k { font-size: 10pt; letter-spacing: .14em; text-transform: uppercase; opacity: .85; font-weight: 600; }
+.cover__t { font-size: 30pt; font-weight: 800; line-height: 1.05; }
+.cover__grid { position: relative; margin-top: 6mm; margin-bottom: 4mm; display: grid; grid-template-columns: 1.25fr 1fr; gap: 8mm; flex: 1; }
+.box { background: #fff; border-radius: 4mm; padding: 4mm 6mm; box-shadow: 0 1mm 4mm rgba(0,0,0,.06); }
+.box h3 { font-size: 10pt; text-transform: uppercase; letter-spacing: .1em; color: var(--acc); margin-bottom: 2.5mm; }
+.box p, .box li { font-size: 9.6pt; line-height: 1.45; }
+.box ul { padding-left: 5mm; }
+.box + .box { margin-top: 3.5mm; }
+.swatches { display: flex; gap: 3mm; margin-top: 1mm; }
+.sw { flex: 1; }
+.sw i { display: block; height: 12mm; border-radius: 2mm; border: .3mm solid rgba(0,0,0,.08); }
+.sw span { display: block; font-size: 8pt; margin-top: 1mm; color: #555; }
+.sw b { display: block; font-size: 8pt; font-family: Consolas, monospace; font-weight: 400; color: #888; }
+.toc { columns: 2; font-size: 10pt; line-height: 1.8; padding-left: 0; list-style: none; }
+.toc b { color: var(--acc); }
+
+/* Páginas del tema alternativo */
+.alt { flex-direction: column; gap: 4mm; }
+.alt__head { display: grid; grid-template-columns: 1fr 92mm; gap: 8mm; align-items: start; }
+.alt__head p { font-size: 9.2pt; line-height: 1.45; }
+.alt__head ul { padding-left: 4.5mm; font-size: 8.6pt; line-height: 1.4; margin-top: 1.5mm; }
+.alt__row { display: flex; justify-content: space-between; gap: 4mm; flex: 1; min-height: 0; }
+.alt__row figure { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1.5mm; background: var(--soft); border-radius: 4mm; padding: 3mm 0 2mm; }
+.alt__row img { height: 118mm; }
+.alt__row figcaption { font-size: 8.5pt; font-weight: 600; color: #554b5c; }
+
+/* Página de pantalla */
+.shot { width: 92mm; flex: none; display: flex; align-items: center; justify-content: center; background: var(--soft); border-radius: 5mm; }
+.shot img { height: 172mm; }
+.info { flex: 1; display: flex; flex-direction: column; min-width: 0; padding-bottom: 4mm; }
+.num { font-size: 9pt; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--acc); }
+.info h2 { font-size: 20pt; font-weight: 800; line-height: 1.1; margin: 1mm 0 3mm; }
+.meta { display: grid; grid-template-columns: 1fr 1.6fr; gap: 4mm; margin-bottom: 4mm; }
+.meta div { background: var(--soft); border-radius: 3mm; padding: 2.5mm 4mm; font-size: 9pt; line-height: 1.45; }
+.meta b { display: block; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .1em; color: var(--acc); margin-bottom: .8mm; }
+.sec { font-size: 8.5pt; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--acc); margin: 2mm 0 1.5mm; }
+.els { border-top: .3mm solid #ece6ef; }
+.el { display: grid; grid-template-columns: 44mm 1fr; gap: 4mm; padding: 1.2mm 0; border-bottom: .3mm solid #ece6ef; font-size: 8.7pt; line-height: 1.35; }
+.el b { font-weight: 700; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin-top: 1mm; }
+.cols ul { padding-left: 4.5mm; font-size: 8.5pt; line-height: 1.38; }
+.cols li { margin-bottom: .6mm; }
+</style>
+</head>
+<body>
+<div id="doc"></div>
+<script src="descripciones.js"></script>
+<script>
+(function () {
+  var d = new URLSearchParams(location.search).get('d') || 'a';
+  var D = DESIGNS[d], S = SCREENS[d];
+  var esc = function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); };
+  var li = function (arr) { return arr.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join(''); };
+  var A = ALT[d];
+  var RANGES = [[0, 4], [4, 8], [8, 12]], total = S.length + 1 + RANGES.length;
+  var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+  var foot = function (p) { return '<div class="foot"><span>Mindanza · Propuesta de app móvil nativa · ' + esc(D.name) + '</span><span>' + p + ' / ' + total + '</span></div>'; };
+  document.title = 'Pantallas — ' + D.name;
+  var html = '';
+  html += '<section class="page cover theme-' + D.theme + '"><div class="cover__band"></div>' +
+    '<div class="cover__head"><img src="icono.jpg" alt=""><div><div class="cover__k">Propuesta de app móvil nativa · descripción de pantallas</div><div class="cover__t">' + esc(D.name) + '</div></div></div>' +
+    '<div class="cover__grid"><div>' +
+      '<div class="box"><h3>Concepto</h3><p>' + esc(D.concept) + '</p></div>' +
+      '<div class="box"><h3>Navegación</h3><p>' + esc(D.nav) + '</p></div>' +
+      '<div class="box"><h3>Pantallas de este documento</h3><ol class="toc">' + S.map(function (s) { return '<li><b>' + s.n + '.</b> ' + esc(s.title) + '</li>'; }).join('') + '</ol><p style="margin-top:2mm;font-size:9.4pt"><b style="color:var(--acc)">Variante:</b> ' + esc(A.label.toLowerCase()) + ' de las ' + S.length + ' pantallas, en las páginas ' + (S.length + 2) + ' a ' + (S.length + 1 + RANGES.length) + '.</p></div>' +
+    '</div><div>' +
+      '<div class="box"><h3>Paleta</h3><div class="swatches">' + D.palette.map(function (p) { return '<div class="sw"><i style="background:' + p[0] + '"></i><span>' + esc(p[1]) + '</span><b>' + p[0] + '</b></div>'; }).join('') + '</div></div>' +
+      '<div class="box"><h3>Tipografía</h3><p>' + esc(D.type) + '</p></div>' +
+      '<div class="box"><h3>A favor</h3><ul>' + li(D.pros) + '</ul></div>' +
+      '<div class="box"><h3>En contra</h3><ul>' + li(D.cons) + '</ul></div>' +
+    '</div></div>' + foot(1) + '</section>';
+  S.forEach(function (s, i) {
+    html += '<section class="page theme-' + D.theme + '">' +
+      '<div class="shot"><img src="../pantallas/' + D.file + '-' + pad(s.n) + '.png" alt=""></div>' +
+      '<div class="info"><div class="num">Pantalla ' + s.n + ' de ' + S.length + '</div><h2>' + esc(s.title) + '</h2>' +
+      '<div class="meta"><div><b>Quién la usa</b>' + esc(s.who) + '</div><div><b>Para qué sirve</b>' + esc(s.use) + '</div></div>' +
+      '<div class="sec">Elementos</div><div class="els">' + s.elements.map(function (e) { return '<div class="el"><b>' + esc(e[0]) + '</b><span>' + esc(e[1]) + '</span></div>'; }).join('') + '</div>' +
+      '<div class="cols"><div><div class="sec">Acciones</div><ul>' + li(s.actions) + '</ul></div>' +
+      '<div><div class="sec">Reglas de negocio que respeta</div><ul>' + li(RULES[s.key]) + '</ul></div></div>' +
+      '</div>' + foot(i + 2) + '</section>';
+  });
+  RANGES.forEach(function (rg, k) {
+    html += '<section class="page alt theme-' + D.theme + '"><div class="alt__head"><div>' +
+      '<div class="num">' + esc(D.name) + ' · variante</div><h2 style="font-size:20pt;font-weight:800;margin:1mm 0 2mm">' + esc(A.label) + ' — pantallas ' + (rg[0] + 1) + ' a ' + rg[1] + '</h2>' +
+      (k === 0 ? '<p>' + esc(A.text) + '</p>' : '<ul>' + li(k === 1 ? A.changes : A.changesAdmin) + '</ul>') + '</div>' +
+      '<div><div class="sec" style="margin-top:0">Paleta del ' + esc(A.label.toLowerCase()) + '</div><div class="swatches">' + A.palette.map(function (p) { return '<div class="sw"><i style="background:' + p[0] + '"></i><span>' + esc(p[1]) + '</span><b>' + p[0] + '</b></div>'; }).join('') + '</div></div></div>' +
+      '<div class="alt__row">' + S.slice(rg[0], rg[1]).map(function (s) { return '<figure><img src="../pantallas/' + A.prefix + '-' + pad(s.n) + '.png" alt=""><figcaption>' + s.n + ' · ' + esc(s.title) + '</figcaption></figure>'; }).join('') + '</div>' +
+      foot(S.length + 2 + k) + '</section>';
+  });
+  document.getElementById('doc').innerHTML = html;
+})();
+</script>
+<script src="check.js"></script>
+</body>
+</html>

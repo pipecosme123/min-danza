@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Mockup A — Celebración (portal del líder)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="a-celebracion.css" data-diseno="a-celebracion">
+<style>
+/* Login */
+.login { background: var(--grad); color: #fff; }
+.login .status { color: #fff; }
+.login__body { flex: 1; display: flex; flex-direction: column; padding: 40px 26px 0; }
+.login__logo { width: 96px; height: 96px; border-radius: 28px; box-shadow: 0 0 0 4px rgba(255,255,255,.5), 0 18px 30px -12px rgba(0,0,0,.4); margin: 10px auto 22px; display: block; }
+.login h1 { text-align: center; font-size: 28px; font-weight: 800; }
+.login__sub { text-align: center; opacity: .9; font-size: 14.5px; margin-top: 4px; }
+.login__card { background: #fff; color: var(--ink); border-radius: 28px; padding: 22px 20px; margin-top: 30px; box-shadow: 0 20px 40px -18px rgba(60,0,40,.5); }
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 12.5px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+.field div { border: 1.5px solid #f0d6dd; border-radius: 14px; padding: 13px 14px; font-size: 15px; display: flex; justify-content: space-between; }
+.field .focus { border-color: var(--coral); box-shadow: 0 0 0 4px #fde3e8; }
+.login__btn { margin-top: 6px; background: var(--grad); color: #fff; text-align: center; padding: 16px; border-radius: 16px; font-weight: 800; font-size: 15.5px; }
+.login__help { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 14px; line-height: 1.4; }
+.login__foot { text-align: center; font-size: 13px; opacity: .9; margin-top: auto; padding-bottom: 46px; }
+
+/* Mis servicios */
+.hello { padding: 4px 20px 6px; display: flex; justify-content: space-between; align-items: center; }
+.hello small { color: var(--muted); font-size: 13.5px; }
+.hello h2 { font-size: 25px; font-weight: 800; }
+.hello .av { width: 44px; height: 44px; border-radius: 50%; background: var(--grad); color: #fff; display: grid; place-items: center; font-weight: 800; }
+.svcs { padding: 10px 16px 120px; display: flex; flex-direction: column; gap: 12px; }
+.sv { background: #fff; border-radius: 22px; padding: 14px 16px; box-shadow: 0 6px 18px -12px rgba(120,30,80,.35); }
+.sv__top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.sv__t { font-weight: 800; font-size: 15.5px; }
+.sv__s { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.sv__act { margin-top: 12px; display: flex; align-items: center; justify-content: space-between; }
+.sv__btn { padding: 10px 16px; border-radius: 12px; font-weight: 800; font-size: 13.5px; background: var(--grad); color: #fff; }
+.sv__btn--ghost { background: #fdeef1; color: var(--magenta); }
+.sv__btn--off { background: #f3eef0; color: #b9a8b4; }
+.sv__meta { font-size: 12px; color: var(--muted); font-weight: 600; }
+.sv--open { box-shadow: 0 0 0 2px #f6b7c4, 0 10px 24px -14px rgba(226,55,79,.6); }
+.group-t { font-size: 12.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 6px 4px -2px; }
+
+/* Hoja de resumen */
+.dim { position: absolute; inset: 0; background: rgba(43,19,49,.45); z-index: 6; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; top: 150px; background: var(--bg); border-radius: 30px 30px 0 0; z-index: 7; padding: 10px 20px 0; display: flex; flex-direction: column; }
+.sheet::before { content: ""; width: 40px; height: 5px; border-radius: 3px; background: #e5cfd6; margin: 0 auto 14px; display: block; }
+.sheet h3 { font-size: 21px; font-weight: 800; }
+.sheet > p { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.sum-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin: 14px 0 12px; }
+.sum-grid div { border-radius: 16px; padding: 10px; text-align: center; background: #fff; box-shadow: 0 4px 12px -8px rgba(120,30,80,.4); }
+.sum-grid b { display: block; font-size: 22px; font-weight: 800; }
+.sum-grid span { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+.sum { background: #fff; border-radius: 18px; padding: 4px 14px; }
+.sum__g { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.sum__g:last-child { border-bottom: 0; }
+.sum__h { font-size: 12.5px; font-weight: 800; color: var(--coral); text-transform: uppercase; letter-spacing: .06em; }
+.sum__l { font-size: 14px; margin-top: 4px; line-height: 1.45; }
+.sum__l em { font-style: normal; color: var(--muted); }
+.sheet .cta { position: absolute; }
+
+/* Enviado */
+.done { padding: 4px 20px 0; text-align: center; }
+.done__ic { width: 76px; height: 76px; border-radius: 50%; margin: 6px auto 12px; background: var(--grad); color: #fff; display: grid; place-items: center; font-size: 36px; box-shadow: 0 14px 28px -12px rgba(226,55,79,.7); }
+.done h2 { font-size: 24px; font-weight: 800; }
+.done p { color: var(--muted); font-size: 13.5px; margin-top: 4px; }
+.wa { margin: 16px 16px 0; background: #fff; border-radius: 22px; padding: 14px; box-shadow: 0 6px 18px -12px rgba(120,30,80,.35); }
+.wa__h { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
+.wa__bubble { background: #e7fbe0; border-radius: 4px 16px 16px 16px; padding: 12px 14px; font-size: 13px; line-height: 1.5; color: #1f2d1b; font-family: "Segoe UI", system-ui, sans-serif; }
+.wa__bubble b { font-weight: 700; }
+.btn--wa { background: #25d366; color: #fff; box-shadow: 0 12px 24px -10px rgba(37,211,102,.7); }
+.stack { position: absolute; left: 16px; right: 16px; bottom: 30px; display: flex; flex-direction: column; gap: 10px; z-index: 4; }
+.stack .btn { flex: none; }
+</style>
+</head>
+<body>
+<header class="board__head">
+  <div>
+    <div class="board__kicker">Propuesta A · Portal del líder</div>
+    <h1 class="board__title">Celebración (2/2)</h1>
+  </div>
+  <p class="board__notes" data-nota-oscuro="Flujo del <b>líder</b> en la versión oscura: el acceso mantiene un fondo de degradado oscuro, «Mis servicios» destaca el reporte urgente con un borde coral luminoso, y la hoja de resumen y la confirmación conservan los mismos <b>contrastes de estado</b> (verde enviado, ámbar borrador).">
+    Continuación del flujo del <b>líder</b>: acceso con usuario y contraseña, la lista de sus servicios con
+    el estado de la ventana de registro, el <b>resumen antes de enviar</b> (hoja inferior) y la confirmación
+    de envío con la vista previa del mensaje para <b>compartir por WhatsApp</b>.
+  </p>
+</header>
+
+<div class="board__row">
+  <!-- 5. Login -->
+  <div class="shot">
+    <div class="phone"><div class="screen login">
+      <div class="status"><span>9:41</span><span class="status__icons"><i class="sig"></i><i class="bat"></i></span></div>
+      <div class="login__body">
+        <img class="login__logo" src="icono.jpg" alt="">
+        <h1>Acceso de líderes</h1>
+        <div class="login__sub">Registrá la asistencia de tu equipo</div>
+        <div class="login__card">
+          <div class="field"><label>Usuario</label><div class="focus">2357498250</div></div>
+          <div class="field"><label>Contraseña</label><div><span>••••••••••</span><span style="color:var(--muted)">👁</span></div></div>
+          <div class="login__btn">Ingresar</div>
+          <div class="login__help">¿Olvidaste tu contraseña? Pedile al administrador que la restablezca.</div>
+        </div>
+        <div class="login__foot">‹ Volver al horario público</div>
+      </div>
+      <div class="home-ind" style="color:#fff"></div>
+    </div></div>
+    <div class="shot__label">5 · Acceso de líderes</div>
+  </div>
+
+  <!-- 6. Mis servicios -->
+  <div class="shot">
+    <div class="phone"><div class="screen">
+      <div class="status"><span>9:41</span><span class="status__icons"><i class="sig"></i><i class="bat"></i></span></div>
+      <div class="hello"><div><small>Hola,</small><h2>Joanne</h2></div><div class="av">JW</div></div>
+      <div class="svcs">
+        <div class="group-t">Para registrar</div>
+        <div class="sv sv--open"><div class="sv__top"><div><div class="sv__t">Culto de oración</div><div class="sv__s">Lun 2 nov · 8:00 pm · Equipo 1 y 2</div></div><span class="b b--ok">Abierta</span></div>
+          <div class="sv__act"><span class="sv__meta">Cierra jue 5 nov, 11:59 pm</span><span class="sv__btn">Registrar</span></div></div>
+        <div class="sv"><div class="sv__top"><div><div class="sv__t">Domingo 8:00 am</div><div class="sv__s">Dom 1 nov · Equipo 1</div></div><span class="b b--warn">Borrador</span></div>
+          <div class="sv__act"><span class="sv__meta">Cierra mié 4 nov, 11:59 pm</span><span class="sv__btn">Continuar</span></div></div>
+        <div class="group-t">Próximos</div>
+        <div class="sv"><div class="sv__top"><div><div class="sv__t">Ensayo general</div><div class="sv__s">Mar 3 nov · 11:00 pm · Equipos 1, 3 y 6</div></div><span class="b b--neu">Pendiente</span></div>
+          <div class="sv__act"><span class="sv__meta">Abre mar 3 nov, 10:00 pm</span><span class="sv__btn sv__btn--off">Registrar</span></div></div>
+        <div class="group-t">Enviados</div>
+        <div class="sv"><div class="sv__top"><div><div class="sv__t">Domingo 10:30 am</div><div class="sv__s">Dom 1 nov · Equipo 1</div></div><span class="b b--ok">Enviado</span></div>
+          <div class="sv__act"><span class="sv__meta">Enviado dom 1 nov, 1:12 pm</span><span class="sv__btn sv__btn--ghost">Ver reporte</span></div></div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><i>⌂</i>Inicio</div><div class="tab"><i>▦</i>Horario</div><div class="tab"><i>☺</i>Equipos</div><div class="tab on"><i>✎</i>Líder</div>
+      </div>
+      <div class="home-ind"></div>
+    </div></div>
+    <div class="shot__label">6 · Mis servicios</div>
+  </div>
+
+  <!-- 7. Resumen -->
+  <div class="shot">
+    <div class="phone"><div class="screen">
+      <div class="status"><span>9:41</span><span class="status__icons"><i class="sig"></i><i class="bat"></i></span></div>
+      <div class="rep-head"><div class="back">‹ Mis servicios</div><h2>Culto de oración</h2><p>Lun 2 nov · 8:00 pm</p></div>
+      <div class="dim"></div>
+      <div class="sheet">
+        <h3>Revisá antes de enviar</h3>
+        <p>Culto de oración · Equipo 1 y Equipo 2</p>
+        <div class="sum-grid"><div><b style="color:#15803d">7</b><span>Asistieron</span></div><div><b style="color:var(--coral)">2</b><span>No asistieron</span></div><div><b style="color:var(--magenta)">1</b><span>Remplazos</span></div></div>
+        <div class="sum">
+          <div class="sum__g"><div class="sum__h">No asistieron con excusa (1)</div><div class="sum__l">Aksel Skirvin <em>— Viaje de trabajo</em></div></div>
+          <div class="sum__g"><div class="sum__h">No asistieron sin excusa (1)</div><div class="sum__l">Timi Blumer</div></div>
+          <div class="sum__g"><div class="sum__h">Remplazos (1)</div><div class="sum__l">Merralee Skully <em>— la cubrió Luisa Peña</em></div></div>
+          <div class="sum__g"><div class="sum__h">Apoyos (1)</div><div class="sum__l">Carla Gómez</div></div>
+          <div class="sum__g"><div class="sum__h">Novedades</div><div class="sum__l">Se presentó una danza nueva con panderos.</div></div>
+        </div>
+        <div class="cta"><div class="btn btn--sec">Modificar</div><div class="btn btn--pri">Confirmar y enviar</div></div>
+      </div>
+      <div class="home-ind" style="z-index:8"></div>
+    </div></div>
+    <div class="shot__label">7 · Resumen antes de enviar</div>
+  </div>
+
+  <!-- 8. Enviado -->
+  <div class="shot">
+    <div class="phone"><div class="screen">
+      <div class="status"><span>9:41</span><span class="status__icons"><i class="sig"></i><i class="bat"></i></span></div>
+      <div class="rep-head" style="padding-bottom:0"><div class="back">‹ Mis servicios</div></div>
+      <div class="done">
+        <div class="done__ic">✓</div>
+        <h2>¡Reporte enviado!</h2>
+        <p>El administrador ya puede verlo. Podés reabrirlo hasta el jue 5 nov.</p>
+        <div class="badges" style="justify-content:center"><span class="b b--ok">Enviado</span><span class="b b--neu">Turno compartido</span><span class="b b--ok">Ventana abierta</span></div>
+      </div>
+      <div class="wa">
+        <div class="wa__h">Vista previa · WhatsApp</div>
+        <div class="wa__bubble">
+          <b>Culto de oración</b><br>Lun 2 nov · 8:00 pm<br>Equipo 1 y Equipo 2<br><br>
+          Joanne Wartnaby<br>Tobe Proback<br>Luisa Peña — cubrió: Merralee Skully<br>…<br><br>
+          <b>No asistieron:</b><br>Aksel Skirvin<br>Timi Blumer<br><br><b>Apoyos:</b><br>Carla Gómez
+        </div>
+      </div>
+      <div class="stack"><div class="btn btn--wa">Compartir por WhatsApp</div><div class="btn btn--sec" style="width:auto">Volver a borrador</div></div>
+      <div class="home-ind"></div>
+    </div></div>
+    <div class="shot__label">8 · Reporte enviado</div>
+  </div>
+</div>
+<script src="tema.js"></script>
+<script src="solo.js"></script>
+</body>
+</html>

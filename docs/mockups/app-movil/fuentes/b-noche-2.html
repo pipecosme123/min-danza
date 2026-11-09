@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Mockup B — Noche de adoración (portal del líder)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="b-noche.css" data-diseno="b-noche">
+<style>
+/* Login */
+.login__body { flex: 1; display: flex; flex-direction: column; padding: 30px 22px 0; position: relative; }
+.login__glow { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); width: 300px; height: 300px; border-radius: 50%; background: radial-gradient(circle, rgba(231,177,255,.28), transparent 65%); }
+.login__logo { width: 92px; height: 92px; border-radius: 26px; margin: 18px auto 22px; display: block; position: relative; box-shadow: 0 16px 36px -10px rgba(231,177,255,.45); }
+.login h1 { text-align: center; font-size: 28px; font-weight: 700; position: relative; }
+.login__sub { text-align: center; color: var(--muted); font-size: 14.5px; margin-top: 4px; }
+.tf { position: relative; border: 1px solid #5c4d6b; border-radius: 6px 6px 6px 6px; padding: 18px 16px 12px; margin-top: 22px; font-size: 16px; }
+.tf label { position: absolute; top: -9px; left: 12px; background: var(--bg); padding: 0 6px; font-size: 12.5px; color: var(--muted); }
+.tf--focus { border: 2px solid var(--pri); }
+.tf--focus label { color: var(--pri); }
+.tf span { position: absolute; right: 14px; top: 16px; color: var(--muted); }
+.filled { margin-top: 28px; background: var(--pri); color: var(--on-pri); text-align: center; padding: 16px; border-radius: 999px; font-weight: 700; font-size: 15.5px; }
+.textbtn { text-align: center; color: var(--pri); font-weight: 600; font-size: 14px; margin-top: 16px; }
+.login__note { margin-top: auto; margin-bottom: 44px; background: var(--s1); border-radius: 20px; padding: 14px 16px; display: flex; gap: 12px; font-size: 13px; color: #d6c8e2; line-height: 1.4; }
+.login__note b { color: var(--ink); }
+
+/* Mis servicios */
+.seg { display: flex; margin: 0 16px 14px; border: 1px solid #5c4d6b; border-radius: 999px; overflow: hidden; }
+.seg span { flex: 1; text-align: center; padding: 10px 0; font-size: 13.5px; font-weight: 600; color: #d8cbe4; border-right: 1px solid #5c4d6b; }
+.seg span:last-child { border-right: 0; }
+.seg .on { background: var(--pri-c); color: var(--pri); }
+.card { background: var(--s1); border-radius: 24px; padding: 16px; }
+.card--now { background: linear-gradient(160deg, #4a2063 0%, #2b1838 75%); }
+.card__top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.card__t { font-size: 17px; font-weight: 700; }
+.card__s { color: var(--muted); font-size: 13px; margin-top: 3px; }
+.card--now .card__s { color: #d6c3e4; }
+.timer { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.ring { width: 44px; height: 44px; border-radius: 50%; background: conic-gradient(var(--acc) 0 75%, rgba(255,255,255,.12) 0); display: grid; place-items: center; flex: none; }
+.ring::after { content: "3d"; width: 34px; height: 34px; border-radius: 50%; background: #34203f; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+.timer div { font-size: 13px; color: #d6c3e4; }
+.timer b { color: var(--ink); display: block; font-size: 14px; }
+.tonal { margin-left: auto; background: var(--acc); color: var(--acc-c); padding: 10px 16px; border-radius: 999px; font-weight: 700; font-size: 13.5px; }
+.outl { margin-left: auto; border: 1px solid #6b5a7c; color: var(--pri); padding: 9px 15px; border-radius: 999px; font-weight: 600; font-size: 13.5px; }
+.dis { margin-left: auto; background: rgba(255,255,255,.06); color: #6f6380; padding: 10px 16px; border-radius: 999px; font-weight: 600; font-size: 13.5px; }
+.card__act { display: flex; align-items: center; margin-top: 12px; font-size: 12.5px; color: var(--muted); }
+
+/* Resumen (diálogo de pantalla completa) */
+.fs-top { display: flex; align-items: center; gap: 14px; padding: 4px 14px 10px; }
+.fs-top .x { width: 40px; height: 40px; display: grid; place-items: center; font-size: 20px; }
+.fs-top h3 { font-size: 19px; font-weight: 600; flex: 1; }
+.fs-top .send { color: var(--pri); font-weight: 700; font-size: 14.5px; }
+.ring-sum { display: flex; align-items: center; gap: 16px; margin: 0 16px 14px; background: var(--s1); border-radius: 24px; padding: 16px; }
+.donut { width: 86px; height: 86px; border-radius: 50%; background: conic-gradient(var(--ok) 0 70%, #ffb3b8 0 90%, #b0c6ff 0 100%); display: grid; place-items: center; flex: none; }
+.donut::after { content: "10"; width: 62px; height: 62px; border-radius: 50%; background: var(--s1); display: grid; place-items: center; font-weight: 700; font-size: 22px; }
+.leg { display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+.leg span { display: flex; align-items: center; gap: 8px; }
+.leg i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.acc { margin: 0 16px; display: flex; flex-direction: column; gap: 8px; }
+.acc__i { background: var(--s1); border-radius: 18px; padding: 13px 16px; }
+.acc__h { display: flex; justify-content: space-between; font-weight: 600; font-size: 14.5px; }
+.acc__h em { font-style: normal; color: var(--muted); font-weight: 500; }
+.acc__b { margin-top: 6px; font-size: 13.5px; color: #d6c8e2; line-height: 1.5; }
+.acc__b small { color: var(--muted); }
+.bar2 { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 16px 34px; background: var(--s2); display: flex; gap: 10px; z-index: 4; }
+.bar2 div { flex: 1; text-align: center; padding: 15px; border-radius: 999px; font-weight: 700; font-size: 15px; }
+.bar2 .o { border: 1px solid #6b5a7c; color: var(--pri); }
+.bar2 .f { background: var(--pri); color: var(--on-pri); }
+
+/* Enviado */
+.ok-hero { margin: 4px 16px 0; border-radius: 28px; padding: 22px 18px; background: linear-gradient(160deg, #173a28, #1d1724 80%); text-align: center; }
+.ok-ic { width: 64px; height: 64px; border-radius: 50%; background: var(--ok); color: #0f2a1b; display: grid; place-items: center; margin: 0 auto 12px; font-size: 30px; font-weight: 800; }
+.ok-hero h2 { font-size: 23px; font-weight: 700; }
+.ok-hero p { color: #bfe9cf; font-size: 13.5px; margin-top: 4px; }
+.share { margin: 12px 16px 0; background: var(--s1); border-radius: 24px; padding: 14px 16px; }
+.share__h { font-size: 12.5px; color: var(--pri); font-weight: 600; letter-spacing: .04em; margin-bottom: 8px; }
+.share pre { font-family: "Segoe UI", system-ui, sans-serif; font-size: 12.5px; line-height: 1.5; color: #e3d8ec; white-space: pre-wrap; }
+.wa-fab { position: absolute; right: 18px; bottom: 116px; background: #25d366; color: #06301a; border-radius: 18px; padding: 18px 22px; font-weight: 700; font-size: 15px; z-index: 5; box-shadow: 0 10px 24px -6px rgba(0,0,0,.6); }
+.snack { position: absolute; left: 16px; right: 16px; bottom: 112px; background: #efe3f7; color: #2a1736; border-radius: 10px; padding: 12px 16px; font-size: 13.5px; display: flex; justify-content: space-between; z-index: 4; opacity: 0; }
+</style>
+</head>
+<body>
+<header class="board__head">
+  <div>
+    <div class="board__kicker">Propuesta B · Portal del líder</div>
+    <h1 class="board__title">Noche de adoración (2/2)</h1>
+  </div>
+  <p class="board__notes" data-nota-claro="Flujo del <b>líder</b> en la versión clara: campos delineados en violeta, tarjeta urgente con anillo de cuenta regresiva en durazno, resumen con gráfico de anillo y confirmación en verde, con <b>la misma jerarquía</b> que la versión oscura.">
+    Continuación del flujo del <b>líder</b> en lenguaje Material You: acceso con campos delineados, «Mis
+    servicios» con un temporizador de la <b>ventana de registro</b>, el resumen antes de enviar como
+    <b>diálogo de pantalla completa</b> con gráfico de anillo, y la confirmación con el texto listo para
+    <b>compartir por WhatsApp</b>.
+  </p>
+</header>
+
+<div class="board__row">
+  <!-- 5. Login -->
+  <div class="shot">
+    <div class="phone"><div class="screen login">
+      <div class="status"><span>9:41</span><span class="status__icons"><i class="sig"></i><i class="bat"></i></span></div>
+      <div class="login__body">
+        <div class="login__glow"></div>
+        <img class="login__logo" src="icono.jpg" alt="">
+        <h1>Portal de líderes</h1>
+        <div class="login__sub">Ingresá para registrar la asistencia</div>
+        <div class="tf tf--focus" style="margin-top:34px"><label>Usuario</label>2357498250</div>
+        <div class="tf"><label>Contraseña</label>••••••••••<span>👁</span></div>
+        <div class="filled">Ingresar</div>
+        <div class="textbtn">Ver el horario sin ingresar</div>
+        <div class="login__note"><span>🔑</span><div><b>¿Primera vez?</b> Usá la contraseña temporal que te dio el administrador; te vamos a pedir que la cambies.</div></div>
+      </div>
+      <div class="home-ind"></div>
+    </div></div>
+    <div class="shot__label">5 · Portal de líderes</div>
+  </div>
+
+  <!-- 6. Mis servicios -->
+  <div class="shot">
+    <div class="phone"><div class="screen">
+      <div class="status"><span>9:41</span><span class="status__icons"><i class="sig"></i><i class="bat"></i></span></div>
+      <div class="top"><div><p>Joanne Wartnaby · Equipo 1</p><h2>Mis servicios</h2></div><div class="avatar">JW</div></div>
+      <div class="seg"><span class="on">Pendientes · 2</span><span>Próximos</span><span>Enviados</span></div>
+      <div class="pad">
+        <div class="card card--now">
+          <div class="card__top"><div><div class="card__t">Culto de oración</div><div class="card__s">Lun 2 nov · 8:00 pm · Equipo 1 y 2</div></div><span class="b b--neu">Compartido</span></div>
+          <div class="timer"><div class="ring"></div><div><b>Quedan 3 días</b>cierra jue 5 nov, 11:59 pm</div><span class="tonal">Registrar</span></div>
+        </div>
+        <div class="card">
+          <div class="card__top"><div><div class="card__t">Domingo 8:00 am</div><div class="card__s">Dom 1 nov · Equipo 1</div></div><span class="b b--warn">Borrador</span></div>
+          <div class="card__act">8 de 10 marcados · cierra mié 4 nov<span class="outl">Continuar</span></div>
+        </div>
+        <div class="card" style="opacity:.75">
+          <div class="card__top"><div><div class="card__t">Ensayo general</div><div class="card__s">Mar 3 nov · 11:00 pm · Equipos 1, 3 y 6</div></div><span class="b b--neu">Pendiente</span></div>
+          <div class="card__act">Abre mar 3 nov, 10:00 pm<span class="dis">Registrar</span></div>
+        </div>
+      </div>
+      <div class="navbar">
+        <div class="nav"><i>⌂</i>Inicio</div><div class="nav"><i>▦</i>Horario</div><div class="nav"><i>☺</i>Equipos</div><div class="nav on"><i>✎</i>Líder</div>
+      </div>
+      <div class="home-ind"></div>
+    </div></div>
+    <div class="shot__label">6 · Mis servicios</div>
+  </div>
+
+  <!-- 7. Resumen -->
+  <div class="shot">
+    <div class="phone"><div class="screen">
+      <div class="status"><span>9:41</span><span class="status__icons"><i class="sig"></i><i class="bat"></i></span></div>
+      <div class="fs-top"><div class="x">✕</div><h3>Revisar y enviar</h3></div>
+      <div style="padding:0 20px 12px"><div style="font-size:21px;font-weight:700">Culto de oración</div><div style="color:var(--muted);font-size:13.5px">Lun 2 nov · 8:00 pm · Equipo 1 y Equipo 2</div></div>
+      <div class="ring-sum"><div class="donut"></div>
+        <div class="leg"><span><i style="background:var(--ok)"></i>7 asistieron</span><span><i style="background:#ffb3b8"></i>2 no asistieron</span><span><i style="background:#b0c6ff"></i>1 remplazo</span></div></div>
+      <div class="acc">
+        <div class="acc__i"><div class="acc__h">No asistieron <em>2</em></div><div class="acc__b">Aksel Skirvin <small>· con excusa: «Viaje de trabajo»</small><br>Timi Blumer <small>· sin excusa</small></div></div>
+        <div class="acc__i"><div class="acc__h">Remplazos y cambios <em>1</em></div><div class="acc__b">Merralee Skully <small>· la cubrió Luisa Peña</small></div></div>
+        <div class="acc__i"><div class="acc__h">Apoyos <em>1</em></div><div class="acc__b">Carla Gómez</div></div>
+        <div class="acc__i"><div class="acc__h">Novedades</div><div class="acc__b">Se presentó una danza nueva con panderos.</div></div>
+        <div class="acc__i"><div class="acc__h">Asistieron <em>7 ▾</em></div></div>
+      </div>
+      <div class="bar2"><div class="o">Modificar</div><div class="f">Confirmar y enviar</div></div>
+      <div class="home-ind"></div>
+    </div></div>
+    <div class="shot__label">7 · Revisar y enviar</div>
+  </div>
+
+  <!-- 8. Enviado -->
+  <div class="shot">
+    <div class="phone"><div class="screen">
+      <div class="status"><span>9:41</span><span class="status__icons"><i class="sig"></i><i class="bat"></i></span></div>
+      <div class="appbar"><div class="ic">←</div><h3>Reporte de asistencia</h3></div>
+      <div class="ok-hero">
+        <div class="ok-ic">✓</div>
+        <h2>Reporte enviado</h2>
+        <p>Culto de oración · lun 2 nov · 8:00 pm</p>
+        <div class="badges" style="justify-content:center;margin-top:12px"><span class="b b--ok">Enviado</span><span class="b b--neu">Turno compartido</span><span class="b b--ok">Ventana abierta</span></div>
+      </div>
+      <div class="share">
+        <div class="share__h">TEXTO PARA WHATSAPP</div>
+<pre>*Culto de oración*
+Lun 2 nov · 8:00 pm
+Equipo 1 y Equipo 2
+
+Joanne Wartnaby
+Tobe Proback
+Luisa Peña — cubrió: Merralee Skully
+…
+
+*No asistieron:*
+Aksel Skirvin
+Timi Blumer</pre>
+      </div>
+      <div style="margin:12px 16px 0;display:flex;gap:10px"><span class="outl" style="margin:0">Volver a borrador</span><span class="outl" style="margin:0">Copiar texto</span></div>
+      <div class="wa-fab">Compartir en WhatsApp</div>
+      <div class="navbar">
+        <div class="nav"><i>⌂</i>Inicio</div><div class="nav"><i>▦</i>Horario</div><div class="nav"><i>☺</i>Equipos</div><div class="nav on"><i>✎</i>Líder</div>
+      </div>
+      <div class="home-ind"></div>
+    </div></div>
+    <div class="shot__label">8 · Reporte enviado</div>
+  </div>
+</div>
+<script src="tema.js"></script>
+<script src="solo.js"></script>
+</body>
+</html>
