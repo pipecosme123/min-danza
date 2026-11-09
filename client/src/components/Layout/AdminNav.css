@@ -1,0 +1,190 @@
+/* ---------------------------------------------------------------------------
+   Navegación del administrador.
+   < 1024px: barra de pestañas flotante abajo (Personas · Equipos · Eventos ·
+             Uniformes · Más), como en el mockup.
+   >= 1024px: menú lateral con las 6 secciones; «Más» se oculta.
+   --------------------------------------------------------------------------- */
+
+.admin-nav {
+  position: fixed;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: calc(var(--space-3) + env(safe-area-inset-bottom));
+  z-index: 50;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+}
+
+.admin-nav__list {
+  list-style: none;
+  display: flex;
+  justify-content: space-around;
+  padding: var(--space-1);
+}
+
+.admin-nav__list > li {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-nav__item--secondary {
+  display: none;
+}
+
+.admin-nav__link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  min-height: 60px;
+  padding: var(--space-1);
+  border: none;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.admin-nav__link:hover {
+  color: var(--color-text);
+}
+
+.admin-nav__link--active {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+.admin-nav__link--active .nav-icon {
+  background-color: var(--color-tint);
+}
+
+.nav-icon {
+  flex-shrink: 0;
+  box-sizing: content-box;
+  padding: 3px 14px;
+  border-radius: var(--radius-full);
+  transition: background-color var(--transition-fast);
+}
+
+.admin-nav__label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 1024px) {
+  .admin-nav {
+    position: sticky;
+    top: var(--space-5);
+    left: auto;
+    right: auto;
+    bottom: auto;
+    align-self: start;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .admin-nav__list {
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: 0;
+  }
+
+  .admin-nav__item--secondary {
+    display: block;
+  }
+
+  .admin-nav__item--more {
+    display: none;
+  }
+
+  .admin-nav__link {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: var(--space-3);
+    min-height: var(--tap-target-min);
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--font-size-base);
+  }
+
+  .admin-nav__link:hover {
+    background-color: var(--color-surface-hover);
+  }
+
+  .admin-nav__link--active {
+    background-color: var(--color-tint);
+    box-shadow: inset 4px 0 0 var(--color-primary);
+  }
+
+  .admin-nav__link--active .nav-icon {
+    background-color: transparent;
+  }
+
+  .nav-icon {
+    padding: 0;
+  }
+}
+
+/* ---- Hoja «Más» ---- */
+.admin-nav-more {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+}
+
+.admin-nav-more__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 52px;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.admin-nav-more__item .nav-icon {
+  padding: 0;
+  color: var(--color-primary);
+}
+
+.admin-nav-more__item:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.admin-nav-more__item--active {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.admin-nav-more__item--danger,
+.admin-nav-more__item--danger .nav-icon {
+  color: var(--color-danger-text);
+}
+
+.admin-nav-more__theme .theme-toggle {
+  width: 100%;
+  justify-content: flex-start;
+  min-height: 52px;
+  padding-inline: var(--space-4);
+}

@@ -125,6 +125,9 @@
   --color-tint: #fdeef1;
   --color-tint-strong: #fbe0e7;
 
+  /* Encabezado: degradado apto para texto blanco (= --gradient-action). */
+  --gradient-header: var(--gradient-action);
+
   /* Texto de estado sobre su fondo translúcido (insignias). */
   --color-success-text: #166534;
   --color-danger-text: #a8102c;
@@ -165,6 +168,9 @@
   --color-accent: #ff6b81;
   --color-tint: rgb(255 107 129 / 0.14);
   --color-tint-strong: rgb(255 107 129 / 0.24);
+
+  /* Encabezado más profundo en oscuro (blanco >= 7:1 en todo el largo). */
+  --gradient-header: linear-gradient(135deg, #6d1166 0%, #8f1733 60%, #8a3a08 100%);
 
   --color-success-text: #86efac;
   --color-danger-text: #ff8b9c;

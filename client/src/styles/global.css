@@ -195,6 +195,33 @@ input[type='radio'] {
   color: var(--color-text-secondary);
 }
 
+.admin-layout__body,
+.admin-layout--with-nav .app-header__inner {
+  max-width: 1280px;
+}
+
+/* Espacio para que la barra de navegación flotante (AdminNav, < 1024px) no tape el final del contenido. */
+.admin-layout__main {
+  min-width: 0;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 1024px) {
+  .admin-layout__body {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+
+  .admin-layout__main {
+    padding-bottom: var(--space-6);
+  }
+
+  .admin-layout__body > .admin-nav {
+    margin-top: var(--space-6);
+  }
+}
+
 .admin-layout__session {
   display: flex;
   align-items: center;

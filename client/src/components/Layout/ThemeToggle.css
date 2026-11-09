@@ -4,14 +4,15 @@
   gap: var(--space-2);
   min-height: var(--tap-target-min);
   padding: var(--space-2) var(--space-4);
-  border: 2px solid var(--color-border-input);
-  border-radius: var(--radius-md);
-  background-color: transparent;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background-color: var(--color-surface);
   color: var(--color-text);
   font-weight: var(--font-weight-medium);
   font-size: var(--font-size-sm);
   cursor: pointer;
   white-space: nowrap;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .theme-toggle:hover {

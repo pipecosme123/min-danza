@@ -1,6 +1,6 @@
 # Fase 10 — Rediseño web con la Propuesta A («Celebración»)
 
-> Estado: **Etapas 1 y 2 completas (2026-11-08)**; etapas 3–7 pendientes. Rama: `feature/rediseno-propuesta-a` (desde `develop`, 2026-11-08).
+> Estado: **Etapas 1 a 3 completas (2026-11-09)**; etapas 4–7 pendientes. Rama: `feature/rediseno-propuesta-a` (desde `develop`, 2026-11-08).
 > Referencia visual: `docs/mockups/app-movil/` — tableros `a-celebracion*.png` (pantallas 1–12, tema claro y
 > oscuro), pantallas sueltas en `pantallas/a-*.png` y la descripción completa en
 > `propuesta-a-celebracion-pantallas.pdf`.
@@ -137,6 +137,17 @@ crean en la etapa que los usa por primera vez, para no dejar componentes sin uso
 - `ThemeToggle` con el nuevo estilo; en admin vive dentro de «Más».
 - Espacio inferior reservado para que la barra flotante no tape contenido (`padding-bottom` +
   `env(safe-area-inset-bottom)`).
+
+**Hecho (2026-11-09).** `AppHeader` es una franja con `--gradient-header` (nuevo token: el degradado de
+acción en claro, uno más profundo en oscuro) y logo blanco en ambos temas; sus controles se redibujan en
+blanco sobre el degradado y en el teléfono el tema queda solo con su ícono (el texto sigue como nombre
+accesible). `NavTabs` se reemplazó por `AdminNav`: **un único `<nav>`** que por CSS es barra inferior
+flotante por debajo de 1024 px (Personas · Equipos · Eventos · Uniformes · Más) y menú lateral desde 1024
+px, sin duplicar enlaces. «Más» abre una hoja (`Modal`) con Asistencia, Accesos, tema y cerrar sesión; en
+el panel de administración el encabezado oculta sesión y tema por debajo de 1024 px porque viven ahí.
+Íconos SVG propios en `NavIcons.jsx`. Prueba nueva `AdminNav.test.jsx` (3 casos).
+Desviación: la barra pública (Inicio · Horario · Equipos · Líder) y la del portal del líder pasan a la
+Etapa 4, porque dependen de la decisión pendiente §9.1 sobre pestañas en la página pública.
 
 ### Etapa 4 — Página pública (pantallas 1–3)
 - **Inicio:** hero con degradado, selector de mes actual/siguiente reutilizando la lógica de tabs ya
