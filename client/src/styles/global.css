@@ -67,8 +67,53 @@ a {
   text-underline-offset: 0.15em;
 }
 
-button {
+button,
+input,
+select,
+textarea {
   font-family: inherit;
+}
+
+/* ---------------------------- Casillas y opciones ---------------------------- */
+/* Casilla propia (en vez de la nativa) para que, marcada, lleve el degradado de
+   acción como en los mockups. Se aplica a TODAS las casillas de la app (el
+   componente Checkbox y las de selección en lote de Personas) para que se vean
+   iguales. El check es un SVG blanco: va siempre sobre el degradado. */
+input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  border: 2px solid var(--color-border-input);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+input[type='checkbox']:checked {
+  border-color: transparent;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+      center / 16px no-repeat,
+    var(--gradient-action) border-box;
+}
+
+input[type='checkbox']:indeterminate {
+  border-color: transparent;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8h8' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E")
+      center / 16px no-repeat,
+    var(--gradient-action) border-box;
+}
+
+input[type='checkbox']:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+input[type='radio'] {
+  accent-color: var(--color-primary);
 }
 
 /* ---------------------------- Foco visible ---------------------------- */

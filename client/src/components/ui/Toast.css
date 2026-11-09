@@ -16,27 +16,28 @@
   align-items: flex-start;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
   background-color: var(--color-surface);
-  border: 2px solid var(--color-border);
+  border: 1px solid var(--color-border);
+  border-left-width: 6px;
   color: var(--color-text);
 }
 
 .toast--success {
-  border-color: var(--color-success);
+  border-left-color: var(--color-success);
 }
 
 .toast--error {
-  border-color: var(--color-danger);
+  border-left-color: var(--color-danger);
 }
 
 .toast--info {
-  border-color: var(--color-info-border);
+  border-left-color: var(--color-info-border);
 }
 
 .toast--warning {
-  border-color: var(--color-warning);
+  border-left-color: var(--color-warning);
 }
 
 .toast__label {

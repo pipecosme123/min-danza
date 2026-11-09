@@ -9,11 +9,12 @@
   border: 2px solid transparent;
   border-radius: var(--radius-md);
   font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-bold);
   line-height: 1;
   cursor: pointer;
   transition: background-color var(--transition-fast), border-color var(--transition-fast),
-    color var(--transition-fast), opacity var(--transition-fast);
+    color var(--transition-fast), opacity var(--transition-fast), box-shadow var(--transition-fast),
+    filter var(--transition-fast);
 }
 
 .btn--sm {
@@ -28,27 +29,33 @@
 
 .btn:disabled {
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.55;
 }
 
+/* Primario: degradado de acción (>= 5:1 con blanco en todo su largo, ver tokens.css).
+   El borde transparente deja ver el degradado también bajo el borde. */
 .btn--primary {
-  background-color: var(--color-primary);
-  color: var(--color-primary-contrast);
+  background: var(--gradient-action) border-box;
+  color: var(--color-on-gradient);
+  box-shadow: 0 10px 22px -12px rgb(200 30 60 / 0.65);
 }
 .btn--primary:hover:not(:disabled) {
-  background-color: var(--color-primary-hover);
+  filter: brightness(1.08);
 }
 .btn--primary:active:not(:disabled) {
-  background-color: var(--color-primary-active);
+  filter: brightness(0.92);
 }
 
+/* Secundario: superficie con texto de acción, como «Modificar» / «Guardar» en los mockups. */
 .btn--secondary {
-  background-color: transparent;
-  color: var(--color-text);
-  border-color: var(--color-border-input);
+  background-color: var(--color-surface);
+  color: var(--color-primary);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-sm);
 }
 .btn--secondary:hover:not(:disabled) {
   background-color: var(--color-surface-hover);
+  border-color: var(--color-tint-strong);
 }
 
 .btn--danger {
@@ -68,7 +75,7 @@
   border-color: transparent;
 }
 .btn--ghost:hover:not(:disabled) {
-  background-color: var(--color-surface-hover);
+  background-color: var(--color-tint);
 }
 
 .btn__spinner {

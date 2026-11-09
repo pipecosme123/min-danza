@@ -16,16 +16,21 @@
   justify-content: center;
   min-height: var(--tap-target-min);
   padding: var(--space-2) var(--space-5);
-  border: 2px solid var(--color-border-input);
+  border: 2px dashed var(--color-border-input);
   border-radius: var(--radius-md);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
   background-color: var(--color-surface);
   cursor: pointer;
 }
 
 .file-upload__control:hover .file-upload__button {
-  background-color: var(--color-surface-hover);
+  background-color: var(--color-tint);
+}
+
+.file-upload__control:focus-within .file-upload__button {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
 }
 
 .file-upload__input {

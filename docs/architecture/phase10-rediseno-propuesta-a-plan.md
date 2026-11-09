@@ -1,6 +1,6 @@
 # Fase 10 — Rediseño web con la Propuesta A («Celebración»)
 
-> Estado: **Etapa 1 completa (2026-11-08)**; etapas 2–7 pendientes. Rama: `feature/rediseno-propuesta-a` (desde `develop`, 2026-11-08).
+> Estado: **Etapas 1 y 2 completas (2026-11-08)**; etapas 3–7 pendientes. Rama: `feature/rediseno-propuesta-a` (desde `develop`, 2026-11-08).
 > Referencia visual: `docs/mockups/app-movil/` — tableros `a-celebracion*.png` (pantallas 1–12, tema claro y
 > oscuro), pantallas sueltas en `pantallas/a-*.png` y la descripción completa en
 > `propuesta-a-celebracion-pantallas.pdf`.
@@ -118,6 +118,17 @@ para texto de estado (insignias y mensajes de error, que en oscuro no alcanzaban
 - Componentes nuevos compartidos: `Avatar` (iniciales sobre tinte), `SegmentedControl` (píldoras tipo
   «Noviembre / Diciembre»), `TabBar` (barra flotante inferior), `StickyActions` (acciones fijas abajo),
   `Chip`.
+
+**Hecho (2026-11-08).** Botón primario con `--gradient-action` y texto blanco en ambos temas, secundario
+sobre superficie con texto de acción, insignias compactas sin borde (nuevo `--font-size-xs`, siempre en
+negrita), foco de campos con halo tintado, casillas propias con degradado al marcarse (estilo global en
+`global.css` para que el componente `Checkbox` y las casillas de selección en lote de Personas se vean
+iguales; las de Personas pasan de 20 a 24 px), `Modal` como hoja inferior con asa por debajo de 768 px
+(solo CSS: el manejo de foco de `Modal.jsx` no se tocó), tablas con encabezado en versalitas y sombra,
+avisos con franja de estado a la izquierda, página actual de la paginación con degradado, opción resaltada
+del selector con tinte en vez de fondo sólido, y anillo doble en el color elegido de la paleta.
+Desviación: los componentes nuevos (`Avatar`, `SegmentedControl`, `TabBar`, `StickyActions`, `Chip`) se
+crean en la etapa que los usa por primera vez, para no dejar componentes sin uso.
 
 ### Etapa 3 — Layout y navegación
 - `Layout/AppHeader`: variante «hero» con degradado (pública, admin en teléfono) y variante compacta

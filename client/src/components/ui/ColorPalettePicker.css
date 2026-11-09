@@ -36,8 +36,8 @@
 }
 
 .color-palette-picker__swatch--selected {
-  border-color: var(--color-primary);
-  border-width: 3px;
+  /* Anillo doble como en el mockup: separación del fondo + aro de acción. */
+  box-shadow: 0 0 0 3px var(--color-surface), 0 0 0 6px var(--color-primary);
 }
 
 .color-palette-picker__swatch--custom {

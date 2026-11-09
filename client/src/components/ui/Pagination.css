@@ -32,7 +32,7 @@
   min-height: var(--tap-target-min);
   padding: 0 var(--space-2);
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-full);
   background: transparent;
   color: var(--color-text);
   font-size: var(--font-size-sm);
@@ -41,13 +41,12 @@
 }
 
 .pagination__page-button:hover:not(:disabled) {
-  background-color: var(--color-surface-hover);
+  background-color: var(--color-tint);
 }
 
 .pagination__page-button[aria-current='page'] {
-  background-color: var(--color-primary);
-  border-color: var(--color-primary);
-  color: var(--color-text-on-primary);
+  background: var(--gradient-action) border-box;
+  color: var(--color-on-gradient);
   cursor: default;
 }
 

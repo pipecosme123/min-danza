@@ -37,6 +37,7 @@
   --font-family-base: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto,
     Helvetica, Arial, sans-serif;
   /* Base generosa (17px) a propósito: el público incluye personas mayores. */
+  --font-size-xs: 0.8125rem; /* 13px — solo insignias, siempre en negrita */
   --font-size-sm: 0.9375rem; /* 15px */
   --font-size-base: 1.0625rem; /* 17px */
   --font-size-lg: 1.25rem; /* 20px */

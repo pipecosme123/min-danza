@@ -16,13 +16,21 @@
 
 .field__control {
   min-height: var(--tap-target-min);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-4);
   font-size: var(--font-size-base);
   font-family: inherit;
   color: var(--color-text);
   background-color: var(--color-surface);
   border: 2px solid var(--color-border-input);
   border-radius: var(--radius-md);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+/* Foco como en el mockup: borde de acción + halo tintado (además del anillo
+   global de :focus-visible para teclado). */
+.field__control:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px var(--color-tint-strong);
 }
 
 textarea.field__control {

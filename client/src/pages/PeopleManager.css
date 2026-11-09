@@ -30,9 +30,7 @@
 }
 
 .people-manager__row-checkbox {
-  width: 20px;
-  height: 20px;
-  accent-color: var(--color-primary);
+  /* Aspecto común de casillas en global.css (24px, degradado al marcar). */
   cursor: pointer;
 }
 

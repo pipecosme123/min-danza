@@ -5,7 +5,7 @@
   gap: var(--space-3);
   padding: var(--space-4);
   border: 1px solid var(--color-danger);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background-color: rgb(200 30 60 / 0.08);
 }
 

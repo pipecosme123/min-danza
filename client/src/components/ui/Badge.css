@@ -1,40 +1,38 @@
+/* Píldoras compactas y en negrita, sin borde, sobre un fondo translúcido de su
+   color (estilo de los mockups de la propuesta A). El texto usa los tokens
+   `--color-*-text`, que mantienen AA sobre ese fondo en ambos temas. */
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: var(--space-1) var(--space-3);
+  padding: 0.1875rem var(--space-3);
   border-radius: var(--radius-full);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  border: 1px solid transparent;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.4;
   white-space: nowrap;
 }
 
 .badge--neutral {
   background-color: var(--color-bg-secondary);
   color: var(--color-text-secondary);
-  border-color: var(--color-border);
 }
 
 .badge--primary {
   background-color: var(--color-info-bg);
   color: var(--color-info-text);
-  border-color: var(--color-info-border);
 }
 
 .badge--success {
-  background-color: rgb(21 128 61 / 0.12);
+  background-color: rgb(21 128 61 / 0.13);
   color: var(--color-success-text);
-  border-color: currentColor;
 }
 
 .badge--danger {
   background-color: rgb(200 30 60 / 0.12);
   color: var(--color-danger-text);
-  border-color: currentColor;
 }
 
 .badge--warning {
-  background-color: rgb(180 83 9 / 0.14);
+  background-color: rgb(245 158 11 / 0.18);
   color: var(--color-warning-text);
-  border-color: currentColor;
 }

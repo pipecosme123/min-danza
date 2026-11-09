@@ -11,7 +11,7 @@
 .empty-state__title {
   margin: 0;
   font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-extrabold);
 }
 
 .empty-state__description {
