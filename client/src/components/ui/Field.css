@@ -11,7 +11,7 @@
 }
 
 .field__required {
-  color: var(--color-danger);
+  color: var(--color-danger-text);
 }
 
 .field__control {
@@ -49,5 +49,5 @@ textarea.field__control {
   margin: 0;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
-  color: var(--color-danger);
+  color: var(--color-danger-text);
 }

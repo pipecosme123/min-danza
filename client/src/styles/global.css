@@ -1,5 +1,11 @@
 @import './tokens.css';
 
+/* Plus Jakarta Sans autoalojada (sin depender de Google Fonts): solo los pesos que usa la app. */
+@import '@fontsource/plus-jakarta-sans/400.css';
+@import '@fontsource/plus-jakarta-sans/600.css';
+@import '@fontsource/plus-jakarta-sans/700.css';
+@import '@fontsource/plus-jakarta-sans/800.css';
+
 /* ---------------------------- Reset básico ---------------------------- */
 *,
 *::before,
@@ -20,6 +26,7 @@ body {
   line-height: var(--line-height-base);
   color: var(--color-text);
   background-color: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
   transition: background-color var(--transition-base), color var(--transition-base);
 }
 
@@ -31,6 +38,12 @@ h4 {
   line-height: var(--line-height-tight);
   font-weight: var(--font-weight-bold);
   margin: 0 0 var(--space-3) 0;
+}
+
+h1,
+h2 {
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: var(--letter-spacing-tight);
 }
 
 p {
@@ -51,10 +64,7 @@ svg {
 
 a {
   color: var(--color-primary);
-}
-
-[data-theme='dark'] a {
-  color: #93c5fd;
+  text-underline-offset: 0.15em;
 }
 
 button {

@@ -1,24 +1,41 @@
 /**
- * Tokens de diseño centralizados.
+ * Tokens de diseño centralizados — identidad «Propuesta A · Celebración»
+ * (Fase 10, ver docs/architecture/phase10-rediseno-propuesta-a-plan.md).
  *
  * Reglas:
  * - Ningún componente debe usar un color, tamaño de espaciado o radio
  *   "suelto" (hex directo, px sin escala). Todo pasa por una variable de
  *   aquí para que el tema claro/oscuro y cualquier ajuste futuro de escala
  *   sean consistentes en toda la app.
- * - Los colores de marca (primary/danger/success/warning) son intencionalmente
- *   los MISMOS en ambos temas: solo cambian fondo/superficie/texto/borde,
- *   que es lo que necesita invertirse entre claro y oscuro. Esto evita
- *   duplicar y desincronizar la paleta de acciones.
- * - Todos los pares texto/fondo listados fueron elegidos para cumplir al
- *   menos WCAG AA (contraste >= 4.5:1 en texto normal); los pares de texto
- *   principal sobre fondo superan AAA.
+ * - A diferencia del diseño anterior, los colores de acción SÍ cambian entre
+ *   temas: en oscuro, el magenta y el coral de la marca pasan a tonos más
+ *   luminosos (#ff8ad8, #ff6b81) para mantener el contraste sobre el fondo
+ *   ciruela. Por eso `--color-primary` sirve tanto de color de texto/enlace
+ *   como de fondo, siempre acompañado de `--color-primary-contrast` (blanco
+ *   en claro, tinta oscura en oscuro).
+ * - Los fondos con color de estado (insignias) usan los `--color-*-text`,
+ *   más oscuros en claro y más luminosos en oscuro que el color base, porque
+ *   el color base está pensado para fondos sólidos con texto blanco.
+ * - Todos los pares texto/fondo cumplen al menos WCAG AA (>= 4.5:1 en texto
+ *   normal); texto principal sobre fondo supera AAA. Bordes de campos de
+ *   formulario >= 3:1 contra la superficie (WCAG 1.4.11).
+ * - Degradados: `--gradient-brand` es el del ícono de la pandereta y su
+ *   extremo ámbar NO soporta texto blanco (2.15:1) — solo para superficies
+ *   decorativas o texto grande en negrita. Toda superficie con texto normal
+ *   encima (botón primario, pestaña activa, casilla marcada) usa
+ *   `--gradient-action`, que se mantiene >= 5:1 con blanco en todo su largo.
+ *
+ * Breakpoints de referencia (CSS no admite variables dentro de @media, así
+ * que son una convención, no tokens):
+ *   - teléfono:    < 768px
+ *   - tablet:      768px – 1023px
+ *   - escritorio:  >= 1024px
  */
 
 :root {
   /* ---- Tipografía ---- */
-  --font-family-base: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica,
-    Arial, sans-serif;
+  --font-family-base: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
   /* Base generosa (17px) a propósito: el público incluye personas mayores. */
   --font-size-sm: 0.9375rem; /* 15px */
   --font-size-base: 1.0625rem; /* 17px */
@@ -27,10 +44,12 @@
   --font-size-2xl: 1.875rem; /* 30px */
   --font-size-3xl: 2.25rem; /* 36px */
   --line-height-base: 1.55;
-  --line-height-tight: 1.25;
+  --line-height-tight: 1.2;
+  --letter-spacing-tight: -0.02em;
   --font-weight-regular: 400;
   --font-weight-medium: 600;
   --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
 
   /* ---- Espaciado (escala base 4px) ---- */
   --space-1: 0.25rem; /* 4px */
@@ -42,16 +61,12 @@
   --space-7: 3rem; /* 48px */
   --space-8: 4rem; /* 64px */
 
-  /* ---- Radios ---- */
-  --radius-sm: 0.375rem;
-  --radius-md: 0.625rem;
-  --radius-lg: 1rem;
+  /* ---- Radios (más generosos: tarjetas muy redondeadas de la propuesta A) ---- */
+  --radius-sm: 0.5rem; /* 8px */
+  --radius-md: 0.875rem; /* 14px — botones y campos */
+  --radius-lg: 1.375rem; /* 22px — tarjetas */
+  --radius-xl: 1.75rem; /* 28px — hojas inferiores y encabezados */
   --radius-full: 999px;
-
-  /* ---- Sombras (sutiles, mismas en ambos temas) ---- */
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.08);
-  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.14);
-  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.22);
 
   /* ---- Movimiento ---- */
   --transition-fast: 150ms ease;
@@ -60,15 +75,18 @@
   /* ---- Accesibilidad táctil ---- */
   --tap-target-min: 44px;
 
-  /* ---- Colores de marca / acción (constantes entre temas) ---- */
-  --color-primary: #1d4ed8;
-  --color-primary-hover: #1e40af;
-  --color-primary-active: #1e3a8a;
-  --color-primary-contrast: #ffffff;
+  /* ---- Marca (constantes entre temas) ---- */
+  --brand-magenta: #a3189b;
+  --brand-coral: #e2374f;
+  --brand-amber: #f59e0b;
+  --gradient-brand: linear-gradient(135deg, #a3189b 0%, #e2374f 55%, #f59e0b 100%);
+  --gradient-action: linear-gradient(135deg, #a3189b 0%, #c81e3c 55%, #c2410c 100%);
+  --color-on-gradient: #ffffff;
 
-  --color-danger: #b91c1c;
-  --color-danger-hover: #991b1b;
-  --color-danger-active: #7f1d1d;
+  /* ---- Botones sólidos de estado (fondo + texto blanco, constantes) ---- */
+  --color-danger: #c81e3c;
+  --color-danger-hover: #a8102c;
+  --color-danger-active: #8c0d24;
   --color-danger-contrast: #ffffff;
 
   --color-success: #15803d;
@@ -77,43 +95,87 @@
 
   --color-warning: #b45309;
   --color-warning-contrast: #ffffff;
-
-  --color-info-bg: #eff6ff;
-  --color-info-border: #93c5fd;
-  --color-info-text: #1e3a8a;
 }
 
 /* ---------------------------- Tema claro (por defecto) --------------------------- */
 :root,
 [data-theme='light'] {
-  --color-bg: #ffffff;
-  --color-bg-secondary: #f3f4f6;
+  --color-bg: #fff8f4;
+  --color-bg-secondary: #fbefea;
   --color-surface: #ffffff;
-  --color-surface-hover: #f3f4f6;
-  --color-border: #d1d5db;
-  --color-border-input: #6b7280;
-  --color-text: #111827;
-  --color-text-secondary: #4b5563;
+  --color-surface-hover: #fdf1f3;
+  --color-border: #f1dfe0;
+  --color-border-input: #8f7489;
+  --color-text: #2b1331;
+  --color-text-secondary: #7a5f74;
+  --color-overlay: rgb(43 19 49 / 0.45);
+
+  /* Acción principal: magenta. Texto/enlace sobre fondo (6.3:1) y fondo con blanco (6.6:1). */
+  --color-primary: #a3189b;
+  --color-primary-hover: #8a1484;
+  --color-primary-active: #6f106a;
+  --color-primary-contrast: #ffffff;
   --color-text-on-primary: #ffffff;
-  --color-focus-ring: #1d4ed8;
-  --color-overlay: rgb(15 17 21 / 0.5);
+  --color-focus-ring: #a3189b;
+
+  /* Acento coral apto para texto (el coral de marca #e2374f no alcanza AA como texto). */
+  --color-accent: #c81e3c;
+  /* Tinte suave para avatares, chips y fondos de selección. */
+  --color-tint: #fdeef1;
+  --color-tint-strong: #fbe0e7;
+
+  /* Texto de estado sobre su fondo translúcido (insignias). */
+  --color-success-text: #166534;
+  --color-danger-text: #a8102c;
+  --color-warning-text: #92400e;
+
+  --color-info-bg: #fbeaf4;
+  --color-info-border: #e9a6d3;
+  --color-info-text: #7d1276;
+
+  /* Sombras tintadas en magenta, como en el mockup. */
+  --shadow-sm: 0 2px 8px -4px rgb(120 30 80 / 0.22);
+  --shadow-md: 0 6px 20px -10px rgb(120 30 80 / 0.3);
+  --shadow-lg: 0 14px 34px -12px rgb(120 30 80 / 0.38);
+
+  color-scheme: light;
 }
 
 /* ---------------------------- Tema oscuro ---------------------------- */
 [data-theme='dark'] {
-  --color-bg: #0f1115;
-  --color-bg-secondary: #171a21;
-  --color-surface: #1c2029;
-  --color-surface-hover: #262b35;
-  --color-border: #3a3f4b;
-  --color-border-input: #8b93a1;
-  --color-text: #f3f4f6;
-  --color-text-secondary: #cbd2dc;
-  --color-text-on-primary: #ffffff;
-  --color-focus-ring: #93c5fd;
-  --color-overlay: rgb(0 0 0 / 0.65);
+  --color-bg: #170c1a;
+  --color-bg-secondary: #1e1122;
+  --color-surface: #241528;
+  --color-surface-hover: #2e1b33;
+  --color-border: #3a2540;
+  --color-border-input: #9a7d96;
+  --color-text: #f8ecf4;
+  --color-text-secondary: #b59aae;
+  --color-overlay: rgb(5 2 6 / 0.65);
 
-  --color-info-bg: #16233d;
-  --color-info-border: #3b5b8c;
-  --color-info-text: #bfdbfe;
+  /* Magenta luminoso: texto sobre fondo (8.9:1); como fondo lleva tinta oscura (8.4:1). */
+  --color-primary: #ff8ad8;
+  --color-primary-hover: #ffa6e2;
+  --color-primary-active: #ffc2ea;
+  --color-primary-contrast: #2b0a26;
+  --color-text-on-primary: #2b0a26;
+  --color-focus-ring: #ff8ad8;
+
+  --color-accent: #ff6b81;
+  --color-tint: rgb(255 107 129 / 0.14);
+  --color-tint-strong: rgb(255 107 129 / 0.24);
+
+  --color-success-text: #86efac;
+  --color-danger-text: #ff8b9c;
+  --color-warning-text: #fcd34d;
+
+  --color-info-bg: #2e1630;
+  --color-info-border: #6b2f63;
+  --color-info-text: #ffc2ea;
+
+  --shadow-sm: 0 2px 8px -4px rgb(0 0 0 / 0.6);
+  --shadow-md: 0 10px 26px -14px rgb(0 0 0 / 0.8);
+  --shadow-lg: 0 14px 34px -12px rgb(0 0 0 / 0.9);
+
+  color-scheme: dark;
 }

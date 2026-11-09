@@ -89,14 +89,6 @@
   font-size: var(--font-size-sm);
 }
 
-/* --color-primary es el mismo azul en los dos temas a propósito (ver
-   tokens.css), pero contra el fondo oscuro queda con muy poco contraste.
-   Mismo ajuste puntual que ya usa global.css para los <a> en tema oscuro. */
-[data-theme='dark'] .leader-report__back,
-[data-theme='dark'] .attendance-panel__back {
-  color: #93c5fd;
-}
-
 .leader-report__header {
   display: flex;
   flex-wrap: wrap;

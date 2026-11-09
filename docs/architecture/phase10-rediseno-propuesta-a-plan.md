@@ -1,6 +1,6 @@
 # Fase 10 — Rediseño web con la Propuesta A («Celebración»)
 
-> Estado: **plan, sin implementar**. Rama: `feature/rediseno-propuesta-a` (desde `develop`, 2026-11-08).
+> Estado: **Etapa 1 completa (2026-11-08)**; etapas 2–7 pendientes. Rama: `feature/rediseno-propuesta-a` (desde `develop`, 2026-11-08).
 > Referencia visual: `docs/mockups/app-movil/` — tableros `a-celebracion*.png` (pantallas 1–12, tema claro y
 > oscuro), pantallas sueltas en `pantallas/a-*.png` y la descripción completa en
 > `propuesta-a-celebracion-pantallas.pdf`.
@@ -97,6 +97,14 @@ Cada etapa termina con `npm test` y `npm run lint` en verde en `/client`, revisi
 - `styles/global.css`: fondo, tipografía, enlaces (magenta), foco.
 - `@fontsource/plus-jakarta-sans` importado en `main.jsx`.
 - **Resultado esperado:** toda la app ya «se siente» A sin haber tocado ninguna página.
+
+**Hecho (2026-11-08).** Además de lo previsto: `--color-primary` pasa a ser por tema (magenta `#a3189b` con
+blanco en claro; `#ff8ad8` con tinta `#2b0a26` en oscuro) y sirve tanto de texto como de fondo, lo que
+eliminó todos los parches `[data-theme='dark'] { color: #93c5fd }`; nuevos `--color-{success,danger,warning}-text`
+para texto de estado (insignias y mensajes de error, que en oscuro no alcanzaban AA con el color sólido);
+`--color-accent`, `--color-tint`, `--radius-xl`, `--font-weight-extrabold`, sombras por tema y
+`color-scheme`. En oscuro el botón primario queda rosa con texto oscuro hasta que la Etapa 2 le aplique
+`--gradient-action`.
 
 ### Etapa 2 — Componentes base (`components/ui`)
 - `Button`: primario con `--gradient-action`, secundario blanco/superficie, peligro; tamaños; estado

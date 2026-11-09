@@ -67,9 +67,6 @@
   color: var(--color-primary);
   border-color: transparent;
 }
-[data-theme='dark'] .btn--ghost {
-  color: #93c5fd;
-}
 .btn--ghost:hover:not(:disabled) {
   background-color: var(--color-surface-hover);
 }

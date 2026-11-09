@@ -39,8 +39,3 @@
   color: var(--color-primary);
   border-bottom-color: var(--color-primary);
 }
-
-[data-theme='dark'] .nav-tabs__link--active {
-  color: #93c5fd;
-  border-bottom-color: #93c5fd;
-}

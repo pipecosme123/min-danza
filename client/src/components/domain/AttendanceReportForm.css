@@ -128,7 +128,7 @@
   background: none;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  color: var(--color-danger);
+  color: var(--color-danger-text);
   padding: var(--space-1) var(--space-2);
   cursor: pointer;
   min-height: var(--tap-target-min);
@@ -154,6 +154,6 @@
 .attendance-form__problems {
   list-style: disc;
   padding-left: var(--space-5);
-  color: var(--color-danger);
+  color: var(--color-danger-text);
   font-size: var(--font-size-sm);
 }
