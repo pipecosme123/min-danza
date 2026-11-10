@@ -15,6 +15,16 @@
   border-left-color: var(--color-primary);
 }
 
+.team-card--highlight {
+  border-color: var(--color-tint-strong);
+  border-left-color: var(--color-primary);
+  box-shadow: var(--shadow-md);
+}
+
+.team-card__highlight {
+  margin-bottom: var(--space-2);
+}
+
 .team-card__header {
   display: flex;
   align-items: baseline;

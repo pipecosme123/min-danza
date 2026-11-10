@@ -9,6 +9,28 @@
   box-shadow: var(--shadow-sm);
 }
 
+.slot-card {
+  position: relative;
+}
+
+/* Turno propio (página pública, persona elegida): fondo tintado y etiqueta «Tú». */
+.slot-card--mine {
+  background-color: var(--color-tint);
+  border-color: var(--color-tint-strong);
+}
+
+.slot-card__mine {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  padding: 0.1875rem var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--gradient-action);
+  color: var(--color-on-gradient);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+}
+
 .slot-card__header {
   display: flex;
   align-items: baseline;
@@ -55,4 +77,8 @@
   margin: 0;
   color: var(--color-text-secondary);
   font-style: italic;
+}
+
+.slot-card--mine .slot-card__teams {
+  padding-right: 3rem;
 }

@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useLeaderAuth } from '../../context/LeaderAuthContext.jsx';
 import { AppHeader } from '../../components/Layout/AppHeader.jsx';
+import { PublicTabBar } from '../../components/Layout/PublicTabBar.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import './leader.css';
 
@@ -20,7 +21,7 @@ export function LeaderLayout() {
   }
 
   return (
-    <div className="admin-layout">
+    <div className="admin-layout has-public-tab-bar">
       <a href="#main-content" className="skip-link">
         Saltar al contenido principal
       </a>
@@ -39,6 +40,8 @@ export function LeaderLayout() {
       <main id="main-content" className="container page-section">
         <Outlet />
       </main>
+
+      <PublicTabBar active="lider" />
     </div>
   );
 }

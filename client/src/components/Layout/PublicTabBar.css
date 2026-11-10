@@ -1,0 +1,67 @@
+/* Barra flotante inferior de la parte pública: misma forma que la del
+   administrador (AdminNav.css) en el teléfono. Desde 768px no existe. */
+.public-tab-bar {
+  position: fixed;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: calc(var(--space-3) + env(safe-area-inset-bottom));
+  z-index: 50;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+}
+
+.public-tab-bar__list {
+  list-style: none;
+  display: flex;
+  padding: var(--space-1);
+}
+
+.public-tab-bar__list > li {
+  flex: 1;
+  min-width: 0;
+}
+
+.public-tab-bar__link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 60px;
+  padding: var(--space-1);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+}
+
+.public-tab-bar__link:hover {
+  color: var(--color-text);
+}
+
+.public-tab-bar__link--active {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+.public-tab-bar__link--active .nav-icon {
+  background-color: var(--color-tint);
+}
+
+/* Contenido de las páginas que llevan la barra: espacio para que no tape el final. */
+.has-public-tab-bar {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 768px) {
+  .public-tab-bar {
+    display: none;
+  }
+
+  .has-public-tab-bar {
+    padding-bottom: 0;
+  }
+}

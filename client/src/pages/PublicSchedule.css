@@ -1,10 +1,25 @@
+/* ---------------------------------------------------------------------------
+   Página pública (propuesta A, Fase 10 etapa 4).
+   Teléfono (< 768px): una vista a la vez según `data-vista` del <main>; cada
+   panel declara en `data-views` en qué vistas aparece. Desde 768px se ve todo.
+   --------------------------------------------------------------------------- */
+
+@media (max-width: 767px) {
+  .public-schedule[data-vista='inicio'] .public-schedule__panel:not([data-views~='inicio']),
+  .public-schedule[data-vista='horario'] .public-schedule__panel:not([data-views~='horario']),
+  .public-schedule[data-vista='equipos'] .public-schedule__panel:not([data-views~='equipos']) {
+    display: none;
+  }
+}
+
+/* ---- Mes ---- */
 .public-schedule__month-header {
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-5);
 }
 
 .public-schedule__month-title {
   margin: 0;
-  font-size: var(--font-size-2xl);
+  font-size: var(--font-size-3xl);
 }
 
 .public-schedule__published-at {
@@ -13,41 +28,293 @@
   font-size: var(--font-size-sm);
 }
 
-.public-schedule__month-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
+.public-schedule__month-header .field {
+  margin-top: var(--space-4);
+  margin-bottom: 0;
+  max-width: 360px;
 }
 
-.public-schedule__verses {
+/* Mes actual / siguiente como control segmentado (píldora), como en el mockup. */
+.public-schedule__month-tabs {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-1);
+  margin-top: var(--space-4);
+  padding: var(--space-1);
+  max-width: 420px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-bg-secondary);
+}
+
+.public-schedule__month-tabs .btn {
+  flex: 1;
+  border-radius: var(--radius-full);
+}
+
+.public-schedule__month-tabs .btn--secondary {
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--color-text-secondary);
+}
+
+/* ---- Inicio: próximo servicio, versículo y semana ---- */
+.public-schedule__home {
+  display: grid;
+  gap: var(--space-4);
   margin-bottom: var(--space-6);
 }
 
-.public-schedule__verse {
+@media (min-width: 768px) {
+  .public-schedule__home--with-verse {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .public-schedule__week {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Tarjeta destacada: degradado de acción (texto blanco >= 5:1 en todo el largo). */
+.public-schedule__next {
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--gradient-action);
+  color: var(--color-on-gradient);
+  box-shadow: 0 14px 30px -16px rgb(200 30 60 / 0.7);
+}
+
+.public-schedule__next-label {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.public-schedule__next-text {
+  margin: 0 0 var(--space-4);
+}
+
+.public-schedule__next-when {
+  display: inline-block;
+  margin: 0 0 var(--space-2);
+  padding: 0.125rem var(--space-3);
+  border-radius: var(--radius-full);
+  background-color: rgb(0 0 0 / 0.18);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.public-schedule__next-day {
   margin: 0;
-  padding: var(--space-4) var(--space-5);
-  background-color: var(--color-bg-secondary);
-  border-left: 4px solid var(--color-primary);
-  border-radius: var(--radius-sm);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-extrabold);
+  line-height: var(--line-height-tight);
+}
+
+.public-schedule__next-time {
+  margin: var(--space-1) 0 0;
+  font-weight: var(--font-weight-medium);
+}
+
+.public-schedule__next-chips {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-4) 0;
+}
+
+.public-schedule__next-chips > li {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background-color: rgb(0 0 0 / 0.18);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+/* El nombre del uniforme va en blanco sobre el chip, con su punto de color. */
+.public-schedule__next-chips .uniform-badge {
+  color: inherit;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-weight: inherit;
+}
+
+.public-schedule__next-action,
+.public-schedule__next-forget {
+  min-height: var(--tap-target-min);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+}
+
+.public-schedule__next-action {
+  border: 0;
+  background-color: var(--color-on-gradient);
+  color: var(--brand-magenta);
+}
+
+.public-schedule__next-forget {
+  padding-inline: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.public-schedule__next :focus-visible {
+  outline-color: var(--color-on-gradient);
+}
+
+/* Versículo: tarjeta de superficie con comilla decorativa. */
+.public-schedule__verses {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.public-schedule__verses::before {
+  content: '“';
+  position: absolute;
+  top: -0.35em;
+  right: var(--space-3);
+  font-size: 7rem;
+  font-weight: var(--font-weight-extrabold);
+  line-height: 1;
+  color: var(--color-tint-strong);
+  pointer-events: none;
+}
+
+.public-schedule__verses-label {
+  position: relative;
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.public-schedule__verse {
+  position: relative;
+  margin: 0;
 }
 
 .public-schedule__verse-text {
   margin: 0 0 var(--space-2);
   font-size: var(--font-size-lg);
-  font-style: italic;
   color: var(--color-text);
 }
 
 .public-schedule__verse-reference {
   font-style: normal;
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-bold);
   color: var(--color-text-secondary);
 }
 
+/* Esta semana */
+.public-schedule__week-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.public-schedule__week-more {
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+}
+
+.public-schedule__week-list {
+  list-style: none;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.public-schedule__week-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.public-schedule__week-item:last-child {
+  border-bottom: 0;
+}
+
+.public-schedule__week-item--mine {
+  margin-inline: calc(-1 * var(--space-2));
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-md);
+  background-color: var(--color-tint);
+}
+
+.public-schedule__week-date {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 52px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-tint);
+  color: var(--color-accent);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.public-schedule__week-date b {
+  display: block;
+  font-size: var(--font-size-lg);
+  color: var(--color-primary);
+}
+
+.public-schedule__week-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.public-schedule__week-title {
+  font-weight: var(--font-weight-bold);
+}
+
+.public-schedule__week-sub {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.public-schedule__week-mine {
+  flex: none;
+  padding: 0.1875rem var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--gradient-action);
+  color: var(--color-on-gradient);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+}
+
+/* ---- Buscador de persona ---- */
 .public-schedule__filter {
   display: flex;
   flex-wrap: wrap;
@@ -61,6 +328,7 @@
   margin-bottom: 0;
 }
 
+/* ---- Equipos y horario ---- */
 .public-schedule__view-toggle {
   display: flex;
   flex-wrap: wrap;
@@ -75,6 +343,7 @@
 .public-schedule__section-title {
   margin: 0 0 var(--space-4);
   font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-extrabold);
 }
 
 .public-schedule__teams-grid {

@@ -1,4 +1,5 @@
 import { MemberList } from './MemberList.jsx';
+import { Badge } from '../ui/Badge.jsx';
 import './TeamCard.css';
 
 /**
@@ -11,11 +12,21 @@ import './TeamCard.css';
  *   actions?: React.ReactNode,
  *   className?: string,
  *   onlyShowLeaderRole?: boolean,
+ *   highlightLabel?: string,
  * }} props
+ *
+ * `highlightLabel`: resalta la tarjeta con una etiqueta (ej. «Tu equipo» en
+ * la página pública para la persona elegida).
  */
-export function TeamCard({ team, actions, className = '', onlyShowLeaderRole = false }) {
+export function TeamCard({ team, actions, className = '', onlyShowLeaderRole = false, highlightLabel }) {
+  const classes = ['team-card', highlightLabel ? 'team-card--highlight' : '', className].filter(Boolean).join(' ');
   return (
-    <article className={`team-card${className ? ` ${className}` : ''}`}>
+    <article className={classes}>
+      {highlightLabel ? (
+        <div className="team-card__highlight">
+          <Badge variant="primary">{highlightLabel}</Badge>
+        </div>
+      ) : null}
       <header className="team-card__header">
         <h3 className="team-card__title">{team.label}</h3>
         <span className="team-card__count">

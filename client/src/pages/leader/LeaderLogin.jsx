@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useLeaderAuth } from '../../context/LeaderAuthContext.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { AppHeader } from '../../components/Layout/AppHeader.jsx';
+import { PublicTabBar } from '../../components/Layout/PublicTabBar.jsx';
 import { Field } from '../../components/ui/Field.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { ErrorMessage } from '../../components/ui/ErrorMessage.jsx';
@@ -34,7 +35,7 @@ export function LeaderLogin() {
   }
 
   return (
-    <div>
+    <div className="has-public-tab-bar">
       <a href="#main-content" className="skip-link">
         Saltar al contenido principal
       </a>
@@ -79,6 +80,7 @@ export function LeaderLogin() {
           </Button>
         </form>
       </main>
+      <PublicTabBar active="lider" />
     </div>
   );
 }

@@ -24,14 +24,19 @@ const SLOT_TYPE_LABELS = {
  *     teams: Array<{ id: string, label: string }>,
  *     cancelledAt?: string | null,
  *   },
+ *   isMine?: boolean,
  * }} props
+ *
+ * `isMine`: el turno es de la persona que el visitante eligió como «soy yo»
+ * en la página pública — se resalta y lleva la etiqueta «Tú».
  */
-export function SlotCard({ slot }) {
+export function SlotCard({ slot, isMine = false }) {
   const isCancelled = Boolean(slot.cancelledAt);
   const eventGroup = getSlotEventGroup(slot);
 
   return (
-    <article className="slot-card">
+    <article className={`slot-card${isMine && !isCancelled ? ' slot-card--mine' : ''}`}>
+      {isMine && !isCancelled ? <span className="slot-card__mine">Tú</span> : null}
       {/* 1º: equipo — la fecha ya la dice el subtítulo del grupo en CalendarGrid, no hace falta repetirla acá. */}
       <div className="slot-card__teams">
         {isCancelled ? (

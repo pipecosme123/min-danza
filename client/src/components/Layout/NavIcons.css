@@ -1,0 +1,9 @@
+/* Ícono de navegación: en las barras inferiores lleva una píldora de fondo
+   cuando su pestaña está activa (ver AdminNav.css / PublicTabBar.css). */
+.nav-icon {
+  flex-shrink: 0;
+  box-sizing: content-box;
+  padding: 3px 14px;
+  border-radius: var(--radius-full);
+  transition: background-color var(--transition-fast);
+}

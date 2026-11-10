@@ -1,6 +1,6 @@
 # Fase 10 — Rediseño web con la Propuesta A («Celebración»)
 
-> Estado: **Etapas 1 a 3 completas (2026-11-09)**; etapas 4–7 pendientes. Rama: `feature/rediseno-propuesta-a` (desde `develop`, 2026-11-08).
+> Estado: **Etapas 1 a 4 completas (2026-11-09)**; etapas 5–7 pendientes. Rama: `feature/rediseno-propuesta-a` (desde `develop`, 2026-11-08).
 > Referencia visual: `docs/mockups/app-movil/` — tableros `a-celebracion*.png` (pantallas 1–12, tema claro y
 > oscuro), pantallas sueltas en `pantallas/a-*.png` y la descripción completa en
 > `propuesta-a-celebracion-pantallas.pdf`.
@@ -162,6 +162,34 @@ Etapa 4, porque dependen de la decisión pendiente §9.1 sobre pestañas en la p
 - **Equipos:** «Tu equipo» destacado, demás equipos y Servicio de jóvenes.
 - **Reglas que no cambian:** solo se distingue «Líder» (sin Apoyo/Ministro), nunca «Adulto mayor», nunca el
   balance; selector «Ver otro mes» solo para meses pasados.
+
+**Hecho (2026-11-09).** Decisiones confirmadas por el usuario: §9.1 pestañas en el teléfono y §9.2 recordar
+el nombre. Implementación:
+- `PublicSchedule.jsx` sigue siendo **una sola ruta** (`/`) que carga lo mismo que antes; la vista sale de
+  `?vista=inicio|horario|equipos` (cualquier otro valor cae en Inicio) y se refleja en `data-vista` del
+  `<main>`. Cada bloque declara en `data-views` en qué vistas aparece y el CSS oculta el resto **solo por
+  debajo de 768 px**; en pantallas grandes se ve todo como antes. Por eso las pruebas existentes (que ven el
+  DOM completo) siguieron pasando sin cambios.
+- Barra `PublicTabBar` (Inicio · Horario · Equipos · Líder), solo en el teléfono; también en el login y el
+  layout del portal de líderes, con «Líder» activa. «Líder» apunta a `/lider` (redirige al login si hace
+  falta).
+- **Persona recordada** (`hooks/useRememberedPerson.js`, clave `app_public_person_id`, solo el id de
+  `Person`, con `try/catch`): se guarda al elegir a alguien en «Buscar mi equipo». Es independiente del
+  filtro, que se sigue limpiando al cambiar de mes. «No soy …» la olvida.
+- **Tu próximo servicio** (tarjeta con `--gradient-action`): el próximo turno no cancelado de los equipos de
+  la persona que todavía no empezó, con «Hoy / Mañana / En N días», fecha, hora, título, equipos y
+  uniforme. Sin persona: invita a elegirla y lleva al buscador. Si la persona no está en el mes mostrado o
+  ya no le quedan turnos, lo dice.
+- **Esta semana**: hasta 4 turnos no cancelados de hoy a 7 días, con «Tú» en los propios. Los turnos del
+  horario (`SlotCard isMine`) y la tarjeta del equipo (`TeamCard highlightLabel="Tu equipo"`) también se
+  marcan.
+- Cálculos en `utils/myServices.js` contra el reloj del navegador. Pruebas nuevas: `myServices.test.js` (5) y
+  `PublicScheduleMyServices.test.jsx` (7).
+- Desviación: el inicio no usa un «hero» con degradado propio. El encabezado ya lleva el degradado y la
+  tarjeta del próximo servicio es el bloque destacado, para cumplir la regla de §2.5 (un solo bloque con
+  degradado por pantalla).
+- Hallazgo, fuera del alcance de esta fase (es backend): `GET /api/schedule/*` devuelve `isAdultoMayor` de
+  cada integrante. La página pública no lo muestra, pero el dato viaja en la respuesta pública.
 
 ### Etapa 5 — Portal del líder (pantallas 4–8)
 - **Login** (5) con fondo degradado y tarjeta; **cambio de contraseña** con el mismo estilo.

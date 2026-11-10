@@ -1,3 +1,5 @@
+import './NavIcons.css';
+
 /**
  * Íconos de línea para la navegación (SVG en línea, sin dependencias).
  * Siempre decorativos: el texto de cada enlace es el que da el nombre
@@ -20,6 +22,24 @@ function Icon({ children }) {
     >
       {children}
     </svg>
+  );
+}
+
+export function HomeIcon() {
+  return (
+    <Icon>
+      <path d="M3.5 10.5 12 3.5l8.5 7" />
+      <path d="M5.5 9v10.5a1 1 0 0 0 1 1H10v-6h4v6h3.5a1 1 0 0 0 1-1V9" />
+    </Icon>
+  );
+}
+
+export function LeaderIcon() {
+  return (
+    <Icon>
+      <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z" />
+      <path d="m13.5 6.5 4 4" />
+    </Icon>
   );
 }
 

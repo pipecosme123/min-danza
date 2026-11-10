@@ -67,14 +67,6 @@
   background-color: var(--color-tint);
 }
 
-.nav-icon {
-  flex-shrink: 0;
-  box-sizing: content-box;
-  padding: 3px 14px;
-  border-radius: var(--radius-full);
-  transition: background-color var(--transition-fast);
-}
-
 .admin-nav__label {
   max-width: 100%;
   overflow: hidden;
