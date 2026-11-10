@@ -486,8 +486,10 @@ export function PeopleManager() {
       header: 'Categoría',
       render: (row) => (
         <div className="people-manager__category-cell">
-          <Badge variant="primary">{CATEGORY_LABELS[row.category] || row.category}</Badge>
-          {row.isJoven ? <Badge variant="success">Joven</Badge> : null}
+          <Badge variant={row.category === 'MINISTRO' ? 'accent' : 'primary'}>
+            {CATEGORY_LABELS[row.category] || row.category}
+          </Badge>
+          {row.isJoven ? <Badge variant="info">Joven</Badge> : null}
           {row.isAdultoMayor ? <Badge variant="warning">Adulto mayor</Badge> : null}
         </div>
       ),

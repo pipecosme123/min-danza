@@ -25,9 +25,10 @@
 
 .event-groups__card {
   padding: var(--space-4);
-  background-color: var(--color-bg-secondary);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-md);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
 }
 
 .event-groups__card-header {

@@ -133,6 +133,10 @@
   --color-danger-text: #a8102c;
   --color-warning-text: #92400e;
 
+  /* Celeste para «Joven» (#075985 sobre #e0f2fe: 7.0:1). */
+  --color-sky-bg: #e0f2fe;
+  --color-sky-text: #075985;
+
   --color-info-bg: #fbeaf4;
   --color-info-border: #e9a6d3;
   --color-info-text: #7d1276;
@@ -175,6 +179,9 @@
   --color-success-text: #86efac;
   --color-danger-text: #ff8b9c;
   --color-warning-text: #fcd34d;
+
+  --color-sky-bg: rgb(56 189 248 / 0.16);
+  --color-sky-text: #7dd3fc;
 
   --color-info-bg: #2e1630;
   --color-info-border: #6b2f63;

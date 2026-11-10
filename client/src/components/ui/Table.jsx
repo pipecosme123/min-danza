@@ -6,6 +6,11 @@ import './Table.css';
  * `columns`, nunca conoce el dominio: así una misma `Table` sirve para
  * personas, equipos o eventos sin reescribirse (principio Open/Closed).
  *
+ * En el teléfono (< 768px) cada fila se muestra como una tarjeta: el
+ * encabezado de cada columna pasa a ser la etiqueta de su celda
+ * (`data-label`, ver Table.css). El <thead> sigue en el DOM para lectores de
+ * pantalla.
+ *
  * @param {{
  *   columns: Array<{ key: string, header: string, render?: (row: any, index: number) => React.ReactNode }>,
  *   data: Array<any>,
@@ -39,7 +44,9 @@ export function Table({ columns, data, getRowKey = (row, index) => row.id ?? ind
             data.map((row, index) => (
               <tr key={getRowKey(row, index)}>
                 {columns.map((column) => (
-                  <td key={column.key}>{column.render ? column.render(row, index) : row[column.key]}</td>
+                  <td key={column.key} data-label={typeof column.header === 'string' ? column.header : undefined}>
+                    {column.render ? column.render(row, index) : row[column.key]}
+                  </td>
                 ))}
               </tr>
             ))

@@ -1,8 +1,9 @@
 .balance-summary {
-  padding: var(--space-4);
+  padding: var(--space-4) var(--space-5);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background-color: var(--color-surface);
+  box-shadow: var(--shadow-md);
 }
 
 .balance-summary__header {
@@ -17,6 +18,7 @@
 .balance-summary__title {
   margin: 0;
   font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-extrabold);
 }
 
 .balance-summary__list {
@@ -40,14 +42,14 @@
 .balance-summary__bar-track {
   height: 12px;
   border-radius: var(--radius-full);
-  background-color: var(--color-bg-secondary);
+  background-color: var(--color-tint);
   overflow: hidden;
 }
 
 .balance-summary__bar-fill {
   display: block;
   height: 100%;
-  background-color: var(--color-primary);
+  background: var(--gradient-action);
   border-radius: var(--radius-full);
 }
 

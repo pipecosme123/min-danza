@@ -1,6 +1,6 @@
 # Fase 10 — Rediseño web con la Propuesta A («Celebración»)
 
-> Estado: **Etapas 1 a 5 completas (2026-11-09)**; etapas 6 y 7 pendientes. Rama: `feature/rediseno-propuesta-a` (desde `develop`, 2026-11-08).
+> Estado: **Etapas 1 a 6 completas (2026-11-09)**; etapa 7 pendiente. Rama: `feature/rediseno-propuesta-a` (desde `develop`, 2026-11-08).
 > Referencia visual: `docs/mockups/app-movil/` — tableros `a-celebracion*.png` (pantallas 1–12, tema claro y
 > oscuro), pantallas sueltas en `pantallas/a-*.png` y la descripción completa en
 > `propuesta-a-celebracion-pantallas.pdf`.
@@ -236,6 +236,24 @@ todas las etapas restantes): botones grandes de un toque.
 - **Uniformes** (12): grilla con muestra de color e interruptor, alta/edición en hoja inferior con
   `ColorPalettePicker`.
 - **Asistencia, Accesos, login admin:** sin mockup; mismos componentes y patrones.
+
+**Hecho (2026-11-09).** Enfoque: casi todo por CSS y componentes compartidos, para no reescribir pantallas
+que ya funcionan ni romper sus pruebas.
+- `Table`: en el teléfono cada fila es una tarjeta y cada celda muestra su encabezado como etiqueta
+  (`data-label`, el `<thead>` queda solo para lectores de pantalla); la columna «#» se oculta ahí. Mejora de
+  una vez Personas y Uniformes; Asistencia y Accesos (que usan su propia `<table className="table">`) quedan
+  como tarjetas sin etiquetas, alineadas a la izquierda.
+- Paneles (filtros de Personas y Uniformes, barras de acciones de Equipos y Horario, Congresos, Versículo
+  del mes) pasan del fondo secundario plano a tarjetas de superficie con sombra. Filtros de Personas en dos
+  columnas desde 480 px.
+- `Badge` gana `info` (celeste, «Joven») y `accent` (coral, «Ministro»), como en el mockup; nuevos tokens
+  `--color-sky-bg/--color-sky-text`.
+- Balance de participaciones con barras en `--gradient-action` sobre riel tintado.
+- Desviación: no se rehicieron como en el mockup la tira de selección en lote flotante de Personas, el
+  aviso fijo «Falta para publicar» ni la grilla de uniformes con interruptores. Las tres funciones ya
+  existen con su interfaz actual (barra de selección, botón «Finalizar mes» deshabilitado con el motivo,
+  tabla con «Editar»); cambiarlas implica reestructurar pantallas con muchas pruebas y queda como mejora
+  posible, no como parte de esta etapa.
 
 ### Etapa 7 — PWA y cierre
 - `public/manifest.webmanifest`: `theme_color` / `background_color` de A (`#fff8f4`).

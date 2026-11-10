@@ -48,3 +48,101 @@
 .table__empty-cell {
   white-space: normal;
 }
+
+/* ---- Teléfono: filas como tarjetas (propuesta A) ---- */
+@media (max-width: 767px) {
+  .table-wrapper {
+    overflow: visible;
+    border: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+    width: 100%;
+  }
+
+  .table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .table__caption {
+    display: block;
+    padding: 0 0 var(--space-2);
+  }
+
+  .table tbody tr {
+    margin-bottom: var(--space-3);
+    padding: var(--space-2) var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background-color: var(--color-surface);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .table tbody tr:hover td {
+    background-color: transparent;
+  }
+
+  .table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--color-border);
+    white-space: normal;
+    text-align: right;
+  }
+
+  .table tbody tr td:last-child {
+    border-bottom: 0;
+  }
+
+  .table td[data-label]::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+    text-align: left;
+  }
+
+  .table td > * {
+    justify-content: flex-end;
+  }
+
+  /* El número de fila no aporta nada dentro de una tarjeta. */
+  .table td[data-label='#'] {
+    display: none;
+  }
+
+  /* Celdas sin encabezado (ej. el turno en Asistencia): van a la izquierda,
+     como título de la tarjeta. */
+  .table td:not([data-label]),
+  .table td[data-label=''] {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .table td:not([data-label]) > *,
+  .table td[data-label=''] > * {
+    justify-content: flex-start;
+  }
+
+  .table__empty-cell {
+    display: block;
+    text-align: center;
+  }
+}
