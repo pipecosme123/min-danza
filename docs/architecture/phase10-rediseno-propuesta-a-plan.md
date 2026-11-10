@@ -1,6 +1,6 @@
 # Fase 10 — Rediseño web con la Propuesta A («Celebración»)
 
-> Estado: **Etapas 1 a 6 completas (2026-11-09)**; etapa 7 pendiente. Rama: `feature/rediseno-propuesta-a` (desde `develop`, 2026-11-08).
+> Estado: **Completo (2026-11-09)**: las 7 etapas están hechas. Rama: `feature/rediseno-propuesta-a` (desde `develop`, 2026-11-08).
 > Referencia visual: `docs/mockups/app-movil/` — tableros `a-celebracion*.png` (pantallas 1–12, tema claro y
 > oscuro), pantallas sueltas en `pantallas/a-*.png` y la descripción completa en
 > `propuesta-a-celebracion-pantallas.pdf`.
@@ -263,6 +263,12 @@ que ya funcionan ni romper sus pruebas.
   íconos y no lo usa la app: se elimina, el bueno es `public/manifest.webmanifest`.
 - Actualizar `CLAUDE.md`, `README.md` y `docs/architecture/css-framework-comparison.md` (se mantiene CSS
   plano con tokens, sin framework).
+
+**Hecho (2026-11-09).** `manifest.webmanifest` con `background_color` `#fff8f4` y `theme_color`
+`#a3189b`; `<meta name="theme-color">` magenta en claro y `#6d1166` (inicio del degradado oscuro del
+encabezado) en oscuro. Borrado `client/src/assets/site.webmanifest` (nunca se versionó). Actualizados
+`CLAUDE.md`, `README.md` y `css-framework-comparison.md` (se mantiene CSS plano con tokens). Service worker
+y modo sin conexión siguen fuera de alcance (§1).
 
 ## 5. Archivos principales que se tocan
 

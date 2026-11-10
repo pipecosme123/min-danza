@@ -5,6 +5,11 @@
 **Autor:** rol arquitecto. Perspectiva de sistema/mantenimiento; la validación de usabilidad concreta la aporta `frontend-developer`.
 **Alcance:** decidir si `/client` migra de CSS plano + tokens a Bootstrap 5, Tailwind CSS o Material UI (MUI). Incluye la cuarta opción: **no migrar**.
 
+> **Nota 2026-11-09 (Fase 10):** el rediseño completo con la propuesta A («Celebración») se hizo sobre
+> este mismo enfoque de CSS plano + tokens, sin agregar ningún framework. La única dependencia nueva fue
+> la tipografía autoalojada (`@fontsource/plus-jakarta-sans`). Ver
+> `docs/architecture/phase10-rediseno-propuesta-a-plan.md`.
+
 ---
 
 ## 0. TL;DR

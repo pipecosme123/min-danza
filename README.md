@@ -87,12 +87,16 @@ documentación:
 - **Frontend**: routing completo (`/`, `/admin/login`, `/admin/personas`, `/admin/equipos`,
   `/admin/eventos`, `/admin/uniformes`, `/admin/asistencia`, `/admin/accesos`, y el portal de
   líderes `/lider/login` + `/lider` + `/lider/reportes/:id`), login funcional contra el
-  backend, sesión persistida en `localStorage`, tema claro/oscuro real. Todas las pantallas
+  backend, sesión persistida en `localStorage`, tema claro/oscuro real, con la identidad visual
+  «Celebración» (Fase 10: degradado de la pandereta, Plus Jakarta Sans autoalojada, diseño
+  mobile-first con barra de pestañas inferior en el teléfono y menú lateral del admin en
+  escritorio; detalle en `docs/architecture/phase10-rediseno-propuesta-a-plan.md`). Todas las pantallas
   administrativas son funcionales de punta a punta contra el backend real (`PeopleManager`,
   `TeamGenerator`, `EventsManager` con vista de lista y de calendario mensual,
   `UniformsManager`, `AttendanceManager`, `LeaderAccountsManager`). La página pública
   (`PublicSchedule.jsx`, en `/`) muestra el mes finalizado más reciente, con un filtro por
-  persona.
+  persona; en el teléfono se divide en Inicio · Horario · Equipos (`?vista=`) y recuerda en el
+  navegador a la persona elegida para mostrarle «Tu próximo servicio».
 - **Portal de líderes** (Fase 9): cada líder de equipo recibe una cuenta al finalizar el mes
   y registra en `/lider/*` la asistencia de su equipo por servicio (asistencias,
   inasistencias con/sin excusa, remplazos, cambios, apoyos, novedades), en borrador y luego
