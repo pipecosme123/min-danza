@@ -57,7 +57,7 @@ export function LeaderChangePassword() {
         </p>
       </header>
 
-      <form onSubmit={handleSubmit} noValidate>
+      <form onSubmit={handleSubmit} noValidate className="leader-auth-card">
         <Field
           label="Contraseña actual"
           type="password"

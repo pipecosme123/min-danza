@@ -103,7 +103,10 @@ export function LeaderServices() {
                 const action = actionFor(svc.report);
                 const canAct = svc.window.state === 'ABIERTA' || action.kind === 'open';
                 return (
-                  <li key={key} className="leader-service-card">
+                  <li
+                    key={key}
+                    className={`leader-service-card leader-service-card--${svc.window.state.toLowerCase()}`}
+                  >
                     <div className="leader-service-card__main">
                       <p className="leader-service-card__title">{svc.slot.label}</p>
                       <p className="leader-service-card__when">{formatSlotWhen(svc.slot)}</p>

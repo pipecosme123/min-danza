@@ -42,6 +42,8 @@ export function LeaderReportEditor() {
   const [busyAction, setBusyAction] = useState(null);
   // Contenido actual del formulario (sin guardar), ver handleSubmit.
   const draftRef = useRef(null);
+  // Vista previa del texto de WhatsApp de un reporte enviado (propuesta A, pantalla 8).
+  const [whatsappPreview, setWhatsappPreview] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,6 +69,27 @@ export function LeaderReportEditor() {
   useEffect(() => {
     document.title = 'Reporte de asistencia — Portal de líderes';
   }, []);
+
+  // Sólo un reporte enviado tiene texto para compartir. Si falla, la vista
+  // previa simplemente no se muestra: compartir sigue funcionando aparte.
+  const reportStatus = report?.report?.status;
+  useEffect(() => {
+    if (reportStatus !== 'SUBMITTED') {
+      setWhatsappPreview(null);
+      return undefined;
+    }
+    let cancelled = false;
+    Promise.resolve(getLeaderWhatsappText(reportId))
+      .then((result) => {
+        if (!cancelled) setWhatsappPreview(result?.text ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setWhatsappPreview(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reportId, reportStatus]);
 
   async function handleSave(body) {
     setSaving(true);
@@ -181,6 +204,29 @@ export function LeaderReportEditor() {
         </div>
       </header>
 
+      {meta.status === 'SUBMITTED' ? (
+        <section className="leader-report__sent" aria-labelledby="leader-report-sent-title">
+          <span className="leader-report__sent-icon" aria-hidden="true">
+            ✓
+          </span>
+          <div>
+            <h2 id="leader-report-sent-title" className="leader-report__sent-title">
+              ¡Reporte enviado!
+            </h2>
+            <p className="leader-report__sent-text">
+              El administrador ya puede verlo.
+              {permissions.canReopen ? ' Mientras la ventana siga abierta podés volverlo a borrador para corregirlo.' : ''}
+            </p>
+          </div>
+          {whatsappPreview ? (
+            <div className="leader-report__wa">
+              <p className="leader-report__wa-label">Vista previa · WhatsApp</p>
+              <pre className="leader-report__wa-bubble">{whatsappPreview}</pre>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       {windowClosed ? (
         <p className="leader-report__closed-notice" role="status">
           La ventana de registro ya se cerró. No podés modificar este reporte; si necesitás corregir
@@ -201,7 +247,7 @@ export function LeaderReportEditor() {
         }}
       />
 
-      <div className="leader-report__footer-actions">
+      <div className="leader-report__footer-actions leader-report__footer-actions--sticky">
         {permissions.canSubmit ? (
           <Button
             onClick={openSubmitSummary}
@@ -217,7 +263,7 @@ export function LeaderReportEditor() {
           </Button>
         ) : null}
         {meta.status === 'SUBMITTED' ? (
-          <Button variant="secondary" onClick={handleShare} loading={busyAction === 'share'}>
+          <Button className="btn--whatsapp" onClick={handleShare} loading={busyAction === 'share'}>
             Compartir por WhatsApp
           </Button>
         ) : null}

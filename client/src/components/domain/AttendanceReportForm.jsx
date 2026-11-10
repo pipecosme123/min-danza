@@ -14,6 +14,33 @@ import './AttendanceReportForm.css';
 
 let supportKeySeq = 0;
 
+/** Iniciales para el avatar de cada integrante (ej. "Ana Pérez" → "AP"). */
+function initialsOf(fullName) {
+  return (fullName || '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0].toUpperCase())
+    .join('');
+}
+
+/**
+ * Conteo en vivo de lo marcado (Fase 10, propuesta A): presentes, faltas y
+ * remplazos/cambios. Un «No asistió» sin excusa elegida todavía ya cuenta
+ * como falta.
+ */
+function countEntries(entries) {
+  let present = 0;
+  let absent = 0;
+  let covered = 0;
+  for (const e of entries) {
+    if (e.status === 'ASISTIO') present += 1;
+    else if (COVERED_STATUSES.has(e.status)) covered += 1;
+    else absent += 1;
+  }
+  return { present, absent, covered, total: entries.length };
+}
+
 /**
  * Formulario del reporte de asistencia de un servicio. Lo comparten el portal
  * de líderes (editable mientras el reporte esté en borrador y la ventana
@@ -168,15 +195,43 @@ export function AttendanceReportForm({
   }, [entries, supports, generalNotes, problemsKey]);
 
   const showActions = !readOnly;
+  const counts = countEntries(entries);
+  const attendedShare = counts.total ? Math.round(((counts.present + counts.covered) / counts.total) * 100) : 0;
 
   return (
     <div className="attendance-form">
       <section className="attendance-form__section">
         <h2 className="attendance-form__section-title">Integrantes del equipo</h2>
+        <div className="attendance-form__stats">
+          <p className="attendance-form__counters">
+            <span className="attendance-form__counter attendance-form__counter--ok">
+              <b>{counts.present}</b> presentes
+            </span>
+            <span className="attendance-form__counter attendance-form__counter--no">
+              <b>{counts.absent}</b> faltas
+            </span>
+            <span className="attendance-form__counter attendance-form__counter--sw">
+              <b>{counts.covered}</b> remplazos y cambios
+            </span>
+          </p>
+          <div
+            className="attendance-form__progress"
+            role="progressbar"
+            aria-label="Integrantes que asistieron o fueron cubiertos"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={attendedShare}
+          >
+            <span style={{ width: `${attendedShare}%` }} />
+          </div>
+        </div>
         <ul className="attendance-form__roster">
           {entries.map((e) => (
             <li key={e.personId} className="roster-row">
               <div className="roster-row__person">
+                <span className="roster-row__avatar" aria-hidden="true">
+                  {initialsOf(e.fullName)}
+                </span>
                 <span className="roster-row__name">{e.fullName}</span>
                 {e.role === 'LEADER' ? <Badge variant="primary">Líder</Badge> : null}
                 {e.personYaNoEnEquipo ? <Badge variant="warning">Ya no en el equipo</Badge> : null}
@@ -204,8 +259,14 @@ export function AttendanceReportForm({
                           aria-label={`Estado de ${e.fullName}`}
                         >
                           {PRIMARY_STATUS_OPTIONS.map((o) => (
-                            <label key={o.value} className="attendance-radio">
+                            <label
+                              key={o.value}
+                              className={`attendance-radio attendance-radio--${o.value.toLowerCase()}${
+                                primary === o.value ? ' attendance-radio--checked' : ''
+                              }`}
+                            >
                               <input
+                                className="attendance-radio__input"
                                 type="radio"
                                 name={`status-${e.personId}`}
                                 value={o.value}
@@ -224,8 +285,14 @@ export function AttendanceReportForm({
                             aria-label={`¿${e.fullName} tiene excusa?`}
                           >
                             {EXCUSE_OPTIONS.map((o) => (
-                              <label key={o.value} className="attendance-radio">
+                              <label
+                                key={o.value}
+                                className={`attendance-radio attendance-radio--small${
+                                  e.status === o.value ? ' attendance-radio--checked' : ''
+                                }`}
+                              >
                                 <input
+                                  className="attendance-radio__input"
                                   type="radio"
                                   name={`excuse-${e.personId}`}
                                   value={o.value}

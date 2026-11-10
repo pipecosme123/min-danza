@@ -53,6 +53,17 @@ export function ReportSubmitSummary({ open, draft, entryNames, people, loading =
       }
     >
       <div className="submit-summary">
+        <ul className="submit-summary__tiles" aria-label="Totales">
+          <li className="submit-summary__tile submit-summary__tile--ok">
+            <b>{attended.length}</b> presentes
+          </li>
+          <li className="submit-summary__tile submit-summary__tile--no">
+            <b>{withExcuse.length + withoutExcuse.length}</b> faltas
+          </li>
+          <li className="submit-summary__tile submit-summary__tile--sw">
+            <b>{replaced.length + swapped.length}</b> remplazos y cambios
+          </li>
+        </ul>
         <SummaryGroup title="Asistieron" items={attended} empty="Nadie." />
         <SummaryGroup
           title="No asistieron con excusa"

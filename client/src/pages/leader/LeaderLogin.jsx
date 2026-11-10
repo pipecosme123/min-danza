@@ -50,7 +50,7 @@ export function LeaderLogin() {
           </p>
         </header>
 
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={handleSubmit} noValidate className="leader-auth-card">
           <Field
             label="Usuario"
             name="username"

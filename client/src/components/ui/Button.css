@@ -69,6 +69,17 @@
   background-color: var(--color-danger-active);
 }
 
+/* Compartir por WhatsApp: verde de la marca, oscurecido para que el texto
+   blanco tenga >= 4.5:1. */
+.btn--whatsapp {
+  background: #107c41;
+  color: #ffffff;
+  box-shadow: 0 10px 22px -12px rgb(16 124 65 / 0.7);
+}
+.btn--whatsapp:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
 .btn--ghost {
   background-color: transparent;
   color: var(--color-primary);

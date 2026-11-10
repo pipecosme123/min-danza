@@ -5,11 +5,12 @@
 }
 
 .leader-services__month {
-  font-size: var(--font-size-lg);
+  margin-bottom: var(--space-3);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--color-text-secondary);
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: var(--space-2);
-  margin-bottom: var(--space-4);
 }
 
 .leader-services__list {
@@ -25,11 +26,21 @@
   gap: var(--space-4);
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4);
+  padding: var(--space-4) var(--space-5);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+/* Ventana abierta: el turno que hay que registrar ahora, con borde de acción. */
+.leader-service-card--abierta {
+  border: 2px solid var(--color-primary);
+  box-shadow: 0 10px 24px -14px rgb(200 30 60 / 0.55);
+}
+
+.leader-service-card--pendiente {
+  opacity: 0.8;
 }
 
 .leader-service-card__main {
@@ -38,7 +49,8 @@
 }
 
 .leader-service-card__title {
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-extrabold);
   margin: 0 0 var(--space-1);
 }
 
@@ -81,12 +93,15 @@
 
 .leader-report__back,
 .attendance-panel__back {
+  min-height: var(--tap-target-min);
   background: none;
   border: none;
   color: var(--color-primary);
   cursor: pointer;
   padding: var(--space-2) 0;
+  font-family: inherit;
   font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
 }
 
 .leader-report__header {
@@ -123,11 +138,80 @@
 }
 
 .leader-report__closed-notice {
-  background: var(--color-warning);
-  color: var(--color-warning-contrast);
+  background: rgb(245 158 11 / 0.18);
+  color: var(--color-warning-text);
+  font-weight: var(--font-weight-medium);
   padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   margin-bottom: var(--space-4);
+}
+
+/* Reporte enviado (pantalla 8 del mockup): confirmación + vista previa de WhatsApp. */
+.leader-report__sent {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3) var(--space-4);
+  align-items: center;
+  margin-bottom: var(--space-5);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.leader-report__sent-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background: var(--gradient-action);
+  color: var(--color-on-gradient);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-extrabold);
+}
+
+.leader-report__sent-title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+}
+
+.leader-report__sent-text {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+}
+
+.leader-report__wa {
+  grid-column: 1 / -1;
+}
+
+.leader-report__wa-label {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+/* Burbuja con los colores de WhatsApp: texto oscuro sobre verde claro
+   (11:1) y su versión oscura (#e7fbe0 sobre #144d37, 9:1). */
+.leader-report__wa-bubble {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: 4px var(--radius-lg) var(--radius-lg) var(--radius-lg);
+  background-color: #e7fbe0;
+  color: #1f2d1b;
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+[data-theme='dark'] .leader-report__wa-bubble {
+  background-color: #144d37;
+  color: #e7fbe0;
 }
 
 .leader-report__footer-actions,
@@ -138,6 +222,41 @@
   margin-top: var(--space-5);
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-border);
+}
+
+/* Acción principal del líder siempre a mano, como en el mockup: barra fija
+   abajo, por encima de la barra de pestañas en el teléfono. */
+.leader-report__footer-actions--sticky {
+  position: sticky;
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  z-index: 10;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.leader-report__footer-actions--sticky:empty {
+  display: none;
+}
+
+.leader-report__footer-actions--sticky .btn {
+  flex: 1 1 auto;
+}
+
+@media (min-width: 768px) {
+  .leader-report__footer-actions--sticky {
+    bottom: var(--space-4);
+  }
+}
+
+/* ---- Acceso y cambio de contraseña: tarjeta sobre el fondo ---- */
+.leader-auth-card {
+  padding: var(--space-5);
+  border-radius: var(--radius-xl);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-lg);
 }
 
 /* ---- Contraseña temporal (modal de finalizar mes / accesos) ---- */
@@ -204,10 +323,52 @@
   gap: var(--space-4);
 }
 
+.submit-summary__tiles {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.submit-summary__tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-3) var(--space-2);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.submit-summary__tile b {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-extrabold);
+  line-height: 1.1;
+}
+
+.submit-summary__tile--ok b {
+  color: var(--color-success-text);
+}
+
+.submit-summary__tile--no b {
+  color: var(--color-danger-text);
+}
+
+.submit-summary__tile--sw b {
+  color: var(--color-primary);
+}
+
 .submit-summary__title {
   margin: 0 0 var(--space-1);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-accent);
 }
 
 .submit-summary__count {

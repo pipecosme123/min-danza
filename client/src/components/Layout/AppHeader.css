@@ -72,6 +72,13 @@
   color: var(--color-on-gradient);
 }
 
+/* En el teléfono el saludo («Hola, …») no entra junto a los botones. */
+@media (max-width: 767px) {
+  .app-header .admin-layout__admin-name {
+    display: none;
+  }
+}
+
 /* En el teléfono el tema queda solo con su ícono (el texto sigue siendo el
    nombre accesible del botón). */
 @media (max-width: 767px) {

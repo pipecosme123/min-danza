@@ -6,9 +6,61 @@
 
 .attendance-form__section-title {
   font-size: var(--font-size-lg);
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: var(--space-2);
+  font-weight: var(--font-weight-extrabold);
   margin-bottom: var(--space-3);
+}
+
+/* Contadores en vivo + barra de progreso (propuesta A). */
+.attendance-form__stats {
+  margin-bottom: var(--space-4);
+}
+
+.attendance-form__counters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+}
+
+.attendance-form__counter {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.attendance-form__counter b {
+  font-weight: var(--font-weight-extrabold);
+}
+
+.attendance-form__counter--ok {
+  background-color: rgb(21 128 61 / 0.13);
+  color: var(--color-success-text);
+}
+
+.attendance-form__counter--no {
+  background-color: rgb(200 30 60 / 0.12);
+  color: var(--color-danger-text);
+}
+
+.attendance-form__counter--sw {
+  background-color: var(--color-info-bg);
+  color: var(--color-info-text);
+}
+
+.attendance-form__progress {
+  height: 8px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-tint-strong);
+  overflow: hidden;
+}
+
+.attendance-form__progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--gradient-action);
+  transition: width var(--transition-base);
 }
 
 .attendance-form__hint,
@@ -32,10 +84,24 @@
   flex-wrap: wrap;
   gap: var(--space-3);
   align-items: center;
-  padding: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.roster-row__avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-tint);
+  color: var(--color-primary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-extrabold);
 }
 
 .roster-row__person {
@@ -66,26 +132,111 @@
   flex: 0 0 auto;
 }
 
+/* Botones grandes de un toque (propuesta A, decisión §9.3). Por dentro siguen
+   siendo radios nativos: el <input> queda oculto visualmente pero sigue en el
+   orden de tabulación y con flechas para cambiar de opción, y el foco se
+   dibuja en la etiqueta. */
 .attendance-radio-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-3);
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
   flex: 1 1 100%;
 }
 
 .attendance-radio-group--sub {
-  padding-left: var(--space-4);
-  border-left: 2px solid var(--color-border);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .attendance-radio {
-  display: inline-flex;
+  position: relative;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-1);
+  min-height: 48px;
+  padding: var(--space-2) var(--space-1);
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
-  min-height: var(--tap-target-min);
+  font-weight: var(--font-weight-bold);
+  text-align: center;
+  line-height: 1.15;
   cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.attendance-radio:hover {
+  color: var(--color-text);
+  border-color: var(--color-tint-strong);
+}
+
+.attendance-radio__input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}
+
+.attendance-radio:focus-within {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.attendance-radio::before {
+  font-size: var(--font-size-base);
+}
+
+.attendance-radio--asistio::before {
+  content: '✓' / '';
+}
+
+.attendance-radio--no_asistio::before {
+  content: '✕' / '';
+}
+
+.attendance-radio--remplazado::before {
+  content: '⇄' / '';
+}
+
+.attendance-radio--cambio::before {
+  content: '↔' / '';
+}
+
+.attendance-radio--checked {
+  background: var(--gradient-action) border-box;
+  color: var(--color-on-gradient);
+}
+
+.attendance-radio--checked:hover {
+  color: var(--color-on-gradient);
+}
+
+.attendance-radio--no_asistio.attendance-radio--checked {
+  background: var(--color-danger);
+}
+
+/* Sub-opciones de «No asistió»: contorno, en vez de relleno. */
+.attendance-radio--small {
+  min-height: var(--tap-target-min);
+  background-color: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+.attendance-radio--small.attendance-radio--checked {
+  background: rgb(200 30 60 / 0.1);
+  border-color: var(--color-danger);
+  color: var(--color-danger-text);
+}
+
+@media (max-width: 420px) {
+  .attendance-radio-group:not(.attendance-radio-group--sub) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .roster-row__cover-picker,

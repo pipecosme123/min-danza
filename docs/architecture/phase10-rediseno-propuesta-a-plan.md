@@ -1,6 +1,6 @@
 # Fase 10 — Rediseño web con la Propuesta A («Celebración»)
 
-> Estado: **Etapas 1 a 4 completas (2026-11-09)**; etapas 5–7 pendientes. Rama: `feature/rediseno-propuesta-a` (desde `develop`, 2026-11-08).
+> Estado: **Etapas 1 a 5 completas (2026-11-09)**; etapas 6 y 7 pendientes. Rama: `feature/rediseno-propuesta-a` (desde `develop`, 2026-11-08).
 > Referencia visual: `docs/mockups/app-movil/` — tableros `a-celebracion*.png` (pantallas 1–12, tema claro y
 > oscuro), pantallas sueltas en `pantallas/a-*.png` y la descripción completa en
 > `propuesta-a-celebracion-pantallas.pdf`.
@@ -203,6 +203,25 @@ el nombre. Implementación:
 - **Resumen antes de enviar** (7): `ReportSubmitSummary` como hoja inferior con contadores y grupos.
 - **Enviado** (8): confirmación, badges, vista previa del texto de WhatsApp (el mismo que devuelve
   `whatsapp-text`) y acciones «Compartir por WhatsApp» / «Volver a borrador».
+
+**Hecho (2026-11-09).** Decisión §9.3 tomada según la recomendación del plan (el usuario pidió ejecutar
+todas las etapas restantes): botones grandes de un toque.
+- `AttendanceReportForm` (compartido con el admin): las opciones son etiquetas grandes en grilla de 4 (2×2
+  por debajo de 420 px) con ícono, y la elegida lleva el degradado de acción («No asistió» en rojo). Por
+  dentro siguen siendo `<input type="radio">` nativos ocultos visualmente: mismo `radiogroup`, mismo
+  teclado, y las pruebas existentes no cambiaron. «Con excusa / Sin excusa» como contorno. Avatar con
+  iniciales por integrante, contadores en vivo (presentes / faltas / remplazos y cambios) y barra de
+  progreso.
+- `LeaderReportEditor`: barra de acciones fija abajo (encima de la barra de pestañas en el teléfono); con
+  el reporte enviado, tarjeta «¡Reporte enviado!» con la vista previa del texto de WhatsApp (el mismo de
+  `whatsapp-text`; si falla, simplemente no se muestra) y «Compartir por WhatsApp» como botón verde
+  (`#107c41`, 5.27:1 con blanco).
+- `ReportSubmitSummary`: totales en tres tarjetas arriba del detalle (en la hoja inferior de `Modal`).
+- `LeaderServices`: tarjetas más grandes, la de ventana abierta con borde de acción y las pendientes
+  atenuadas. Login y cambio de contraseña dentro de una tarjeta. En el teléfono el saludo «Hola, …» del
+  encabezado se oculta para que entren los botones.
+- Para la revisión visual se creó un borrador de reporte en la base **local** (turno «Domingo 10:30» del
+  8 de noviembre, Equipo 1), porque ninguno de los turnos con ventana abierta tenía reporte.
 
 ### Etapa 6 — Administración (pantallas 9–12 + resto)
 - **Personas** (9): encabezado con Importar/Nueva, buscador, filtros en píldora, filas con etiquetas,
