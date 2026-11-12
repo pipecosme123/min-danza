@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { getUniforms, createUniform, updateUniform } from '../api/uniforms.js';
 import { describeApiError } from '../utils/apiError.js';
 import { useApi } from '../hooks/useApi.js';
-import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
+import { useFilterModal } from '../hooks/useFilterModal.js';
 import { useToast } from '../hooks/useToast.js';
 import { Table } from '../components/ui/Table.jsx';
 import { Spinner } from '../components/ui/Spinner.jsx';
@@ -15,9 +15,14 @@ import { Button } from '../components/ui/Button.jsx';
 import { Badge } from '../components/ui/Badge.jsx';
 import { ColorPalettePicker, UNIFORM_COLOR_PALETTE } from '../components/ui/ColorPalettePicker.jsx';
 import { UniformBadge } from '../components/domain/UniformBadge.jsx';
+import { PageHeader } from '../components/ui/PageHeader.jsx';
+import { FilterButton, FilterChips, FilterModal } from '../components/ui/Filters.jsx';
 import './UniformsManager.css';
 
 const EMPTY_UNIFORM_FORM = { name: '', colorHex: '', description: '' };
+
+const NEUTRAL_FILTERS = { name: '', color: '', status: 'all' };
+const STATUS_LABELS = { active: 'Activos', inactive: 'Inactivos' };
 
 /**
  * Nombre legible de un `colorHex` si coincide con la paleta fija; si no
@@ -38,29 +43,34 @@ export function UniformsManager() {
   );
   const uniformList = uniforms ?? [];
 
-  // ---- Filtros (todos del lado del cliente, la lista ya está completa) ----
-  const [nameFilter, setNameFilter] = useState('');
-  const debouncedNameFilter = useDebouncedValue(nameFilter, 400);
-  const [colorFilter, setColorFilter] = useState('');
-  // 'active' (default) | 'inactive' | 'all' — mismo patrón que "Estado" en PeopleManager.
-  const [statusFilter, setStatusFilter] = useState('all');
+  // ---- Filtros (del lado del cliente: la lista ya está completa). Se editan
+  // en un modal y se aplican todos juntos con «Filtrar». ----
+  const filters = useFilterModal(NEUTRAL_FILTERS, NEUTRAL_FILTERS);
+  const appliedFilters = filters.applied;
 
   const colorOptions = Array.from(new Set(uniformList.map((u) => u.colorHex).filter(Boolean))).map((hex) => ({
     hex,
     label: colorFilterLabel(hex),
   }));
 
+  const nameQuery = appliedFilters.name.trim().toLowerCase();
   const filteredUniforms = uniformList.filter((u) => {
-    if (debouncedNameFilter.trim() && !u.name.toLowerCase().includes(debouncedNameFilter.trim().toLowerCase())) {
-      return false;
-    }
-    if (colorFilter && (u.colorHex ?? '').toLowerCase() !== colorFilter.toLowerCase()) return false;
-    if (statusFilter === 'active' && !u.active) return false;
-    if (statusFilter === 'inactive' && u.active) return false;
+    if (nameQuery && !u.name.toLowerCase().includes(nameQuery)) return false;
+    if (appliedFilters.color && (u.colorHex ?? '').toLowerCase() !== appliedFilters.color.toLowerCase()) return false;
+    if (appliedFilters.status === 'active' && !u.active) return false;
+    if (appliedFilters.status === 'inactive' && u.active) return false;
     return true;
   });
 
-  const hasActiveFilters = Boolean(debouncedNameFilter.trim()) || Boolean(colorFilter) || statusFilter !== 'all';
+  const filterChips = filters.activeKeys
+    .filter((key) => key !== 'name' || nameQuery)
+    .map((key) => {
+      const value = appliedFilters[key];
+      if (key === 'name') return { key, label: `Nombre: «${value.trim()}»` };
+      if (key === 'color') return { key, label: `Color: ${colorFilterLabel(value)}` };
+      return { key, label: `Estado: ${STATUS_LABELS[value] || value}` };
+    });
+  const hasActiveFilters = filterChips.length > 0;
 
   // ---- Alta / edición ----
   const [modalMode, setModalMode] = useState(null); // null | 'create' | 'edit'
@@ -150,26 +160,36 @@ export function UniformsManager() {
 
   return (
     <div>
-      <header className="page-header">
-        <h1>Uniformes</h1>
-        <p className="page-header__description">
-          Define los uniformes disponibles. El uniforme de cada turno se asigna por fecha desde «Horario y
-          eventos», no acá.
-        </p>
-      </header>
+      <PageHeader
+        title="Uniformes"
+        description="Define los uniformes disponibles. El uniforme de cada turno se asigna por fecha desde «Horario y eventos», no acá."
+      />
 
       <div className="uniforms-manager__toolbar">
+        <FilterButton count={filterChips.length} onClick={filters.openModal} />
         <Button onClick={openCreateModal}>Nuevo uniforme</Button>
       </div>
 
-      <div className="uniforms-manager__filters">
+      <FilterModal
+        open={filters.open}
+        onClose={filters.closeModal}
+        onApply={filters.apply}
+        onClear={filters.clearDraft}
+        title="Filtrar uniformes"
+      >
         <Field
+          className="filter-modal__wide"
           label="Buscar por nombre"
-          value={nameFilter}
-          onChange={(event) => setNameFilter(event.target.value)}
+          value={filters.draft.name}
+          onChange={(event) => filters.setDraftField('name', event.target.value)}
           placeholder="Ej. Uniforme A"
         />
-        <Field label="Color" as="select" value={colorFilter} onChange={(event) => setColorFilter(event.target.value)}>
+        <Field
+          label="Color"
+          as="select"
+          value={filters.draft.color}
+          onChange={(event) => filters.setDraftField('color', event.target.value)}
+        >
           <option value="">Todos los colores</option>
           {colorOptions.map((option) => (
             <option key={option.hex} value={option.hex}>
@@ -180,14 +200,16 @@ export function UniformsManager() {
         <Field
           label="Estado"
           as="select"
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value)}
+          value={filters.draft.status}
+          onChange={(event) => filters.setDraftField('status', event.target.value)}
         >
-          <option value="all">Todas</option>
-          <option value="active">Activas</option>
-          <option value="inactive">Inactivas</option>
+          <option value="all">Todos</option>
+          <option value="active">Activos</option>
+          <option value="inactive">Inactivos</option>
         </Field>
-      </div>
+      </FilterModal>
+
+      <FilterChips chips={filterChips} onRemove={filters.removeFilter} onClearAll={filters.clearAll} />
 
       {uniformsLoading ? <Spinner label="Cargando uniformes..." /> : null}
 

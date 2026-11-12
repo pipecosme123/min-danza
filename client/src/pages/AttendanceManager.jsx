@@ -19,6 +19,7 @@ import {
   WINDOW_LABEL,
   WINDOW_BADGE_VARIANT,
 } from './leader/leaderFormat.js';
+import { PageHeader } from '../components/ui/PageHeader.jsx';
 import './leader/leader.css';
 
 export function AttendanceManager() {
@@ -49,13 +50,10 @@ export function AttendanceManager() {
 
   return (
     <div>
-      <header className="page-header">
-        <h1>Asistencia</h1>
-        <p className="page-header__description">
-          Estado de los reportes de cada líder. Podés ver el contenido de un reporte solo cuando el
-          líder lo envió.
-        </p>
-      </header>
+      <PageHeader
+        title="Asistencia"
+        description="Estado de los reportes de cada líder. Podés ver el contenido de un reporte solo cuando el líder lo envió."
+      />
 
       {!openReportId ? (
         <Field

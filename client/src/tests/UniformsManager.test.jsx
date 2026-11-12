@@ -34,6 +34,20 @@ function renderPage() {
   );
 }
 
+/** Abre el modal de filtros, completa los campos y aplica con «Filtrar». */
+async function applyFilters(user, { texts = {}, selects = {} } = {}) {
+  await user.click(screen.getByRole("button", { name: /^Filtros/ }));
+  const dialog = screen.getByRole("dialog", { name: "Filtrar uniformes" });
+  for (const [label, value] of Object.entries(texts)) {
+    await user.clear(within(dialog).getByLabelText(label));
+    if (value) await user.type(within(dialog).getByLabelText(label), value);
+  }
+  for (const [label, value] of Object.entries(selects)) {
+    await user.selectOptions(within(dialog).getByLabelText(label), value);
+  }
+  await user.click(within(dialog).getByRole("button", { name: "Filtrar" }));
+}
+
 describe("UniformsManager", () => {
   beforeEach(() => {
     getUniforms.mockReset();
@@ -131,10 +145,11 @@ describe("UniformsManager", () => {
 
     await waitFor(() => expect(screen.getByText("Camisa azul")).toBeInTheDocument());
 
-    await user.type(screen.getByLabelText("Buscar por nombre"), "Uniforme B");
+    await applyFilters(user, { texts: { "Buscar por nombre": "Uniforme B" } });
 
-    await waitFor(() => expect(screen.queryByText("Camisa azul")).not.toBeInTheDocument());
+    expect(screen.queryByText("Camisa azul")).not.toBeInTheDocument();
     expect(screen.getByText("Uniforme B")).toBeInTheDocument();
+    expect(screen.getByText("Nombre: «Uniforme B»")).toBeInTheDocument();
   });
 
   it("filtra por color, ofreciendo solo los colores en uso", async () => {
@@ -143,11 +158,14 @@ describe("UniformsManager", () => {
 
     await waitFor(() => expect(screen.getByText("Camisa azul")).toBeInTheDocument());
 
-    const colorSelect = screen.getByLabelText("Color");
+    await user.click(screen.getByRole("button", { name: /^Filtros/ }));
+    const dialog = screen.getByRole("dialog", { name: "Filtrar uniformes" });
+    const colorSelect = within(dialog).getByLabelText("Color");
     expect(within(colorSelect).getByRole("option", { name: "Azul" })).toBeInTheDocument();
     expect(within(colorSelect).getByRole("option", { name: "Verde" })).toBeInTheDocument();
 
     await user.selectOptions(colorSelect, "#1E40AF");
+    await user.click(within(dialog).getByRole("button", { name: "Filtrar" }));
 
     expect(screen.getByText("Camisa azul")).toBeInTheDocument();
     expect(screen.queryByText("Uniforme B")).not.toBeInTheDocument();
@@ -160,15 +178,36 @@ describe("UniformsManager", () => {
     await waitFor(() => expect(screen.getByText("Camisa azul")).toBeInTheDocument());
     expect(screen.getByText("Uniforme B")).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText("Estado"), "active");
+    await applyFilters(user, { selects: { Estado: "active" } });
 
     expect(screen.getByText("Camisa azul")).toBeInTheDocument();
     expect(screen.queryByText("Uniforme B")).not.toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText("Estado"), "inactive");
+    await applyFilters(user, { selects: { Estado: "inactive" } });
 
     expect(screen.queryByText("Camisa azul")).not.toBeInTheDocument();
     expect(screen.getByText("Uniforme B")).toBeInTheDocument();
+  });
+
+  it("aplica varios filtros a la vez y quitar un chip devuelve los uniformes que ese filtro ocultaba", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Camisa azul")).toBeInTheDocument());
+    expect(screen.queryByRole("region", { name: "Filtros aplicados" })).not.toBeInTheDocument();
+
+    await applyFilters(user, { selects: { Color: "#16A34A", Estado: "active" } });
+
+    // Verde + activo: no queda ninguno (el verde está inactivo).
+    expect(screen.getByText("No hay uniformes que coincidan con los filtros")).toBeInTheDocument();
+    const chips = within(screen.getByRole("region", { name: "Filtros aplicados" }));
+    expect(chips.getByText("Color: Verde")).toBeInTheDocument();
+    expect(chips.getByText("Estado: Activos")).toBeInTheDocument();
+
+    await user.click(chips.getByRole("button", { name: "Quitar filtro Estado: Activos" }));
+
+    expect(screen.getByText("Uniforme B")).toBeInTheDocument();
+    expect(screen.queryByText("Camisa azul")).not.toBeInTheDocument();
   });
 
   it("el picker de colores ofrece la paleta y un modo personalizado", async () => {

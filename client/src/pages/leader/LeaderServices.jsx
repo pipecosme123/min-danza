@@ -18,6 +18,7 @@ import {
   WINDOW_BADGE_VARIANT,
   REPORT_STATUS_LABEL,
 } from './leaderFormat.js';
+import { PageHeader } from '../../components/ui/PageHeader.jsx';
 import './leader.css';
 
 /** Agrupa los servicios por "Mes AAAA" preservando el orden cronológico. */
@@ -80,13 +81,10 @@ export function LeaderServices() {
 
   return (
     <div className="leader-services">
-      <header className="page-header">
-        <h1>Mis servicios</h1>
-        <p className="page-header__description">
-          Estos son los turnos asignados a tu equipo. Podés registrar la asistencia desde una hora
-          antes de cada servicio y hasta tres días después.
-        </p>
-      </header>
+      <PageHeader
+        title="Mis servicios"
+        description="Estos son los turnos asignados a tu equipo. Podés registrar la asistencia desde una hora antes de cada servicio y hasta tres días después."
+      />
 
       {groups.length === 0 ? (
         <EmptyState

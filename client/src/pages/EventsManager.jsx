@@ -35,6 +35,7 @@ import { BalanceSummary } from '../components/domain/BalanceSummary.jsx';
 import { EventGroupsSection } from '../components/domain/EventGroupsSection.jsx';
 import { MonthVersesSection } from '../components/domain/MonthVersesSection.jsx';
 import { NewLeaderAccountsModal } from '../components/domain/NewLeaderAccountsModal.jsx';
+import { PageHeader } from '../components/ui/PageHeader.jsx';
 import './EventsManager.css';
 
 const EMPTY_EVENT_FORM = { date: '', startTime: '', title: '', teamsNeeded: '1', uniformId: '' };
@@ -523,14 +524,10 @@ export function EventsManager() {
 
   return (
     <div>
-      <header className="page-header">
-        <h1>Horario y eventos</h1>
-        <p className="page-header__description">
-          Genera el horario del mes (turnos fijos de miércoles y domingo, y el Servicio de jóvenes si corresponde),
-          ajusta a mano las asignaciones y el uniforme de cada turno, y agrega eventos extraordinarios fuera de los
-          turnos fijos.
-        </p>
-      </header>
+      <PageHeader
+        title="Horario y eventos"
+        description="Genera el horario del mes (turnos fijos de miércoles y domingo, y el Servicio de jóvenes si corresponde), ajusta a mano las asignaciones y el uniforme de cada turno, y agrega eventos extraordinarios fuera de los turnos fijos."
+      />
 
       {monthsLoading ? <Spinner label="Cargando meses..." /> : null}
 

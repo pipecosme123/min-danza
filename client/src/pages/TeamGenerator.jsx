@@ -16,6 +16,7 @@ import { Field } from '../components/ui/Field.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
 import { TeamCard } from '../components/domain/TeamCard.jsx';
 import { ROLE_LABELS, sortMembers } from '../components/domain/MemberList.jsx';
+import { PageHeader } from '../components/ui/PageHeader.jsx';
 import './TeamGenerator.css';
 
 const CATEGORY_LABELS = {
@@ -395,13 +396,10 @@ export function TeamGenerator() {
 
   return (
     <div>
-      <header className="page-header">
-        <h1>Equipos</h1>
-        <p className="page-header__description">
-          Aquí se sortean los equipos del mes (líder, apoyo y ministros) y se pueden ajustar manualmente antes
-          de publicar. Los equipos se forman una sola vez al mes y luego rotan de horario.
-        </p>
-      </header>
+      <PageHeader
+        title="Equipos"
+        description="Aquí se sortean los equipos del mes (líder, apoyo y ministros) y se pueden ajustar manualmente antes de publicar. Los equipos se forman una sola vez al mes y luego rotan de horario."
+      />
 
       {monthsLoading ? <Spinner label="Cargando meses..." /> : null}
 

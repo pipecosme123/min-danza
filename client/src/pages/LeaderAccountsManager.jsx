@@ -18,6 +18,7 @@ import { useToast } from '../hooks/useToast.js';
 import { describeApiError } from '../utils/apiError.js';
 import { formatMonthYear } from '../utils/dates.js';
 import { formatDateTimeShort } from './leader/leaderFormat.js';
+import { PageHeader } from '../components/ui/PageHeader.jsx';
 import './leader/leader.css';
 
 export function LeaderAccountsManager() {
@@ -123,13 +124,10 @@ export function LeaderAccountsManager() {
 
   return (
     <div>
-      <header className="page-header">
-        <h1>Accesos de líderes</h1>
-        <p className="page-header__description">
-          Cada líder recibe una cuenta al finalizar el mes. Acá podés crear una cuenta a mano,
-          reiniciar una contraseña olvidada o desactivar un acceso.
-        </p>
-      </header>
+      <PageHeader
+        title="Accesos de líderes"
+        description="Cada líder recibe una cuenta al finalizar el mes. Acá podés crear una cuenta a mano, reiniciar una contraseña olvidada o desactivar un acceso."
+      />
 
       <div className="leader-accounts__toolbar">
         <SearchableSelect

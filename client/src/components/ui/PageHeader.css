@@ -1,0 +1,70 @@
+.page-header__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.page-header__title-row h1 {
+  margin: 0;
+}
+
+/* Botón de ayuda circular «i». El área táctil cumple el mínimo aunque el
+   círculo visible sea más chico (el padding transparente lo agranda). */
+.help-button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius-full);
+  background-color: transparent;
+  color: var(--color-primary);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: var(--font-size-base);
+  font-style: italic;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  cursor: pointer;
+  position: relative;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.help-button::after {
+  content: '';
+  position: absolute;
+  inset: calc((var(--tap-target-min) - 28px) / -2);
+}
+
+.help-button:hover,
+.help-button--active {
+  background-color: var(--color-primary);
+  color: var(--color-text-on-primary);
+}
+
+.help-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.page-header__help {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  background-color: var(--color-info-bg);
+  max-width: 680px;
+}
+
+.page-header__help[hidden] {
+  display: none;
+}
+
+.page-header__help .page-header__description {
+  margin: 0;
+  color: var(--color-text);
+}

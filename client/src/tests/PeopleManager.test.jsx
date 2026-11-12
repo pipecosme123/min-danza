@@ -37,6 +37,20 @@ function samplePage(overrides = {}) {
   };
 }
 
+/** Abre el modal de filtros, cambia los selects indicados y aplica con «Filtrar». */
+async function applyFilters(user, selects = {}, texts = {}) {
+  await user.click(screen.getByRole("button", { name: /^Filtros/ }));
+  const dialog = screen.getByRole("dialog", { name: "Filtrar personas" });
+  for (const [label, value] of Object.entries(texts)) {
+    await user.clear(within(dialog).getByLabelText(label));
+    if (value) await user.type(within(dialog).getByLabelText(label), value);
+  }
+  for (const [label, value] of Object.entries(selects)) {
+    await user.selectOptions(within(dialog).getByLabelText(label), value);
+  }
+  await user.click(within(dialog).getByRole("button", { name: "Filtrar" }));
+}
+
 describe("PeopleManager", () => {
   beforeEach(() => {
     getPeople.mockReset();
@@ -73,8 +87,10 @@ describe("PeopleManager", () => {
     expect(screen.queryByText(/colaborador/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/elegible/i)).not.toBeInTheDocument();
 
-    // Filtro de categoría: debe ofrecer los valores nuevos, nunca los viejos.
-    const filterSelect = screen.getByLabelText("Categoría");
+    // Filtro de categoría (dentro del modal de filtros): debe ofrecer los
+    // valores nuevos, nunca los viejos.
+    fireEvent.click(screen.getByRole("button", { name: /^Filtros/ }));
+    const filterSelect = within(screen.getByRole("dialog")).getByLabelText("Categoría");
     const optionLabels = Array.from(filterSelect.querySelectorAll("option")).map((o) => o.textContent);
     expect(optionLabels).toEqual(["Todas las categorías", "Instructor", "Ministro"]);
   });
@@ -282,6 +298,108 @@ describe("PeopleManager", () => {
     expect(within(betoRow).queryByText("Adulto mayor")).not.toBeInTheDocument();
   });
 
+  it("la descripción de la pantalla está oculta y se muestra/oculta con el botón de ayuda «i»", async () => {
+    getPeople.mockResolvedValue(samplePage());
+    const user = userEvent.setup();
+    render(<PeopleManager />);
+
+    const helpButton = screen.getByRole("button", { name: "Ver ayuda de esta pantalla" });
+    expect(helpButton).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText(/Administra el padrón/)).not.toBeVisible();
+
+    await user.click(helpButton);
+    expect(helpButton).toHaveAttribute("aria-expanded", "true");
+    expect(helpButton).toHaveAccessibleName("Ocultar ayuda de esta pantalla");
+    expect(screen.getByText(/Administra el padrón/)).toBeVisible();
+
+    await user.click(helpButton);
+    expect(screen.getByText(/Administra el padrón/)).not.toBeVisible();
+  });
+
+  it("los filtros viven en un modal y se aplican todos juntos con una sola consulta al dar «Filtrar»", async () => {
+    getPeople.mockResolvedValue(samplePage());
+    const user = userEvent.setup();
+    render(<PeopleManager />);
+
+    await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
+    // Ningún filtro queda suelto en la pantalla: solo dentro del modal.
+    expect(screen.queryByLabelText("Categoría")).not.toBeInTheDocument();
+    const callsBefore = getPeople.mock.calls.length;
+
+    await user.click(screen.getByRole("button", { name: /^Filtros/ }));
+    const dialog = screen.getByRole("dialog", { name: "Filtrar personas" });
+    await user.type(within(dialog).getByLabelText("Buscar por nombre o documento"), "Ana");
+    await user.selectOptions(within(dialog).getByLabelText("Categoría"), "INSTRUCTOR");
+    await user.selectOptions(within(dialog).getByLabelText("Joven"), "yes");
+
+    // Editar el modal no dispara ninguna consulta todavía.
+    expect(getPeople.mock.calls.length).toBe(callsBefore);
+
+    await user.click(within(dialog).getByRole("button", { name: "Filtrar" }));
+
+    await waitFor(() =>
+      expect(getPeople).toHaveBeenLastCalledWith(
+        expect.objectContaining({ search: "Ana", category: "INSTRUCTOR", isJoven: true, active: true, page: 1 }),
+      ),
+    );
+    expect(getPeople.mock.calls.length).toBe(callsBefore + 1);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("muestra los filtros aplicados como chips sobre la tabla, y quitar un chip quita solo ese filtro", async () => {
+    getPeople.mockResolvedValue(samplePage());
+    const user = userEvent.setup();
+    render(<PeopleManager />);
+
+    await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
+    const chips = () => within(screen.getByRole("region", { name: "Filtros aplicados" }));
+    // Al entrar se ven solo las activas: ese filtro ya aparece como chip.
+    expect(chips().getByText("Estado: Activas")).toBeInTheDocument();
+
+    await applyFilters(user, { "Categoría": "MINISTRO", "Adulto mayor": "yes" });
+
+    expect(chips().getByText("Categoría: Ministro")).toBeInTheDocument();
+    expect(chips().getByText("Adulto mayor: Solo adultos mayores")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Filtros/ })).toHaveTextContent("3");
+
+    await user.click(chips().getByRole("button", { name: "Quitar filtro Categoría: Ministro" }));
+
+    await waitFor(() => {
+      const lastCall = getPeople.mock.calls.at(-1)[0];
+      expect(lastCall).not.toHaveProperty("category");
+      expect(lastCall).toEqual(expect.objectContaining({ isAdultoMayor: true, active: true }));
+    });
+    expect(chips().queryByText("Categoría: Ministro")).not.toBeInTheDocument();
+
+    await user.click(chips().getByRole("button", { name: "Quitar todos" }));
+    await waitFor(() => {
+      const lastCall = getPeople.mock.calls.at(-1)[0];
+      expect(lastCall).not.toHaveProperty("isAdultoMayor");
+      expect(lastCall).not.toHaveProperty("active");
+    });
+    expect(screen.queryByRole("region", { name: "Filtros aplicados" })).not.toBeInTheDocument();
+  });
+
+  it("cerrar el modal sin «Filtrar» descarta los cambios del borrador", async () => {
+    getPeople.mockResolvedValue(samplePage());
+    const user = userEvent.setup();
+    render(<PeopleManager />);
+
+    await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
+    const callsBefore = getPeople.mock.calls.length;
+
+    await user.click(screen.getByRole("button", { name: /^Filtros/ }));
+    let dialog = screen.getByRole("dialog");
+    await user.selectOptions(within(dialog).getByLabelText("Categoría"), "MINISTRO");
+    await user.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+
+    expect(getPeople.mock.calls.length).toBe(callsBefore);
+
+    await user.click(screen.getByRole("button", { name: /^Filtros/ }));
+    dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByLabelText("Categoría")).toHaveValue("");
+  });
+
   it("el filtro «Adulto mayor» permite pedir solo adultos mayores o solo no adultos mayores, además de todas", async () => {
     getPeople.mockResolvedValue(samplePage());
     const user = userEvent.setup();
@@ -290,13 +408,13 @@ describe("PeopleManager", () => {
     await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
     expect(getPeople).toHaveBeenLastCalledWith(expect.not.objectContaining({ isAdultoMayor: expect.anything() }));
 
-    await user.selectOptions(screen.getByLabelText("Adulto mayor"), "yes");
+    await applyFilters(user, { "Adulto mayor": "yes" });
     await waitFor(() => expect(getPeople).toHaveBeenLastCalledWith(expect.objectContaining({ isAdultoMayor: true })));
 
-    await user.selectOptions(screen.getByLabelText("Adulto mayor"), "no");
+    await applyFilters(user, { "Adulto mayor": "no" });
     await waitFor(() => expect(getPeople).toHaveBeenLastCalledWith(expect.objectContaining({ isAdultoMayor: false })));
 
-    await user.selectOptions(screen.getByLabelText("Adulto mayor"), "all");
+    await applyFilters(user, { "Adulto mayor": "all" });
     await waitFor(() => {
       const lastCall = getPeople.mock.calls.at(-1)[0];
       expect(lastCall).not.toHaveProperty("isAdultoMayor");
@@ -395,10 +513,10 @@ describe("PeopleManager", () => {
     await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
     expect(getPeople).toHaveBeenLastCalledWith(expect.objectContaining({ active: true }));
 
-    await user.selectOptions(screen.getByLabelText("Estado"), "inactive");
+    await applyFilters(user, { "Estado": "inactive" });
     await waitFor(() => expect(getPeople).toHaveBeenLastCalledWith(expect.objectContaining({ active: false })));
 
-    await user.selectOptions(screen.getByLabelText("Estado"), "all");
+    await applyFilters(user, { "Estado": "all" });
     await waitFor(() => {
       const lastCall = getPeople.mock.calls.at(-1)[0];
       expect(lastCall).not.toHaveProperty("active");
@@ -413,13 +531,13 @@ describe("PeopleManager", () => {
     await waitFor(() => expect(screen.getByText("Ana Gómez")).toBeInTheDocument());
     expect(getPeople).toHaveBeenLastCalledWith(expect.not.objectContaining({ isJoven: expect.anything() }));
 
-    await user.selectOptions(screen.getByLabelText("Joven"), "yes");
+    await applyFilters(user, { "Joven": "yes" });
     await waitFor(() => expect(getPeople).toHaveBeenLastCalledWith(expect.objectContaining({ isJoven: true })));
 
-    await user.selectOptions(screen.getByLabelText("Joven"), "no");
+    await applyFilters(user, { "Joven": "no" });
     await waitFor(() => expect(getPeople).toHaveBeenLastCalledWith(expect.objectContaining({ isJoven: false })));
 
-    await user.selectOptions(screen.getByLabelText("Joven"), "all");
+    await applyFilters(user, { "Joven": "all" });
     await waitFor(() => {
       const lastCall = getPeople.mock.calls.at(-1)[0];
       expect(lastCall).not.toHaveProperty("isJoven");

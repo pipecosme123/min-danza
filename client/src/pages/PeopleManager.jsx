@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPerson, deactivatePerson, getPeople, importPeople, updatePerson } from '../api/people.js';
 import { describeApiError } from '../utils/apiError.js';
 import { useApi } from '../hooks/useApi.js';
-import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
+import { useFilterModal } from '../hooks/useFilterModal.js';
 import { useToast } from '../hooks/useToast.js';
 import { Table } from '../components/ui/Table.jsx';
 import { Badge } from '../components/ui/Badge.jsx';
@@ -16,6 +16,8 @@ import { FileUpload } from '../components/ui/FileUpload.jsx';
 import { Field } from '../components/ui/Field.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
 import { Pagination } from '../components/ui/Pagination.jsx';
+import { PageHeader } from '../components/ui/PageHeader.jsx';
+import { FilterButton, FilterChips, FilterModal } from '../components/ui/Filters.jsx';
 import { ImportReport } from '../components/domain/ImportReport.jsx';
 import './PeopleManager.css';
 
@@ -30,6 +32,32 @@ const EMPTY_FORM = { fullName: '', documentId: '', category: '', isJoven: false,
 
 const INITIAL_LIST_PARAMS = { page: 1, pageSize: PAGE_SIZE, sort: 'fullName', active: true };
 
+// Valor «sin filtro» de cada clave. `status: 'all'` es el neutral (quitar el
+// chip de Estado muestra todas), aunque al entrar se arranca con 'active'.
+const NEUTRAL_FILTERS = { search: '', category: '', status: 'all', joven: 'all', adultoMayor: 'all' };
+const INITIAL_FILTERS = { ...NEUTRAL_FILTERS, status: 'active' };
+
+const STATUS_LABELS = { active: 'Activas', inactive: 'Inactivas' };
+const JOVEN_LABELS = { yes: 'Solo jóvenes', no: 'Solo no jóvenes' };
+const ADULTO_MAYOR_LABELS = { yes: 'Solo adultos mayores', no: 'Solo no adultos mayores' };
+
+function filterChipLabel(key, value) {
+  switch (key) {
+    case 'search':
+      return `Búsqueda: «${value.trim()}»`;
+    case 'category':
+      return `Categoría: ${CATEGORY_LABELS[value] || value}`;
+    case 'status':
+      return `Estado: ${STATUS_LABELS[value] || value}`;
+    case 'joven':
+      return `Joven: ${JOVEN_LABELS[value] || value}`;
+    case 'adultoMayor':
+      return `Adulto mayor: ${ADULTO_MAYOR_LABELS[value] || value}`;
+    default:
+      return value;
+  }
+}
+
 function toNullableTrimmed(value) {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
@@ -40,28 +68,23 @@ export function PeopleManager() {
   const { showSuccess, showError, showWarning } = useToast();
   const isFirstFilterRun = useRef(true);
 
-  // ---- Filtros y paginación ----
-  const [search, setSearch] = useState('');
-  const debouncedSearch = useDebouncedValue(search, 400);
-  const [category, setCategory] = useState('');
-  // 'active' (default, igual que antes) | 'inactive' (solo inactivas) | 'all'.
-  const [statusFilter, setStatusFilter] = useState('active');
-  // 'all' (default) | 'yes' (solo jóvenes) | 'no' (solo no jóvenes).
-  const [jovenFilter, setJovenFilter] = useState('all');
-  // 'all' (default) | 'yes' (solo adultos mayores) | 'no' (solo no adultos mayores).
-  const [adultoMayorFilter, setAdultoMayorFilter] = useState('all');
+  // ---- Filtros (modal, se aplican todos juntos con «Filtrar») y paginación ----
+  // status: 'active' (al entrar) | 'inactive' | 'all'; joven/adultoMayor: 'all' | 'yes' | 'no'.
+  const filters = useFilterModal(INITIAL_FILTERS, NEUTRAL_FILTERS);
+  const appliedFilters = filters.applied;
   const [page, setPage] = useState(1);
 
   function buildListParams() {
+    const { search, category, status, joven, adultoMayor } = appliedFilters;
     const params = { page, pageSize: PAGE_SIZE, sort: 'fullName' };
-    if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
+    if (search.trim()) params.search = search.trim();
     if (category) params.category = category;
-    if (statusFilter === 'active') params.active = true;
-    else if (statusFilter === 'inactive') params.active = false;
-    if (jovenFilter === 'yes') params.isJoven = true;
-    else if (jovenFilter === 'no') params.isJoven = false;
-    if (adultoMayorFilter === 'yes') params.isAdultoMayor = true;
-    else if (adultoMayorFilter === 'no') params.isAdultoMayor = false;
+    if (status === 'active') params.active = true;
+    else if (status === 'inactive') params.active = false;
+    if (joven === 'yes') params.isJoven = true;
+    else if (joven === 'no') params.isJoven = false;
+    if (adultoMayor === 'yes') params.isAdultoMayor = true;
+    else if (adultoMayor === 'no') params.isAdultoMayor = false;
     return params;
   }
 
@@ -75,7 +98,7 @@ export function PeopleManager() {
     setPage(1);
     setSelectedIds(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, category, statusFilter, jovenFilter, adultoMayorFilter]);
+  }, [appliedFilters]);
 
   // La primera carga ya la hace `immediate: true` de arriba; este efecto
   // solo reacciona a cambios posteriores de filtros/página.
@@ -86,7 +109,7 @@ export function PeopleManager() {
     }
     execute(buildListParams()).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, debouncedSearch, category, statusFilter, jovenFilter, adultoMayorFilter]);
+  }, [page, appliedFilters]);
 
   // Si una baja/edición deja vacía la página actual (y no es la primera),
   // retrocede una página automáticamente en vez de mostrar un vacío confuso.
@@ -424,7 +447,13 @@ export function PeopleManager() {
   const people = data?.data ?? [];
   const pagination = data?.pagination ?? null;
   const hasActiveFilters =
-    Boolean(debouncedSearch.trim()) || Boolean(category) || jovenFilter !== 'all' || adultoMayorFilter !== 'all';
+    Boolean(appliedFilters.search.trim()) ||
+    Boolean(appliedFilters.category) ||
+    appliedFilters.joven !== 'all' ||
+    appliedFilters.adultoMayor !== 'all';
+  const filterChips = filters.activeKeys
+    .filter((key) => key !== 'search' || appliedFilters.search.trim())
+    .map((key) => ({ key, label: filterChipLabel(key, appliedFilters[key]) }));
 
   const pageIds = people.map((p) => p.id);
   const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
@@ -536,13 +565,10 @@ export function PeopleManager() {
 
   return (
     <div>
-      <header className="page-header">
-        <h1>Personas</h1>
-        <p className="page-header__description">
-          Administra el padrón de instructores y ministros: carga masiva por archivo, alta, edición, inactivación
-          y acciones en lote sobre varias personas a la vez.
-        </p>
-      </header>
+      <PageHeader
+        title="Personas"
+        description="Administra el padrón de instructores y ministros: carga masiva por archivo, alta, edición, inactivación y acciones en lote sobre varias personas a la vez."
+      />
 
       <div className="people-manager__toolbar">
         <Button onClick={openCreateModal}>Nueva persona</Button>
@@ -556,16 +582,29 @@ export function PeopleManager() {
         >
           {selectionMode ? 'Salir de selección múltiple' : 'Seleccionar varias'}
         </Button>
+        <FilterButton count={filterChips.length} onClick={filters.openModal} />
       </div>
 
-      <div className="people-manager__filters">
+      <FilterModal
+        open={filters.open}
+        onClose={filters.closeModal}
+        onApply={filters.apply}
+        onClear={filters.clearDraft}
+        title="Filtrar personas"
+      >
         <Field
+          className="filter-modal__wide"
           label="Buscar por nombre o documento"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          value={filters.draft.search}
+          onChange={(event) => filters.setDraftField('search', event.target.value)}
           placeholder="Ej. María o 1234567"
         />
-        <Field label="Categoría" as="select" value={category} onChange={(event) => setCategory(event.target.value)}>
+        <Field
+          label="Categoría"
+          as="select"
+          value={filters.draft.category}
+          onChange={(event) => filters.setDraftField('category', event.target.value)}
+        >
           <option value="">Todas las categorías</option>
           <option value="INSTRUCTOR">Instructor</option>
           <option value="MINISTRO">Ministro</option>
@@ -573,14 +612,19 @@ export function PeopleManager() {
         <Field
           label="Estado"
           as="select"
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value)}
+          value={filters.draft.status}
+          onChange={(event) => filters.setDraftField('status', event.target.value)}
         >
           <option value="active">Activas</option>
           <option value="inactive">Inactivas</option>
           <option value="all">Todas</option>
         </Field>
-        <Field label="Joven" as="select" value={jovenFilter} onChange={(event) => setJovenFilter(event.target.value)}>
+        <Field
+          label="Joven"
+          as="select"
+          value={filters.draft.joven}
+          onChange={(event) => filters.setDraftField('joven', event.target.value)}
+        >
           <option value="all">Todas</option>
           <option value="yes">Solo jóvenes</option>
           <option value="no">Solo no jóvenes</option>
@@ -588,14 +632,14 @@ export function PeopleManager() {
         <Field
           label="Adulto mayor"
           as="select"
-          value={adultoMayorFilter}
-          onChange={(event) => setAdultoMayorFilter(event.target.value)}
+          value={filters.draft.adultoMayor}
+          onChange={(event) => filters.setDraftField('adultoMayor', event.target.value)}
         >
           <option value="all">Todas</option>
           <option value="yes">Solo adultos mayores</option>
           <option value="no">Solo no adultos mayores</option>
         </Field>
-      </div>
+      </FilterModal>
 
       {selectionMode && selectedIds.size > 0 ? (
         <div className="people-manager__selection-bar" role="toolbar" aria-label="Acciones sobre la selección">
@@ -625,6 +669,8 @@ export function PeopleManager() {
       {loading ? <Spinner label="Cargando personas..." /> : null}
 
       {!loading && error ? <ErrorMessage message={error.message} onRetry={refetch} /> : null}
+
+      <FilterChips chips={filterChips} onRemove={filters.removeFilter} onClearAll={filters.clearAll} />
 
       {!loading && !error ? (
         <>
